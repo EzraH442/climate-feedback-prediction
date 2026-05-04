@@ -13,13 +13,21 @@ config_path = "config_preprocess.yaml"
 conf = OmegaConf.load(config_path)
 torch.manual_seed(conf.seed)
 
-era5_paths = [
+train_paths = [
     f"{conf.dataset.era5.raw_path}/{make_era5_filename(year)}"
-    for year in conf.dataset.years
+    for year in conf.dataset.train_years
 ]
-print(f"Loading ERA5 data from: {era5_paths}")
 
-train_dataset = xr.open_mfdataset(era5_paths, combine="nested", concat_dim="date")
+val_paths = [
+    f"{conf.dataset.era5.raw_path}/{make_era5_filename(year)}"
+    for year in conf.dataset.val_years
+]
+
+print(f"Loading ERA5 train data from: {train_paths}")
+train_dataset = xr.open_mfdataset(train_paths, combine="nested", concat_dim="date")
+
+print(f"Loading ERA5 val data from: {train_paths}")
+val_dataset = xr.open_mfdataset(val_paths, combine="nested", concat_dim="date")
 """
    fal        (date, latitude, longitude) float64 100MB 0.7555 0.7555 ... 0.85
    hcc        (date, latitude, longitude) float64 100MB 0.3654 0.3654 ... 0.085
@@ -34,15 +42,27 @@ train_dataset = xr.open_mfdataset(era5_paths, combine="nested", concat_dim="date
    tsr        (date, latitude, longitude) float64 100MB 0.0 0.0 ... 1.344e+07
 """
 
-scaler = XarrayMinMaxScaler(dim=("date", "latitude", "longitude"), min=-1, max=1)
-scaler.fit(train_dataset)
-train_scaled = scaler.transform(train_dataset)
-scaler.save("scaler_small")
+# TODO: compute ECOD
 
-if not os.path.exists(conf.dataset.era5.processed_path):
-    os.makedirs(conf.dataset.era5.processed_path)
+scaler_train = XarrayMinMaxScaler(dim=("date", "latitude", "longitude"), min=-1, max=1)
+scaler_train.fit(train_dataset)
+train_scaled = scaler_train.transform(train_dataset)
+scaler_train.save("scaler_small_train")
 
-for year in conf.dataset.years:
+scalar_val = XarrayMinMaxScaler(dim=("date", "latitude", "longitude"), min=-1, max=1)
+scalar_val.load("scaler_small_train")
+val_scaled = scalar_val.transform(val_dataset)
+scalar_val.save("scaler_small_val")
+
+if not os.path.exists(conf.dataset.era5.path):
+    os.makedirs(conf.dataset.era5.path)
+
+for year in conf.dataset.train_years:
     path = f"{conf.dataset.era5.path}/era5_single_levels_monthly_{year}.nc"
     print(f"Saving scaled data for year {year} to {path}...")
     train_scaled.sel(date=str(year)).to_netcdf(path)
+
+for year in conf.dataset.val_years:
+    path = f"{conf.dataset.era5.path}/era5_single_levels_monthly_{year}.nc"
+    print(f"Saving scaled data for year {year} to {path}...")
+    val_scaled.sel(date=str(year)).to_netcdf(path)
