@@ -3,7 +3,6 @@ import numpy as np
 import torch
 import xarray as xr
 from omegaconf import OmegaConf
-from torch.utils.data import random_split, DataLoader
 
 
 def make_era5_filename(year):
@@ -15,18 +14,25 @@ def make_kernel_filename(year):
 
 
 class ClimateTorchDataset(torch.utils.data.Dataset):
-    def __init__(self, config_path="config.yaml", device=None):
+    def __init__(self, config_path="config.yaml", data_type="train", device=None):
         """
         Args:
             config_path (str): Path to OmegaConf YAML config
+            data_type (str): Type of data to load ("train" or "val")
             device (optional): Device for tensors
         """
         conf = OmegaConf.load(config_path)
 
-        era5_paths = [
-            f"{conf.dataset.era5.path}/{make_era5_filename(year)}"
-            for year in conf.dataset.years
-        ]
+        if data_type == "train":
+            era5_paths = [
+                f"{conf.dataset.era5.path}/{make_era5_filename(year)}"
+                for year in conf.dataset.train_years
+            ]
+        else:
+            era5_paths = [
+                f"{conf.dataset.era5.path}/{make_era5_filename(year)}"
+                for year in conf.dataset.val_years
+            ]
         print(f"Loading ERA5 data from: {era5_paths}")
 
         self.dataset_era5 = xr.open_mfdataset(
@@ -87,28 +93,3 @@ class ClimateTorchDataset(torch.utils.data.Dataset):
         X = tensor_data[:-1]  # All but last variable as input
         y = tensor_data[-1]  # Last variable as target
         return X, y
-
-
-def prepare_data(config, full_dataset):
-    # Calculate lengths
-    total_size = len(full_dataset)
-    train_size = int(config.train.split_ratio * total_size)
-    val_size = total_size - train_size
-
-    generator = torch.Generator().manual_seed(config.seed)
-    train_dataset, val_dataset = random_split(
-        full_dataset, [train_size, val_size], generator=generator
-    )
-
-    # Create DataLoaders
-    train_loader = DataLoader(
-        train_dataset,
-        batch_size=config.train.batch_size,
-        shuffle=True,
-    )
-
-    val_loader = DataLoader(
-        val_dataset, batch_size=config.train.batch_size, shuffle=False
-    )
-
-    return train_loader, val_loader
