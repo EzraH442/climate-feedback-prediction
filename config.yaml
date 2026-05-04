@@ -3,10 +3,10 @@ seed: 42
 # each kernel variable has dim (t, lat, lon), t is yyyy-mm
 dataset:
   era5: # data that the era5 monthly single level data will be in
-    path: './data/era5'
+    path: './data/era5_processed'
   kernels: # data that the kernel data will be in
     path: './data/kernels'
-  train_years: # even years from 1990-2020
+  years: # even years from 1990-2020
     # - 1990
     # - 1992
     # - 1994
@@ -40,4 +40,3 @@ train:
 wandb:
   project: 'climate-feedback-solobev'
   entity: 'baseline-simple'
-

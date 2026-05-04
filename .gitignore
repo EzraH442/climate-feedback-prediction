@@ -3,3 +3,6 @@ __pycache__
 wandb
 .ipynb_checkpoints
 era5_cache.npy
+*.grib
+*.nc
+.vscode
