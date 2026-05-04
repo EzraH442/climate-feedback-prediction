@@ -1,3 +1,4 @@
+import os
 import torch
 from omegaconf import OmegaConf
 from preprocessing import XarrayMinMaxScaler
@@ -37,6 +38,9 @@ scaler = XarrayMinMaxScaler(dim=("date", "latitude", "longitude"), min=-1, max=1
 scaler.fit(train_dataset)
 train_scaled = scaler.transform(train_dataset)
 scaler.save("scaler_small")
+
+if not os.path.exists(conf.dataset.era5.processed_path):
+    os.makedirs(conf.dataset.era5.processed_path)
 
 for year in conf.dataset.years:
     path = f"{conf.dataset.era5.path}/era5_single_levels_monthly_{year}.nc"
