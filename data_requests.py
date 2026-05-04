@@ -33,7 +33,7 @@ def retrieve_era5_years_data(years=[2006, 2008], data_path="data/era5"):
                     "total_toa_incident_solar_radiation",
                     "top_net_solar_radiation",
                 ],
-                "year": "2005",
+                "year": year,
                 "month": [f"{m:02d}" for m in range(1, 13)],
                 "time": "00:00",
             },
