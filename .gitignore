@@ -1,0 +1,7 @@
+*.grib
+*.nc
+.vscode
+__pycache__
+/data
+era5_cache.npy
+wandb
