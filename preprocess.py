@@ -26,7 +26,7 @@ val_paths = [
 print(f"Loading ERA5 train data from: {train_paths}")
 train_dataset = xr.open_mfdataset(train_paths, combine="nested", concat_dim="date")
 
-print(f"Loading ERA5 val data from: {train_paths}")
+print(f"Loading ERA5 val data from: {val_paths}")
 val_dataset = xr.open_mfdataset(val_paths, combine="nested", concat_dim="date")
 """
    fal        (date, latitude, longitude) float64 100MB 0.7555 0.7555 ... 0.85
