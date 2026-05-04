@@ -8,8 +8,8 @@ config_path = "config.yaml"
 config = OmegaConf.load(config_path)
 torch.manual_seed(config.seed)
 
-train_dataset = ClimateTorchDataset(config_path=config_path)
-val_dataset = ClimateTorchDataset(config_path=config_path)
+train_dataset = ClimateTorchDataset(config_path=config_path, data_type="train")
+val_dataset = ClimateTorchDataset(config_path=config_path, data_type="val")
 
 train_dataloader = DataLoader(
     train_dataset,
