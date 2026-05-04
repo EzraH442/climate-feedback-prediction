@@ -75,17 +75,23 @@ class SimpleModelTrainer(nn.Module):
 
     def train_model(self, train_loader, val_loader):
         for epoch in range(self.epoch, self.config.train.epochs):
+            print(epoch)
             # --- TRAINING PHASE ---
             self.model.train()
             train_loss = 0
+
+            i = 0
             for x, y in train_loader:
                 x, y = x.to(self.device), y.to(self.device)
                 self.optimizer.zero_grad(set_to_none=True)
                 y_pred = self.model(x)
-                loss = self.loss_fn(y_pred, y)
+                loss = self.loss_fn(y_pred, y.flatten())
                 loss.backward()
                 self.optimizer.step()
                 train_loss += loss.item()
+                if i % 10 == 0:
+                    print(f"Batch {i} | Loss: {loss.item():.4e}")
+                i += 1
 
             avg_train_loss = train_loss / len(train_loader)
 
