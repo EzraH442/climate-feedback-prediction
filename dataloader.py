@@ -42,14 +42,14 @@ class ClimateTorchDataset(torch.utils.data.Dataset):
             "date", "latitude", "longitude", "variable"
         )
         # Write to a memmap once
-        mmap_path = "era5_cache.npy"
+        mmap_path = data_type + "_era5_cache.npy"
         if not os.path.exists(mmap_path):
             np.save(mmap_path, data_array.values)
 
         self.n_dates = len(self.dataset_era5.date)
         self.n_lat = len(self.dataset_era5.latitude)
         self.n_lon = len(self.dataset_era5.longitude)
-        self.n_vars = len(self.dataset_era5.variables)
+        self.n_vars = len(self.dataset_era5.data_vars)
 
         self.shape = (self.n_dates, self.n_lat, self.n_lon, self.n_vars)
         self.data = np.load(mmap_path, mmap_mode="r")  # OS handles paging
