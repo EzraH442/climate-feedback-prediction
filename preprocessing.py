@@ -2,7 +2,7 @@ import xarray as xr
 
 
 class XarrayMinMaxScaler:
-    def __init__(self, dim="date", min=-1, max=1):
+    def __init__(self, dim, min=-1, max=1):
         self.dim = dim
         self.min_val = min
         self.max_val = max

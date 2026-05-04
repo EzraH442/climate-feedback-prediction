@@ -1,10 +1,12 @@
+seed: 42
+# each kernel variable has dim (t, lat, lon), t is yyyy-mm
 dataset:
   era5: # data that the era5 monthly single level data will be in
     raw_path: './data/era5'
-    out_path: './data/era5_processed'
+    path: './data/era5_processed'
   kernels: # data that the kernel data will be in
     path: './data/kernels'
-  years: # even years from 1990-2020
+  train_years: # even years from 1990-2020
     # - 1990
     # - 1992
     # - 1994
@@ -21,3 +23,19 @@ dataset:
     # - 2016
     # - 2018
     # - 2020
+  val_years: # odd years from 1990-2020
+    # - 1991
+    # - 1993
+    # - 1995
+    # - 1997
+    # - 1999
+    # - 2001
+    # - 2003
+    - 2005
+    # - 2007
+    # - 2009
+    # - 2011
+    # - 2013
+    # - 2015
+    # - 2017
+    # - 2019
