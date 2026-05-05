@@ -26,4 +26,4 @@ pip install --no-index -r requirements.txt
 export WANDB_MODE=offline
 wandb offline
 
-# python train.py
+python train.py
