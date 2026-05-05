@@ -3,6 +3,7 @@ import torch
 import torch.nn as nn
 import wandb
 import omegaconf
+import time
 
 
 class SimpleModel(nn.Module):
@@ -29,7 +30,9 @@ class SimpleModelTrainer:
         self.device = torch.device(device)
         self.loss_fn = nn.MSELoss()
         self.best_val_loss = float("inf")  # Track for saving the "best" model
+        self.epoch = 0  # Track current epoch for checkpointing
         self.best_epoch = 0  # Track epoch of the best model
+        self.total_training_time = 0.0  # Track total training time across epochs
 
         if checkpoint_path is not None:
             checkpoint = torch.load(checkpoint_path, map_location=self.device)
@@ -41,16 +44,16 @@ class SimpleModelTrainer:
             )
             if "optimizer_state_dict" in checkpoint:
                 self.optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
+            self.best_val_loss = checkpoint["best_val_loss"]
             self.epoch = checkpoint["epoch"] + 1
             self.best_epoch = checkpoint["best_epoch"]
-            self.best_val_loss = checkpoint["best_val_loss"]
+            self.total_training_time = checkpoint["total_training_time"]
         else:
             self.config = omegaconf.OmegaConf.load(config_file)
             self.model = SimpleModel(self.config).to(self.device)
             self.optimizer = torch.optim.Adam(
                 self.model.parameters(), lr=self.config.optimizer.learning_rate
             )
-            self.epoch = 0
 
         # --- WandB Setup ---
         wandb.init(
@@ -68,6 +71,7 @@ class SimpleModelTrainer:
             "epoch": epoch,
             "best_epoch": self.best_epoch,
             "best_val_loss": self.best_val_loss,
+            "total_training_time": self.total_training_time,
             "model_state_dict": self.model.state_dict(),
             "optimizer_state_dict": self.optimizer.state_dict(),
             "config": self.config,
@@ -86,15 +90,20 @@ class SimpleModelTrainer:
                 checkpoint_data, f"{self.config.train.checkpoint_dir}/best_model.pt"
             )
 
-    def train_model(self, train_loader, val_loader):
+    def train_model(
+        self,
+        train_loader: torch.utils.data.DataLoader,
+        val_loader: torch.utils.data.DataLoader,
+    ):
         for epoch in range(self.epoch, self.config.train.epochs):
-            print(epoch)
+            epoch_start_time = time.time()
+            print(f"Epoch {epoch} started at {time.ctime(epoch_start_time)}")
+
             # --- TRAINING PHASE ---
             self.model.train()
             train_loss = 0
 
-            i = 0
-            for x, y in train_loader:
+            for i, (x, y) in train_loader:
                 x, y = x.to(self.device), y.to(self.device)
                 self.optimizer.zero_grad(set_to_none=True)
                 y_pred = self.model(x)
@@ -102,23 +111,36 @@ class SimpleModelTrainer:
                 loss.backward()
                 self.optimizer.step()
                 train_loss += loss.item()
-                if i % 10 == 0:
-                    print(f"Batch {i} | Loss: {loss.item():.4e}")
-                i += 1
+                if i % 100 == 0:
+                    print(f"Batch {i}/{len(train_loader)} | Loss: {loss.item():.4e}")
 
             avg_train_loss = train_loss / len(train_loader)
+            print(f"avg_train_loss: {avg_train_loss:.4e}")
 
             # --- VALIDATION PHASE ---
             self.model.eval()
             val_loss = 0
             with torch.no_grad():  # Disable gradient calculation to save memory/time
-                for x_val, y_val in val_loader:
+                for i, (x_val, y_val) in enumerate(val_loader):
                     x_val, y_val = x_val.to(self.device), y_val.to(self.device)
                     val_pred = self.model(x_val)
                     v_loss = self.loss_fn(val_pred, y_val.flatten())
                     val_loss += v_loss.item()
+                    if i % 100 == 0:
+                        print(
+                            f"Val Batch {i}/{len(val_loader)} | Val Loss: {v_loss.item():.4e}"
+                        )
 
             avg_val_loss = val_loss / len(val_loader)
+            print(f"avg_val_loss: {avg_val_loss:.4e}")
+
+            # --- TIME TRACKING ---
+            epoch_end_time = time.time()
+            epoch_duration = epoch_end_time - epoch_start_time
+            self.total_training_time += epoch_duration
+            print(
+                f"Epoch {epoch} completed in {epoch_duration:.2f} seconds. Total training time: {self.total_training_time:.2f} seconds."
+            )
 
             # --- LOGGING & CHECKPOINTING ---
             wandb.log(
@@ -152,4 +174,5 @@ class SimpleModelTrainer:
                 )
                 break
 
+        print(f"Training complete. Total time: {self.total_training_time/3600:.2f}h")
         wandb.finish()
