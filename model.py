@@ -4,6 +4,7 @@ import torch.nn as nn
 import wandb
 import omegaconf
 
+
 class SimpleModel(nn.Module):
     def __init__(self, config):
         super(SimpleModel, self).__init__()
@@ -17,14 +18,18 @@ class SimpleModel(nn.Module):
     def forward(self, x: torch.Tensor):
         return self.model(x)
 
-class SimpleModelTrainer(nn.Module):
+
+class SimpleModelTrainer:
     def __init__(
-        self, config_file: str = "config.yaml", checkpoint_path: str | None = None, device: str = "cpu"
+        self,
+        config_file: str = "config.yaml",
+        checkpoint_path: str | None = None,
+        device: str = "cpu",
     ):
-        super(SimpleModelTrainer, self).__init__()
         self.device = torch.device(device)
         self.loss_fn = nn.MSELoss()
-        self.best_val_loss = float('inf') # Track for saving the "best" model
+        self.best_val_loss = float("inf")  # Track for saving the "best" model
+        self.best_epoch = 0  # Track epoch of the best model
 
         if checkpoint_path is not None:
             checkpoint = torch.load(checkpoint_path, map_location=self.device)
@@ -37,6 +42,8 @@ class SimpleModelTrainer(nn.Module):
             if "optimizer_state_dict" in checkpoint:
                 self.optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
             self.epoch = checkpoint["epoch"] + 1
+            self.best_epoch = checkpoint["best_epoch"]
+            self.best_val_loss = checkpoint["best_val_loss"]
         else:
             self.config = omegaconf.OmegaConf.load(config_file)
             self.model = SimpleModel(self.config).to(self.device)
@@ -50,28 +57,34 @@ class SimpleModelTrainer(nn.Module):
             project=self.config.wandb.project,
             entity=self.config.wandb.entity,
             config=omegaconf.OmegaConf.to_container(self.config, resolve=True),
-            resume="allow" if checkpoint_path else None
+            resume="allow" if checkpoint_path else None,
         )
 
-    def checkpoint(self, epoch, val_loss, is_best=False):
+    def checkpoint(self, epoch, is_best=False):
         if not os.path.exists(self.config.train.checkpoint_dir):
             os.makedirs(self.config.train.checkpoint_dir)
-            
+
         checkpoint_data = {
             "epoch": epoch,
+            "best_epoch": self.best_epoch,
+            "best_val_loss": self.best_val_loss,
             "model_state_dict": self.model.state_dict(),
             "optimizer_state_dict": self.optimizer.state_dict(),
             "config": self.config,
-            "val_loss": val_loss,
         }
-        
+
         # Save regular checkpoint
         if epoch % 10 == 0:
-            torch.save(checkpoint_data, f"{self.config.train.checkpoint_dir}/model_epoch_{epoch}.pt")
-        
+            torch.save(
+                checkpoint_data,
+                f"{self.config.train.checkpoint_dir}/model_epoch_{epoch}.pt",
+            )
+
         # Save "best" model separately
         if is_best:
-            torch.save(checkpoint_data, f"{self.config.train.checkpoint_dir}/best_model.pt")
+            torch.save(
+                checkpoint_data, f"{self.config.train.checkpoint_dir}/best_model.pt"
+            )
 
     def train_model(self, train_loader, val_loader):
         for epoch in range(self.epoch, self.config.train.epochs):
@@ -98,28 +111,45 @@ class SimpleModelTrainer(nn.Module):
             # --- VALIDATION PHASE ---
             self.model.eval()
             val_loss = 0
-            with torch.no_grad(): # Disable gradient calculation to save memory/time
+            with torch.no_grad():  # Disable gradient calculation to save memory/time
                 for x_val, y_val in val_loader:
                     x_val, y_val = x_val.to(self.device), y_val.to(self.device)
                     val_pred = self.model(x_val)
-                    v_loss = self.loss_fn(val_pred, y_val)
+                    v_loss = self.loss_fn(val_pred, y_val.flatten())
                     val_loss += v_loss.item()
 
             avg_val_loss = val_loss / len(val_loader)
 
             # --- LOGGING & CHECKPOINTING ---
-            wandb.log({
-                "epoch": epoch,
-                "train/loss": avg_train_loss,
-                "val/loss": avg_val_loss
-            })
+            wandb.log(
+                {"epoch": epoch, "train/loss": avg_train_loss, "val/loss": avg_val_loss}
+            )
 
             is_best = avg_val_loss < self.best_val_loss
             if is_best:
                 self.best_val_loss = avg_val_loss
+                self.best_epoch = epoch
 
             if epoch % 10 == 0 or is_best:
-                print(f"Epoch {epoch:04d} | Train: {avg_train_loss:.4e} | Val: {avg_val_loss:.4e}")
-                self.checkpoint(epoch, avg_val_loss, is_best=is_best)
-        
+                print(
+                    f"Epoch {epoch:04d} | Train: {avg_train_loss:.4e} | Val: {avg_val_loss:.4e}"
+                )
+                self.checkpoint(epoch, is_best=is_best)
+
+            # --- EARLY STOPPING ---
+            if avg_val_loss < self.config.train.early_stopping_threshold:
+                print(
+                    f"Early stopping at epoch {epoch} with val loss {avg_val_loss:.4e}"
+                )
+                break
+
+            elif (
+                epoch - self.best_epoch
+                >= self.config.train.max_epochs_without_improvement
+            ):
+                print(
+                    f"Early stopping at epoch {epoch} due to no improvement for {self.config.train.max_epochs_without_improvement} epochs"
+                )
+                break
+
         wandb.finish()

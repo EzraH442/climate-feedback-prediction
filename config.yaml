@@ -50,10 +50,13 @@ optimizer:
   learning_rate: 0.001
 
 train:
-  epochs: 1000
+  epochs: 900
   checkpoint_dir: './checkpoints/baseline-simple'
   split_ratio: 0.8
   batch_size: 256
+  early_stopping_threshold: 0.001
+  max_epochs_without_improvement: 10
+
 
 wandb:
   project: 'climate-feedback-solobev'
