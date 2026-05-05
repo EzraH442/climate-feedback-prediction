@@ -39,3 +39,6 @@ dataset:
     # - 2015
     # - 2017
     # - 2019
+
+preprocess:
+  params_dir: 'preprocess_states/small'

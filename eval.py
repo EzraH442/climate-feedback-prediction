@@ -361,9 +361,8 @@ def main():
     dataset = xr.open_mfdataset(era5_paths, combine="nested", concat_dim="date")
 
     # --- load val preprocessor ---
-    path_prefix = "scaler_small_val"
     scaler = XarrayMinMaxScaler(dim=("date", "latitude", "longitude"))
-    scaler.load(path_prefix)
+    scaler.load(config.preprocess.params_dir)
 
     # --- run tests ---
     test_1(dataset, scaler, model, figures_path=output_path)

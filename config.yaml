@@ -41,7 +41,6 @@ dataset:
     # - 2017
     # - 2019
 
-
 model:
   input_dim: 10
   hidden_dim: 15
@@ -57,6 +56,8 @@ train:
   early_stopping_threshold: 0.001
   max_epochs_without_improvement: 10
 
+preprocess:
+  params_dir: 'preprocess_states/small'
 
 wandb:
   project: 'climate-feedback-solobev'
