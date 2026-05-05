@@ -1,3 +1,4 @@
+import os
 import argparse
 from omegaconf import OmegaConf
 import torch
@@ -94,6 +95,7 @@ def test_1(
     dataset: xr.Dataset,
     scaler: XarrayMinMaxScaler,
     model: torch.nn.Module,
+    figures_path: Path = Path("."),
 ):
     data_torch = (
         torch.from_numpy(
@@ -139,7 +141,7 @@ def test_1(
     plt.colorbar(orientation="horizontal", fraction=0.075, label="$W/m^2$")
     plt.title("TSR (ERA5)")
 
-    plt.savefig("tsr_era5.png")
+    plt.savefig(figures_path / "tsr_era5.png")
 
     fig = plt.figure(figsize=(8, 6), dpi=300)
     m = setup_map()
@@ -156,7 +158,7 @@ def test_1(
     plt.colorbar(orientation="horizontal", fraction=0.075, label="$W/m^2$")
     plt.title("TSR (NN)")
 
-    plt.savefig("tsr_nn.png")
+    plt.savefig(figures_path / "tsr_nn.png")
 
     diff = tsr_mean - tsr_pred_mean
     max_abs_diff = np.max(np.abs(diff))
@@ -175,7 +177,7 @@ def test_1(
     )
     plt.colorbar(orientation="horizontal", fraction=0.075, label="$W/m^2$")
     plt.title("MBE")
-    plt.savefig("mbe.png")
+    plt.savefig(figures_path / "mbe.png")
 
     mse = np.mean(diff**2)
     rmse = np.sqrt(mse)
@@ -195,7 +197,7 @@ def test_1(
     )
     plt.colorbar(orientation="horizontal", fraction=0.075, label="$W/m^2$")
     plt.title("RMSE")
-    plt.savefig("rmse.png")
+    plt.savefig(figures_path / "rmse.png")
 
     # slope, intercept, r_value, p_value, std_err = linregress(
     #     predictions_inversed, dataset["tsr"].values
@@ -224,6 +226,7 @@ def test_2(
     date,
     scaler: XarrayMinMaxScaler,
     model: SimpleModel,
+    figures_path: Path = Path("."),
 ):
     date_specific_data = dataset.sel(date=date)
     date_specific_data_perturbed = copy.deepcopy(date_specific_data)
@@ -232,7 +235,9 @@ def test_2(
 
     data_torch_base = (
         torch.from_numpy(
-            scaler.transform(date_specific_data.transpose("date", "latitude", "longitude"))
+            scaler.transform(
+                date_specific_data.transpose("date", "latitude", "longitude")
+            )
             .to_array()
             .to_numpy()
         )
@@ -241,7 +246,9 @@ def test_2(
     )
     data_torch_perturbed = (
         torch.from_numpy(
-            scaler.transform(date_specific_data_perturbed.transpose("date", "latitude", "longitude"))
+            scaler.transform(
+                date_specific_data_perturbed.transpose("date", "latitude", "longitude")
+            )
             .to_array()
             .to_numpy()
         )
@@ -249,8 +256,12 @@ def test_2(
         .float()
     )
 
-    model_output_base = model(data_torch_base[:, :, :, :10]).permute(2, 1, 0, 3).detach().numpy()
-    model_output_perturbed = model(data_torch_perturbed[:, :, :, :10]).permute(2, 1, 0, 3).detach().numpy()
+    model_output_base = (
+        model(data_torch_base[:, :, :, :10]).permute(2, 1, 0, 3).detach().numpy()
+    )
+    model_output_perturbed = (
+        model(data_torch_perturbed[:, :, :, :10]).permute(2, 1, 0, 3).detach().numpy()
+    )
 
     predictions_base = scaler.inverse_transform(
         dataset_from_array(
@@ -287,8 +298,7 @@ def test_2(
     )
     plt.colorbar(orientation="horizontal", fraction=0.075, label=r"$W/m^2 1\%$")
     plt.title(f"NN Surface Albedo Kernel\n{date}")
-    plt.savefig("nn_kernel.png")
-
+    plt.savefig(figures_path / f"nn_kernel_{date}.png")
 
     pass
 
@@ -303,10 +313,25 @@ def main():
         required=True,
         help="Path to OmegaConf YAML config",
     )
+    parser.add_argument(
+        "--output_dir",
+        type=str,
+        help="Path to output directory (optional)",
+    )
+    args = parser.parse_args()
 
     # --- load config ---
-    config_path = parser.parse_args().config_path
+    config_path = args.config_path
     config = OmegaConf.load(config_path)
+
+    # --- setup output directory ---
+    output_dir = config.train.checkpoint_dir / 'figures'
+    if args.output_dir:
+        output_dir = args.output_dir
+
+    output_path = Path(output_dir)
+    if not output_path.exists():
+        output_path.mkdir(parents=True, exist_ok=True)
 
     # --- load model checkpoint ---
     checkpoint_path = Path(config.train.checkpoint_dir) / "best_model.pt"
@@ -341,8 +366,8 @@ def main():
     scaler.load(path_prefix)
 
     # --- run tests ---
-    # test_1(dataset, scaler, model)
-    test_2(dataset, date="2005-09", scaler=scaler, model=model)
+    test_1(dataset, scaler, model, figures_path=output_path)
+    test_2(dataset, date="2005-09", scaler=scaler, model=model, figures_path=output_path)
 
 
 if __name__ == "__main__":
