@@ -1,3 +1,4 @@
+import os
 import xarray as xr
 from pathlib import Path
 
@@ -43,6 +44,8 @@ class XarrayMinMaxScaler:
         return ds_std * denom + self.data_min_
 
     def save(self, path):
+        if not os.path.exists(path):
+            os.makedirs(path)
         self.data_min_.to_netcdf(Path(path) / "min.nc")
         self.data_max_.to_netcdf(Path(path) / "max.nc")
 
@@ -76,6 +79,8 @@ class XarrayStandardScaler:
         return (ds_norm * self.std_) + self.mean_
 
     def save(self, path):
+        if not os.path.exists(path):
+            os.makedirs(path)
         """Save stats to NetCDF for production use."""
         self.mean_.to_netcdf(Path(path) / "mean.nc")
         self.std_.to_netcdf(Path(path) / "std.nc")
