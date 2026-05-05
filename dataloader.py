@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 import numpy as np
 import torch
 import xarray as xr
@@ -14,12 +15,11 @@ def make_kernel_filename(year):
 
 
 class ClimateTorchDataset(torch.utils.data.Dataset):
-    def __init__(self, config_path="config.yaml", data_type="train", device=None):
+    def __init__(self, config_path="config.yaml", data_type="train"):
         """
         Args:
             config_path (str): Path to OmegaConf YAML config
             data_type (str): Type of data to load ("train" or "val")
-            device (optional): Device for tensors
         """
         conf = OmegaConf.load(config_path)
 
@@ -38,21 +38,41 @@ class ClimateTorchDataset(torch.utils.data.Dataset):
         self.dataset_era5 = xr.open_mfdataset(
             era5_paths, combine="nested", concat_dim="date"
         )
-        data_array = self.dataset_era5.to_dataarray(dim="variable").transpose(
-            "date", "latitude", "longitude", "variable"
-        )
-        # Write to a memmap once
-        mmap_path = data_type + "_era5_cache.npy"
-        if not os.path.exists(mmap_path):
-            np.save(mmap_path, data_array.values)
-
         self.n_dates = len(self.dataset_era5.date)
         self.n_lat = len(self.dataset_era5.latitude)
         self.n_lon = len(self.dataset_era5.longitude)
         self.n_vars = len(self.dataset_era5.data_vars)
 
-        self.shape = (self.n_dates, self.n_lat, self.n_lon, self.n_vars)
+        expected_shape = (self.n_dates, self.n_lat, self.n_lon, self.n_vars)
+        slurm_tmpdir = os.getenv("SLURM_TMPDIR")
+        if not slurm_tmpdir:
+            raise EnvironmentError("SLURM_TMPDIR environment variable is not set.")
+
+        mmap_path = Path(slurm_tmpdir) / f"{data_type}_data_mmap.npy"
+        if not mmap_path.exists():
+            mmap = np.lib.format.open_memmap(
+                mmap_path, mode="w+", dtype=np.float32, shape=expected_shape
+            )
+            for t in range(self.n_dates):
+                data_slice = self.dataset_era5.isel(date=t).to_dataarray().transpose(
+                    "latitude", "longitude", "variable"
+                ).values
+                mmap[t] = data_slice
+                if t % 12 == 0:
+                    print(f"Processed {t}/{self.n_dates} dates into memory-mapped file.")
+            mmap.flush()  # Ensure data is written to disk
+            del mmap  # Close the memmap
+            print(f"Data successfully written to memory-mapped file: {mmap_path}")
+        else:
+            existing = np.load(mmap_path, mmap_mode="r")
+            if existing.shape != expected_shape:
+                raise ValueError(
+                    f"Existing memory-mapped file shape {existing.shape} does not match expected shape {expected_shape}."
+                )
+
+        self.dataset_era5.close()  
         self.data = np.load(mmap_path, mmap_mode="r")  # OS handles paging
+        self.shape = (self.n_dates, self.n_lat, self.n_lon, self.n_vars)
 
         # dataset_kernels = xr.open(mfdataset(...))
         """
@@ -69,8 +89,6 @@ class ClimateTorchDataset(torch.utils.data.Dataset):
            tsr        (date, latitude, longitude) float64 100MB 0.0 0.0 ... 1.344e+07
         """
 
-        self.device = device
-
     def __len__(self):
         return self.n_dates * self.n_lat * self.n_lon
 
@@ -82,14 +100,11 @@ class ClimateTorchDataset(torch.utils.data.Dataset):
         lon_idx = rem % self.n_lon
 
         # Extract the data for this index
-        data_point = self.data[date_idx, lat_idx, lon_idx, :]
+        data_point = self.data[date_idx, lat_idx, lon_idx, :].copy()
 
         # Convert to torch tensor
-        tensor_data = torch.from_numpy(data_point).float()
-
-        if self.device:
-            tensor_data = tensor_data.to(self.device)
-
+        tensor_data = torch.from_numpy(data_point)
         X = tensor_data[:-1]  # All but last variable as input
         y = tensor_data[-1]  # Last variable as target
         return X, y
+

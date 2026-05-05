@@ -23,7 +23,7 @@ class SimpleModel(nn.Module):
 class SimpleModelTrainer:
     def __init__(
         self,
-        config_file: str = "config.yaml",
+        config,
         checkpoint_path: str | None = None,
         device: str = "cpu",
     ):
@@ -49,7 +49,7 @@ class SimpleModelTrainer:
             self.best_epoch = checkpoint["best_epoch"]
             self.total_training_time = checkpoint["total_training_time"]
         else:
-            self.config = omegaconf.OmegaConf.load(config_file)
+            self.config = config
             self.model = SimpleModel(self.config).to(self.device)
             self.optimizer = torch.optim.Adam(
                 self.model.parameters(), lr=self.config.optimizer.learning_rate
@@ -96,14 +96,14 @@ class SimpleModelTrainer:
         val_loader: torch.utils.data.DataLoader,
     ):
         for epoch in range(self.epoch, self.config.train.epochs):
-            epoch_start_time = time.time()
-            print(f"Epoch {epoch} started at {time.ctime(epoch_start_time)}")
+            epoch_start_time = time.perf_counter()
+            print(f"Epoch {epoch} started at {time.strftime('%Y-%m-%d %H:%M:%S')}")
 
             # --- TRAINING PHASE ---
             self.model.train()
             train_loss = 0
 
-            for i, (x, y) in train_loader:
+            for i, (x, y) in enumerate(train_loader):
                 x, y = x.to(self.device), y.to(self.device)
                 self.optimizer.zero_grad(set_to_none=True)
                 y_pred = self.model(x)
@@ -135,7 +135,7 @@ class SimpleModelTrainer:
             print(f"avg_val_loss: {avg_val_loss:.4e}")
 
             # --- TIME TRACKING ---
-            epoch_end_time = time.time()
+            epoch_end_time = time.perf_counter()
             epoch_duration = epoch_end_time - epoch_start_time
             self.total_training_time += epoch_duration
             print(
@@ -144,7 +144,13 @@ class SimpleModelTrainer:
 
             # --- LOGGING & CHECKPOINTING ---
             wandb.log(
-                {"epoch": epoch, "train/loss": avg_train_loss, "val/loss": avg_val_loss}
+                {
+                    "epoch": epoch,
+                    "train/loss": avg_train_loss,
+                    "val/loss": avg_val_loss,
+                    "time/epoch_duration": epoch_duration,
+                    "time/total_training_time_hours": self.total_training_time / 3600,
+                }
             )
 
             is_best = avg_val_loss < self.best_val_loss
