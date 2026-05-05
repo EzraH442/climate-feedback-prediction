@@ -47,12 +47,9 @@ val_dataset = xr.open_mfdataset(val_paths, combine="nested", concat_dim="date")
 scaler_train = XarrayMinMaxScaler(dim=("date", "latitude", "longitude"), min=-1, max=1)
 scaler_train.fit(train_dataset)
 train_scaled = scaler_train.transform(train_dataset)
-scaler_train.save("scaler_small_train")
+scaler_train.save(conf.preprocess.params_dir)
 
-scalar_val = XarrayMinMaxScaler(dim=("date", "latitude", "longitude"), min=-1, max=1)
-scalar_val.load("scaler_small_train")
-val_scaled = scalar_val.transform(val_dataset)
-scalar_val.save("scaler_small_val")
+val_scaled = scaler_train.transform(val_dataset)
 
 if not os.path.exists(conf.dataset.era5.path):
     os.makedirs(conf.dataset.era5.path)
