@@ -227,7 +227,8 @@ def test_2(
 ):
     date_specific_data = dataset.sel(date=date)
     date_specific_data_perturbed = copy.deepcopy(date_specific_data)
-    date_specific_data_perturbed["fal"] = min(date_specific_data["fal"] + 0.01, 1.0)
+    date_specific_data_perturbed["fal"] = date_specific_data["fal"] + 0.01
+    # todo clamping
 
     data_torch_base = (
         torch.from_numpy(
@@ -248,13 +249,13 @@ def test_2(
         .float()
     )
 
-    model_output_base = model(data_torch_base).permute(2, 1, 0, 3).detach().numpy()
-    model_output_perturbed = model(data_torch_perturbed).permute(2, 1, 0, 3).detach().numpy()
+    model_output_base = model(data_torch_base[:, :, :, :10]).permute(2, 1, 0, 3).detach().numpy()
+    model_output_perturbed = model(data_torch_perturbed[:, :, :, :10]).permute(2, 1, 0, 3).detach().numpy()
 
     predictions_base = scaler.inverse_transform(
         dataset_from_array(
             arr=model_output_base,
-            date=dataset["date"].values,
+            date=[date],
             lon=dataset["longitude"].values,
             lat=dataset["latitude"].values,
         )
@@ -262,7 +263,7 @@ def test_2(
     predictions_perturbed = scaler.inverse_transform(
         dataset_from_array(
             arr=model_output_perturbed,
-            date=dataset["date"].values,
+            date=[date],
             lon=dataset["longitude"].values,
             lat=dataset["latitude"].values,
         )
@@ -340,8 +341,8 @@ def main():
     scaler.load(path_prefix)
 
     # --- run tests ---
-    test_1(dataset, scaler, model)
-    test_2(dataset, date="2007-09", scaler=scaler, model=model)
+    # test_1(dataset, scaler, model)
+    test_2(dataset, date="2005-09", scaler=scaler, model=model)
 
 
 if __name__ == "__main__":
