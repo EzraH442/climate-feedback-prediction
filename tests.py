@@ -39,12 +39,13 @@ def setup_map():
 
 
 def plot_colormesh_on_map(m, lon, lat, data, cmap, vmin, vmax):
-    lon, lat = np.meshgrid(lon, lat)
-    x, y = m(lon, lat)
+    print(lon.shape)
+    print(lat.shape)
+    print(data.shape)
     m.pcolormesh(
-        x,
-        y,
-        data,
+        np.asarray(lon),
+        np.asarray(lat),
+        np.asarray(data),
         shading="nearest",
         cmap=cmap,
         vmin=vmin,
@@ -80,16 +81,7 @@ def plot_correlation(ax, predictions, actuals):
 def dataset_from_array(arr, date, lon, lat):
     array = xr.Dataset(
         data_vars={
-            "fal": (("date", "latitude", "longitude"), arr[:, :, :, 0]),
-            "hcc": (("date", "latitude", "longitude"), arr[:, :, :, 1]),
-            "mcc": (("date", "latitude", "longitude"), arr[:, :, :, 2]),
-            "lcc": (("date", "latitude", "longitude"), arr[:, :, :, 3]),
-            "sp": (("date", "latitude", "longitude"), arr[:, :, :, 4]),
-            "tciw": (("date", "latitude", "longitude"), arr[:, :, :, 5]),
-            "tclw": (("date", "latitude", "longitude"), arr[:, :, :, 6]),
-            "tco3": (("date", "latitude", "longitude"), arr[:, :, :, 7]),
-            "tcwv": (("date", "latitude", "longitude"), arr[:, :, :, 8]),
-            "totalx": (("date", "latitude", "longitude"), arr[:, :, :, 9]),
+            "tsr": (("date", "latitude", "longitude"), arr[:,:,:,0]),
         },
         coords={
             "date": date,
@@ -106,32 +98,37 @@ def test_1(
     model: torch.nn.Module,
 ):
     data_torch = torch.from_numpy(
-        scaler.transform(dataset.transpose("date", "latitude", "longitude")).values
-    )
+        scaler.transform(dataset.transpose("date", "latitude", "longitude")).to_array().to_numpy()
+    ).permute(3,2,1,0).float()
+    # print(data_torch.shape)
 
+    model_outputs=model(data_torch[:, :, :, :10]).permute(2,1,0,3).detach().numpy()
+    # print(model_outputs.shape)
     predictions = scaler.inverse_transform(
         dataset_from_array(
-            arr=model(data_torch).detach().numpy(),
+            arr=model_outputs,
             date=dataset["date"].values,
             lon=dataset["longitude"].values,
             lat=dataset["latitude"].values,
         )
     )
 
-    tsr_mean = dataset["tsr"].mean(dim="date").transpose()
-    tsr_pred_mean = predictions.mean(dim="date").transpose()
+    tsr_mean = dataset["tsr"].mean(dim="date").to_numpy()
+    tsr_pred_mean = predictions.mean(dim="date").to_array().to_numpy()
 
     max_tsr = max(np.max(tsr_mean), np.max(tsr_pred_mean))
+    print(max_tsr)
 
     fig = plt.figure(figsize=(8, 6), dpi=300)
     m = setup_map()
 
+    print(tsr_mean)
     lon, lat = dataset["longitude"].values, dataset["latitude"].values
     plot_colormesh_on_map(m, lon, lat, tsr_mean, cmap="Spectral", vmin=0, vmax=max_tsr)
 
     plt.text(
         x=np.max(tsr_mean) - 65,
-        y=np.max(dataset["lat"].values) + 5,
+        y=np.max(dataset["latitude"].values) + 5,
         s=f"{np.mean(tsr_mean):.2f}",
         fontsize=20,
     )
@@ -148,7 +145,7 @@ def test_1(
 
     plt.text(
         x=np.max(tsr_pred_mean) - 65,
-        y=np.max(dataset["lat"].values) + 5,
+        y=np.max(dataset["latitude"].values) + 5,
         s=f"{np.mean(tsr_pred_mean):.2f}",
         fontsize=20,
     )
@@ -233,7 +230,7 @@ def main():
 
     # --- load model checkpoint ---
     checkpoint_path = Path(config.train.checkpoint_dir) / "best_model.pt"
-    checkpoint_data = torch.load(checkpoint_path, map_location="cpu")
+    checkpoint_data = torch.load(checkpoint_path, map_location="cpu", weights_only=False)
     # checkpoint_data = {
     #     "epoch": epoch,
     #     "best_epoch": self.best_epoch,

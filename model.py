@@ -17,7 +17,7 @@ class SimpleModel(nn.Module):
         )
 
     def forward(self, x: torch.Tensor):
-        return self.model(x).flatten()
+        return self.model(x)
 
 
 class SimpleModelTrainer:
@@ -107,7 +107,7 @@ class SimpleModelTrainer:
                 x, y = x.to(self.device), y.to(self.device)
                 self.optimizer.zero_grad(set_to_none=True)
                 y_pred = self.model(x)
-                loss = self.loss_fn(y_pred, y.flatten())
+                loss = self.loss_fn(y_pred, y)
                 loss.backward()
                 self.optimizer.step()
                 train_loss += loss.item()
@@ -124,7 +124,7 @@ class SimpleModelTrainer:
                 for i, (x_val, y_val) in enumerate(val_loader):
                     x_val, y_val = x_val.to(self.device), y_val.to(self.device)
                     val_pred = self.model(x_val)
-                    v_loss = self.loss_fn(val_pred, y_val.flatten())
+                    v_loss = self.loss_fn(val_pred, y_val)
                     val_loss += v_loss.item()
                     if i % 100 == 0:
                         print(

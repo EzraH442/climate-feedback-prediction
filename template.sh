@@ -23,8 +23,7 @@ pip install --no-index --upgrade pip
 pip install --no-index -r requirements.txt
 pip install --no-index wandb
 
-export WANDB_API_KEY=
 export WANDB_MODE=offline
 wandb offline
-~
-~
+
+# python train.py
