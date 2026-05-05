@@ -7,6 +7,7 @@ from scipy.stats import linregress
 from dataloader import make_era5_filename
 from preprocessing import XarrayMinMaxScaler
 from pathlib import Path
+import copy
 
 from model import SimpleModel
 import matplotlib.pyplot as plt
@@ -39,9 +40,6 @@ def setup_map():
 
 
 def plot_colormesh_on_map(m, lon, lat, data, cmap, vmin, vmax):
-    print(lon.shape)
-    print(lat.shape)
-    print(data.shape)
     m.pcolormesh(
         np.asarray(lon),
         np.asarray(lat),
@@ -51,7 +49,6 @@ def plot_colormesh_on_map(m, lon, lat, data, cmap, vmin, vmax):
         vmin=vmin,
         vmax=vmax,
     )
-
 
 def setup_correlation_plot():
     fig, ax = plt.subplots(figsize=(6, 6), dpi=300)
@@ -113,21 +110,22 @@ def test_1(
         )
     )
 
-    tsr_mean = dataset["tsr"].mean(dim="date").to_numpy()
-    tsr_pred_mean = predictions.mean(dim="date").to_array().to_numpy()
-
+    tsr_mean = dataset["tsr"].mean(dim="date").to_numpy() / (3600 * 24)
+    tsr_pred_mean = predictions.mean(dim="date").to_array().to_numpy()[0] / (3600 * 24)
     max_tsr = max(np.max(tsr_mean), np.max(tsr_pred_mean))
-    print(max_tsr)
-
+    print('tsr_mean', tsr_mean)
+    print('tsr_pred_mean', tsr_mean)
+    print('max_tsr', max_tsr)
+    
+    
     fig = plt.figure(figsize=(8, 6), dpi=300)
     m = setup_map()
 
-    print(tsr_mean)
     lon, lat = dataset["longitude"].values, dataset["latitude"].values
     plot_colormesh_on_map(m, lon, lat, tsr_mean, cmap="Spectral", vmin=0, vmax=max_tsr)
 
     plt.text(
-        x=np.max(tsr_mean) - 65,
+        x=300,
         y=np.max(dataset["latitude"].values) + 5,
         s=f"{np.mean(tsr_mean):.2f}",
         fontsize=20,
@@ -144,7 +142,7 @@ def test_1(
     )
 
     plt.text(
-        x=np.max(tsr_pred_mean) - 65,
+        x=300,
         y=np.max(dataset["latitude"].values) + 5,
         s=f"{np.mean(tsr_pred_mean):.2f}",
         fontsize=20,
@@ -164,8 +162,8 @@ def test_1(
     )
 
     plt.text(
-        x=320,
-        y=np.max(dataset["lat"].values) + 5,
+        x=300,
+        y=np.max(dataset["latitude"].values) + 5,
         s=f"{np.mean(diff):.2f}",
         fontsize=20,
     )
@@ -179,11 +177,11 @@ def test_1(
 
     fig = plt.figure(figsize=(8, 6), dpi=300)
     m = setup_map()
-    plot_colormesh_on_map(m, lon, lat, rmse, cmap="Blues", vmin=0, vmax=max_rmse)
+    plot_colormesh_on_map(m, lon, lat, np.abs(diff), cmap="Blues", vmin=0, vmax=max_rmse)
 
     plt.text(
-        x=320,
-        y=np.max(dataset["lat"].values) + 5,
+        x=300,
+        y=np.max(dataset["latitude"].values) + 5,
         s=f"{np.mean(rmse):.2f}",
         fontsize=20,
     )
@@ -247,7 +245,7 @@ def main():
 
     # --- load val data ---
     era5_paths = [
-        f"{config.dataset.era5.path}/{make_era5_filename(year)}"
+        f"{config.dataset.era5.raw_path}/{make_era5_filename(year)}"
         for year in config.dataset.val_years
     ]
     print(f"Loading ERA5 data from: {era5_paths}")
