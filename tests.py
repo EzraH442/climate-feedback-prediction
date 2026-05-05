@@ -50,6 +50,7 @@ def plot_colormesh_on_map(m, lon, lat, data, cmap, vmin, vmax):
         vmax=vmax,
     )
 
+
 def setup_correlation_plot():
     fig, ax = plt.subplots(figsize=(6, 6), dpi=300)
     return fig, ax
@@ -78,7 +79,7 @@ def plot_correlation(ax, predictions, actuals):
 def dataset_from_array(arr, date, lon, lat):
     array = xr.Dataset(
         data_vars={
-            "tsr": (("date", "latitude", "longitude"), arr[:,:,:,0]),
+            "tsr": (("date", "latitude", "longitude"), arr[:, :, :, 0]),
         },
         coords={
             "date": date,
@@ -94,12 +95,18 @@ def test_1(
     scaler: XarrayMinMaxScaler,
     model: torch.nn.Module,
 ):
-    data_torch = torch.from_numpy(
-        scaler.transform(dataset.transpose("date", "latitude", "longitude")).to_array().to_numpy()
-    ).permute(3,2,1,0).float()
+    data_torch = (
+        torch.from_numpy(
+            scaler.transform(dataset.transpose("date", "latitude", "longitude"))
+            .to_array()
+            .to_numpy()
+        )
+        .permute(3, 2, 1, 0)
+        .float()
+    )
     # print(data_torch.shape)
 
-    model_outputs=model(data_torch[:, :, :, :10]).permute(2,1,0,3).detach().numpy()
+    model_outputs = model(data_torch[:, :, :, :10]).permute(2, 1, 0, 3).detach().numpy()
     # print(model_outputs.shape)
     predictions = scaler.inverse_transform(
         dataset_from_array(
@@ -113,11 +120,10 @@ def test_1(
     tsr_mean = dataset["tsr"].mean(dim="date").to_numpy() / (3600 * 24)
     tsr_pred_mean = predictions.mean(dim="date").to_array().to_numpy()[0] / (3600 * 24)
     max_tsr = max(np.max(tsr_mean), np.max(tsr_pred_mean))
-    print('tsr_mean', tsr_mean)
-    print('tsr_pred_mean', tsr_mean)
-    print('max_tsr', max_tsr)
-    
-    
+    print("tsr_mean", tsr_mean)
+    print("tsr_pred_mean", tsr_mean)
+    print("max_tsr", max_tsr)
+
     fig = plt.figure(figsize=(8, 6), dpi=300)
     m = setup_map()
 
@@ -177,7 +183,9 @@ def test_1(
 
     fig = plt.figure(figsize=(8, 6), dpi=300)
     m = setup_map()
-    plot_colormesh_on_map(m, lon, lat, np.abs(diff), cmap="Blues", vmin=0, vmax=max_rmse)
+    plot_colormesh_on_map(
+        m, lon, lat, np.abs(diff), cmap="Blues", vmin=0, vmax=max_rmse
+    )
 
     plt.text(
         x=300,
@@ -211,6 +219,79 @@ def test_1(
     # fig.savefig("correlation.png")
 
 
+def test_2(
+    dataset: xr.Dataset,
+    date,
+    scaler: XarrayMinMaxScaler,
+    model: SimpleModel,
+):
+    date_specific_data = dataset.sel(date=date)
+    date_specific_data_perturbed = copy.deepcopy(date_specific_data)
+    date_specific_data_perturbed["fal"] = min(date_specific_data["fal"] + 0.01, 1.0)
+
+    data_torch_base = (
+        torch.from_numpy(
+            scaler.transform(date_specific_data.transpose("date", "latitude", "longitude"))
+            .to_array()
+            .to_numpy()
+        )
+        .permute(3, 2, 1, 0)
+        .float()
+    )
+    data_torch_perturbed = (
+        torch.from_numpy(
+            scaler.transform(date_specific_data_perturbed.transpose("date", "latitude", "longitude"))
+            .to_array()
+            .to_numpy()
+        )
+        .permute(3, 2, 1, 0)
+        .float()
+    )
+
+    model_output_base = model(data_torch_base).permute(2, 1, 0, 3).detach().numpy()
+    model_output_perturbed = model(data_torch_perturbed).permute(2, 1, 0, 3).detach().numpy()
+
+    predictions_base = scaler.inverse_transform(
+        dataset_from_array(
+            arr=model_output_base,
+            date=dataset["date"].values,
+            lon=dataset["longitude"].values,
+            lat=dataset["latitude"].values,
+        )
+    ).mean(dim="date").to_array().to_numpy()[0] / (3600 * 24)
+    predictions_perturbed = scaler.inverse_transform(
+        dataset_from_array(
+            arr=model_output_perturbed,
+            date=dataset["date"].values,
+            lon=dataset["longitude"].values,
+            lat=dataset["latitude"].values,
+        )
+    ).mean(dim="date").to_array().to_numpy()[0] / (3600 * 24)
+
+    diff = predictions_perturbed - predictions_base
+    lon, lat = dataset["longitude"].values, dataset["latitude"].values
+    max_diff = np.max(np.abs(diff))
+
+    fig = plt.figure(figsize=(8, 6), dpi=300)
+    m = setup_map()
+    plot_colormesh_on_map(
+        m, lon, lat, diff, cmap="RdBu_r", vmin=-max_diff, vmax=max_diff
+    )
+
+    plt.text(
+        x=300,
+        y=np.max(dataset["latitude"].values) + 5,
+        s=f"{np.mean(diff):.2f}",
+        fontsize=20,
+    )
+    plt.colorbar(orientation="horizontal", fraction=0.075, label=r"$W/m^2 1\%$")
+    plt.title(f"NN Surface Albedo Kernel\n{date}")
+    plt.savefig("nn_kernel.png")
+
+
+    pass
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Test the trained model on validation data."
@@ -228,7 +309,9 @@ def main():
 
     # --- load model checkpoint ---
     checkpoint_path = Path(config.train.checkpoint_dir) / "best_model.pt"
-    checkpoint_data = torch.load(checkpoint_path, map_location="cpu", weights_only=False)
+    checkpoint_data = torch.load(
+        checkpoint_path, map_location="cpu", weights_only=False
+    )
     # checkpoint_data = {
     #     "epoch": epoch,
     #     "best_epoch": self.best_epoch,
@@ -258,6 +341,7 @@ def main():
 
     # --- run tests ---
     test_1(dataset, scaler, model)
+    test_2(dataset, date="2007-09", scaler=scaler, model=model)
 
 
 if __name__ == "__main__":
