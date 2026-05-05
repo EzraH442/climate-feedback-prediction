@@ -325,7 +325,7 @@ def main():
     config = OmegaConf.load(config_path)
 
     # --- setup output directory ---
-    output_dir = config.train.checkpoint_dir / 'figures'
+    output_dir = Path(config.train.checkpoint_dir) / 'figures'
     if args.output_dir:
         output_dir = args.output_dir
 
