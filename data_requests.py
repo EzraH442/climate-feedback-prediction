@@ -3,7 +3,10 @@ import cdsapi
 import xarray as xr
 import cfgrib
 
-c = cdsapi.Client()
+c = cdsapi.Client(
+    url="https://cds.climate.copernicus.eu/api",
+    key="3dbc229c-81f7-4fd5-be2f-c6f193729ef5"
+)
 
 
 def retrieve_era5_years_data(years=[2006, 2008], data_path="data/era5"):
@@ -75,6 +78,6 @@ def load_all_era5_data(years):
 
 
 if __name__ == "__main__":
-    years = [2006, 2008]
+    years = range(1990,2021)
     retrieve_era5_years_data(years)
     ds = load_all_era5_data(years)
