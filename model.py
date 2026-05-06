@@ -10,6 +10,8 @@ class SimpleModel(nn.Module):
     def __init__(self, config):
         super(SimpleModel, self).__init__()
         self.config = config
+        self.input_dim = config.model.input_dim
+        self.hidden_dim = config.model.hidden_dim
         self.model = nn.Sequential(
             nn.Linear(config.model.input_dim, config.model.hidden_dim),
             nn.Tanh(),

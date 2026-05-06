@@ -1,4 +1,3 @@
-import os
 import argparse
 from omegaconf import OmegaConf
 import torch
@@ -8,7 +7,6 @@ from scipy.stats import linregress
 from dataloader import make_era5_filename
 from preprocessing import XarrayMinMaxScaler
 from pathlib import Path
-import copy
 
 from model import SimpleModel
 import matplotlib.pyplot as plt
@@ -16,7 +14,7 @@ import matplotlib.pyplot as plt
 from mpl_toolkits.basemap import Basemap
 
 
-def setup_map():
+def setup_global_map():
     m = Basemap(
         projection="cyl",
         resolution="l",
@@ -78,103 +76,82 @@ def plot_correlation(ax, predictions, actuals):
 # totalx     (date, latitude, longitude) float64 100MB 33.78 33.78 ... 24.45
 # tsr        (date, latitude, longitude) float64 100MB 0.0 0.0 ... 1.344e+07
 def dataset_from_array(arr, date, lon, lat):
+    """
+    arr must have shape (date, lat, lon)
+    """
     array = xr.Dataset(
-        data_vars={
-            "tsr": (("date", "latitude", "longitude"), arr),
-        },
-        coords={
-            "date": date,
-            "longitude": lon,
-            "latitude": lat,
-        },
+        data_vars={"tsr": (("date", "latitude", "longitude"), arr)},
+        coords={"date": date, "longitude": lon, "latitude": lat},
     )
     return array
 
 
 def test_1(
-    dataset: xr.Dataset,
+    preprocessed_dataset: xr.Dataset,
+    raw_dataset: xr.Dataset,
     scaler: XarrayMinMaxScaler,
     model: torch.nn.Module,
     figures_path: Path = Path("."),
 ):
-    data_torch = (
-        torch.from_numpy(
-            scaler.transform(dataset.transpose("date", "latitude", "longitude"))
-            .to_array()
-            .to_numpy()
-        )
-        .permute(3, 2, 1, 0)
-        .float()
-    )
+    date = raw_dataset["date"].values
+    lat = raw_dataset["latitude"].values
+    lon = raw_dataset["longitude"].values
+
+    data_torch = torch.from_numpy(
+        preprocessed_dataset.to_dataarray()
+        .transpose("date", "latitude", "longitude", "variable")
+        .to_numpy()
+    ).float()
     print(data_torch.shape)
 
-    model_outputs = model(data_torch[:, :, :, :10]).permute(2, 1, 0).detach().numpy()
-    # print(model_outputs.shape)
+    model_outputs = model(data_torch[:, :, :, : model.input_dim]).detach()
+    # (date, lat, lon)
+
+    print(model_outputs.shape)
     predictions = scaler.inverse_transform(
-        dataset_from_array(
-            arr=model_outputs,
-            date=dataset["date"].values,
-            lon=dataset["longitude"].values,
-            lat=dataset["latitude"].values,
-        )
+        dataset_from_array(arr=model_outputs.numpy(), date=date, lon=lon, lat=lat)
     )
 
-    tsr_mean = dataset["tsr"].mean(dim="date").to_numpy() / (3600 * 24)
-    tsr_pred_mean = predictions.mean(dim="date").to_array().to_numpy()[0] / (3600 * 24)
+    tsr_mean = raw_dataset["tsr"].mean(dim="date").to_numpy() / (3600 * 24)
+    tsr_pred_mean = predictions.mean(dim="date").to_dataarray().to_numpy()[0] / (
+        3600 * 24
+    )
     max_tsr = max(np.max(tsr_mean), np.max(tsr_pred_mean))
     print("tsr_mean", tsr_mean)
-    print("tsr_pred_mean", tsr_mean)
+    print("tsr_pred_mean", tsr_pred_mean)
     print("max_tsr", max_tsr)
 
     fig = plt.figure(figsize=(8, 6), dpi=300)
-    m = setup_map()
+    m = setup_global_map()
 
-    lon, lat = dataset["longitude"].values, dataset["latitude"].values
     plot_colormesh_on_map(m, lon, lat, tsr_mean, cmap="Spectral", vmin=0, vmax=max_tsr)
 
-    plt.text(
-        x=300,
-        y=np.max(dataset["latitude"].values) + 5,
-        s=f"{np.mean(tsr_mean):.2f}",
-        fontsize=20,
-    )
+    plt.text(x=300, y=np.max(lat) + 5, s=f"{np.mean(tsr_mean):.2f}", fontsize=20)
     plt.colorbar(orientation="horizontal", fraction=0.075, label="$W/m^2$")
     plt.title("TSR (ERA5)")
-
     plt.savefig(figures_path / "tsr_era5.png")
 
     fig = plt.figure(figsize=(8, 6), dpi=300)
-    m = setup_map()
+    m = setup_global_map()
     plot_colormesh_on_map(
         m, lon, lat, tsr_pred_mean, cmap="Spectral", vmin=0, vmax=max_tsr
     )
 
-    plt.text(
-        x=300,
-        y=np.max(dataset["latitude"].values) + 5,
-        s=f"{np.mean(tsr_pred_mean):.2f}",
-        fontsize=20,
-    )
+    plt.text(x=300, y=np.max(lat) + 5, s=f"{np.mean(tsr_pred_mean):.2f}", fontsize=20)
     plt.colorbar(orientation="horizontal", fraction=0.075, label="$W/m^2$")
     plt.title("TSR (NN)")
-
     plt.savefig(figures_path / "tsr_nn.png")
 
     diff = tsr_mean - tsr_pred_mean
     max_abs_diff = np.max(np.abs(diff))
 
     fig = plt.figure(figsize=(8, 6), dpi=300)
-    m = setup_map()
+    m = setup_global_map()
     plot_colormesh_on_map(
         m, lon, lat, diff, cmap="RdBu_r", vmin=-max_abs_diff, vmax=max_abs_diff
     )
 
-    plt.text(
-        x=300,
-        y=np.max(dataset["latitude"].values) + 5,
-        s=f"{np.mean(diff):.2f}",
-        fontsize=20,
-    )
+    plt.text(x=300, y=np.max(lat) + 5, s=f"{np.mean(diff):.2f}", fontsize=20)
     plt.colorbar(orientation="horizontal", fraction=0.075, label="$W/m^2$")
     plt.title("MBE")
     plt.savefig(figures_path / "mbe.png")
@@ -184,17 +161,12 @@ def test_1(
     max_rmse = np.max(rmse)
 
     fig = plt.figure(figsize=(8, 6), dpi=300)
-    m = setup_map()
+    m = setup_global_map()
     plot_colormesh_on_map(
         m, lon, lat, np.abs(diff), cmap="Blues", vmin=0, vmax=max_rmse
     )
 
-    plt.text(
-        x=300,
-        y=np.max(dataset["latitude"].values) + 5,
-        s=f"{np.mean(rmse):.2f}",
-        fontsize=20,
-    )
+    plt.text(x=300, y=np.max(lat) + 5, s=f"{np.mean(rmse):.2f}", fontsize=20)
     plt.colorbar(orientation="horizontal", fraction=0.075, label="$W/m^2$")
     plt.title("RMSE")
     plt.savefig(figures_path / "rmse.png")
@@ -222,84 +194,79 @@ def test_1(
 
 
 def test_2(
+    preprocessed_dataset: xr.Dataset,
+    date,
+    scaler: XarrayMinMaxScaler,
+    model: SimpleModel,
+    figures_path: Path = Path("."),
+):
+    date_specific_data = preprocessed_dataset.sel(date=date)
+    date_specific_data_perturbed = date_specific_data.copy(deep=True)
+    date_specific_data_perturbed["fal"] = date_specific_data["fal"] + 0.01
+    # todo clamping
+
+    lon = date_specific_data["longitude"].values
+    lat = date_specific_data["latitude"].values
+
+    data_torch_base = torch.from_numpy(
+        date_specific_data.to_dataarray()
+        .tranpose("date", "latitude", "longitude", "variable")
+        .to_numpy()
+    ).float()
+    data_torch_perturbed = torch.from_numpy(
+        date_specific_data_perturbed.to_dataarray()
+        .transpose("date", "latitude", "longitude", "variable")
+        .to_numpy()
+    ).float()
+
+    model_output_base = model(data_torch_base[:, :, :, : model.input_dim]).detach()
+    model_output_perturbed = model(
+        data_torch_perturbed[:, :, :, : model.input_dim]
+    ).detach()
+
+    predictions_base = scaler.inverse_transform(
+        dataset_from_array(
+            arr=model_output_base.numpy(),
+            date=[date],
+            lon=lon,
+            lat=lat,
+        )
+    ).mean(dim="date").to_dataarray().to_numpy()[0] / (3600 * 24)
+    predictions_perturbed = scaler.inverse_transform(
+        dataset_from_array(
+            arr=model_output_perturbed.numpy(),
+            date=[date],
+            lon=lon,
+            lat=lat,
+        )
+    ).mean(dim="date").to_dataarray().to_numpy()[0] / (3600 * 24)
+
+    diff = predictions_perturbed - predictions_base
+    max_diff = np.max(np.abs(diff))
+
+    fig = plt.figure(figsize=(8, 6), dpi=300)
+    m = setup_global_map()
+    plot_colormesh_on_map(
+        m, lon, lat, diff, cmap="RdBu_r", vmin=-max_diff, vmax=max_diff
+    )
+
+    plt.text(x=300, y=np.max(lat) + 5, s=f"{np.mean(diff):.2f}", fontsize=20)
+    plt.colorbar(orientation="horizontal", fraction=0.075, label=r"$W/m^2 1\%$")
+    plt.title(f"NN Surface Albedo Kernel\n{date}")
+    plt.savefig(figures_path / f"nn_kernel_{date}.png")
+
+    pass
+
+
+def test_3(
     dataset: xr.Dataset,
     date,
     scaler: XarrayMinMaxScaler,
     model: SimpleModel,
     figures_path: Path = Path("."),
 ):
-    date_specific_data = dataset.sel(date=date)
-    date_specific_data_perturbed = copy.deepcopy(date_specific_data)
-    date_specific_data_perturbed["fal"] = date_specific_data["fal"] + 0.01
-    # todo clamping
-
-    data_torch_base = (
-        torch.from_numpy(
-            scaler.transform(
-                date_specific_data.transpose("date", "latitude", "longitude")
-            )
-            .to_array()
-            .to_numpy()
-        )
-        .permute(3, 2, 1, 0)
-        .float()
-    )
-    data_torch_perturbed = (
-        torch.from_numpy(
-            scaler.transform(
-                date_specific_data_perturbed.transpose("date", "latitude", "longitude")
-            )
-            .to_array()
-            .to_numpy()
-        )
-        .permute(3, 2, 1, 0)
-        .float()
-    )
-
-    model_output_base = (
-        model(data_torch_base[:, :, :, :10]).permute(2, 1, 0).detach().numpy()
-    )
-    model_output_perturbed = (
-        model(data_torch_perturbed[:, :, :, :10]).permute(2, 1, 0).detach().numpy()
-    )
-
-    predictions_base = scaler.inverse_transform(
-        dataset_from_array(
-            arr=model_output_base,
-            date=[date],
-            lon=dataset["longitude"].values,
-            lat=dataset["latitude"].values,
-        )
-    ).mean(dim="date").to_array().to_numpy()[0] / (3600 * 24)
-    predictions_perturbed = scaler.inverse_transform(
-        dataset_from_array(
-            arr=model_output_perturbed,
-            date=[date],
-            lon=dataset["longitude"].values,
-            lat=dataset["latitude"].values,
-        )
-    ).mean(dim="date").to_array().to_numpy()[0] / (3600 * 24)
-
-    diff = predictions_perturbed - predictions_base
-    lon, lat = dataset["longitude"].values, dataset["latitude"].values
-    max_diff = np.max(np.abs(diff))
-
-    fig = plt.figure(figsize=(8, 6), dpi=300)
-    m = setup_map()
-    plot_colormesh_on_map(
-        m, lon, lat, diff, cmap="RdBu_r", vmin=-max_diff, vmax=max_diff
-    )
-
-    plt.text(
-        x=300,
-        y=np.max(dataset["latitude"].values) + 5,
-        s=f"{np.mean(diff):.2f}",
-        fontsize=20,
-    )
-    plt.colorbar(orientation="horizontal", fraction=0.075, label=r"$W/m^2 1\%$")
-    plt.title(f"NN Surface Albedo Kernel\n{date}")
-    plt.savefig(figures_path / f"nn_kernel_{date}.png")
-
+    # Second-Order Test: Radiative Sensitivity Difference
+    # \Delta K^* =
     pass
 
 
@@ -324,7 +291,7 @@ def main():
     config = OmegaConf.load(args.config_file)
 
     # --- setup output directory ---
-    output_dir = Path(config.train.checkpoint_dir) / 'figures'
+    output_dir = Path(config.train.checkpoint_dir) / "figures"
     if args.output_dir:
         output_dir = args.output_dir
 
@@ -352,20 +319,39 @@ def main():
     model.eval()
 
     # --- load val data ---
-    era5_paths = [
+    raw_era5_paths = [
         f"{config.dataset.era5.raw_path}/{make_era5_filename(year)}"
         for year in config.dataset.val_years
     ]
-    print(f"Loading ERA5 data from: {era5_paths}")
-    dataset = xr.open_mfdataset(era5_paths, combine="nested", concat_dim="date")
+    processed_era5_paths = [
+        f"{config.dataset.era5.path}/{make_era5_filename(year)}"
+        for year in config.dataset.val_years
+    ]
+    print(f"Loading ERA5 data from: {raw_era5_paths} and {processed_era5_paths}")
+    raw_dataset = xr.open_mfdataset(raw_era5_paths, combine="nested", concat_dim="date")
+    preprocessed_dataset = xr.open_mfdataset(
+        processed_era5_paths, combine="nested", concat_dim="date"
+    )
 
     # --- load val preprocessor ---
     scaler = XarrayMinMaxScaler(dim=("date", "latitude", "longitude"))
     scaler.load(config.preprocess.params_dir)
 
     # --- run tests ---
-    test_1(dataset, scaler, model, figures_path=output_path)
-    test_2(dataset, date="2005-09", scaler=scaler, model=model, figures_path=output_path)
+    test_1(
+        preprocessed_dataset=preprocessed_dataset,
+        raw_dataset=raw_dataset,
+        scaler=scaler,
+        model=model,
+        figures_path=output_path,
+    )
+    test_2(
+        preprocessed_dataset=preprocessed_dataset,
+        date="2005-09",
+        scaler=scaler,
+        model=model,
+        figures_path=output_path,
+    )
 
 
 if __name__ == "__main__":
