@@ -1,3 +1,4 @@
+import argparse
 import os
 import shutil
 from pathlib import Path
@@ -40,49 +41,68 @@ def stage_training_data(config_path: str) -> str:
     return str(runtime_config_path)
 
 
-config_path = stage_training_data("config.yaml")
-config = OmegaConf.load(config_path)
+def train(config_path: str):
 
-train_dataset = ClimateTorchDataset(
-    config_path=config_path,
-    data_type="train",
-)
-val_dataset = ClimateTorchDataset(
-    config_path=config_path,
-    data_type="val",
-)
+    config = OmegaConf.load(config_path)
 
-torch.manual_seed(config.seed)
-num_workers = int(os.environ.get("SLURM_CPUS_PER_TASK", 4))
-device = "cuda" if torch.cuda.is_available() else "cpu"
-pin_memory = False
-if device == "cuda":
-    torch.cuda.manual_seed_all(config.seed)
-    pin_memory = True
+    train_dataset = ClimateTorchDataset(
+        config_path=config_path,
+        data_type="train",
+    )
+    val_dataset = ClimateTorchDataset(
+        config_path=config_path,
+        data_type="val",
+    )
 
-print(f"Number of workers for DataLoader: {num_workers}")
-print(f"Using device: {device}")
+    torch.manual_seed(config.seed)
+    num_workers = int(os.environ.get("SLURM_CPUS_PER_TASK", 4))
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    pin_memory = False
+    if device == "cuda":
+        torch.cuda.manual_seed_all(config.seed)
+        pin_memory = True
 
-train_dataloader = DataLoader(
-    train_dataset,
-    batch_size=config.train.batch_size,
-    shuffle=True,
-    num_workers=num_workers,
-    pin_memory=pin_memory,
-)
-val_dataloader = DataLoader(
-    val_dataset,
-    batch_size=config.train.batch_size,
-    shuffle=False,
-    num_workers=num_workers,
-    pin_memory=pin_memory,
-)
+    print(f"Number of workers for DataLoader: {num_workers}")
+    print(f"Using device: {device}")
 
-checkpoint_path = None  # Set to a valid path to resume from checkpoint
-if (Path(config.train.checkpoint_dir) / "best_model.pt").exists():
-    checkpoint_path = str(Path(config.train.checkpoint_dir) / "best_model.pt")
+    train_dataloader = DataLoader(
+        train_dataset,
+        batch_size=config.train.batch_size,
+        shuffle=True,
+        num_workers=num_workers,
+        pin_memory=pin_memory,
+    )
+    val_dataloader = DataLoader(
+        val_dataset,
+        batch_size=config.train.batch_size,
+        shuffle=False,
+        num_workers=num_workers,
+        pin_memory=pin_memory,
+    )
 
-trainer = SimpleModelTrainer(
-    config=config, device=device, checkpoint_path=checkpoint_path
-)
-trainer.train_model(train_dataloader, val_dataloader)
+    checkpoint_path = None  # Set to a valid path to resume from checkpoint
+    if (Path(config.train.checkpoint_dir) / "best_model.pt").exists():
+        checkpoint_path = str(Path(config.train.checkpoint_dir) / "best_model.pt")
+
+    trainer = SimpleModelTrainer(
+        config=config, device=device, checkpoint_path=checkpoint_path
+    )
+    trainer.train_model(train_dataloader, val_dataloader)
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Train model on ERA5 data")
+    parser.add_argument(
+        "--config_file",
+        type=str,
+        required=True,
+        help="Path to config file",
+        default="config_train.yaml",
+    )
+    args = parser.parse_args()
+
+    train(args.config_file)
+
+
+if __name__ == "__main__":
+    main()

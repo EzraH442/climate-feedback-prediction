@@ -308,7 +308,7 @@ def main():
         description="Test the trained model on validation data."
     )
     parser.add_argument(
-        "--config_path",
+        "--config_file",
         type=str,
         required=True,
         help="Path to OmegaConf YAML config",
@@ -321,8 +321,7 @@ def main():
     args = parser.parse_args()
 
     # --- load config ---
-    config_path = args.config_path
-    config = OmegaConf.load(config_path)
+    config = OmegaConf.load(args.config_file)
 
     # --- setup output directory ---
     output_dir = Path(config.train.checkpoint_dir) / 'figures'

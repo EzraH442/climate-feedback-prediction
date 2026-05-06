@@ -80,3 +80,7 @@ def main():
     args = parser.parse_args()
 
     preprocess(args.config_file)
+
+
+if __name__ == "__main__":
+    main()
