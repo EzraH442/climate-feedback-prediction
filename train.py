@@ -41,26 +41,27 @@ def stage_training_data(config_path: str) -> str:
     return str(runtime_config_path)
 
 
-def train(config_path: str):
-
-    config = OmegaConf.load(config_path)
+def train(config_path: str, resume: bool = True):
+    staged_config_path = stage_training_data(config_path)
+    config = OmegaConf.load(staged_config_path)
 
     train_dataset = ClimateTorchDataset(
-        config_path=config_path,
+        config_path=staged_config_path,
         data_type="train",
     )
     val_dataset = ClimateTorchDataset(
-        config_path=config_path,
+        config_path=staged_config_path,
         data_type="val",
     )
 
     torch.manual_seed(config.seed)
-    num_workers = int(os.environ.get("SLURM_CPUS_PER_TASK", 4))
     device = "cuda" if torch.cuda.is_available() else "cpu"
     pin_memory = False
+    num_workers = max(0, int(os.environ.get("SLURM_CPUS_PER_TASK", 4)) - 1)
     if device == "cuda":
         torch.cuda.manual_seed_all(config.seed)
         pin_memory = True
+        num_workers += 1
 
     print(f"Number of workers for DataLoader: {num_workers}")
     print(f"Using device: {device}")
@@ -71,6 +72,7 @@ def train(config_path: str):
         shuffle=True,
         num_workers=num_workers,
         pin_memory=pin_memory,
+        persistent_workers=True,
     )
     val_dataloader = DataLoader(
         val_dataset,
@@ -78,11 +80,31 @@ def train(config_path: str):
         shuffle=False,
         num_workers=num_workers,
         pin_memory=pin_memory,
+        persistent_workers=True,
     )
 
     checkpoint_path = None  # Set to a valid path to resume from checkpoint
-    if (Path(config.train.checkpoint_dir) / "best_model.pt").exists():
-        checkpoint_path = str(Path(config.train.checkpoint_dir) / "best_model.pt")
+    if resume:
+        if not Path(config.train.checkpoint_dir).exists():
+            raise FileNotFoundError(
+                f"Checkpoint directory does not exist: {config.train.checkpoint_dir}"
+            )
+        checkpoint_files = list(
+            Path(config.train.checkpoint_dir).glob("model_epoch_*.pt")
+        )
+        if not checkpoint_files:
+            raise FileNotFoundError(
+                f"No checkpoint files found in {config.train.checkpoint_dir} to resume from."
+            )
+
+        max_epoch = 0
+        for file in checkpoint_files:
+            epoch = int(file.stem.split("_")[-1])
+            max_epoch = max(max_epoch, epoch)
+        checkpoint_path = str(
+            Path(config.train.checkpoint_dir) / f"model_epoch_{max_epoch}.pt"
+        )
+        print(f"Resuming training from checkpoint: {checkpoint_path}")
 
     trainer = SimpleModelTrainer(
         config=config, device=device, checkpoint_path=checkpoint_path
@@ -99,9 +121,21 @@ def main():
         help="Path to config file",
         default="config_train.yaml",
     )
+    parser.add_argument(
+        "--resume",
+        action="store_true",
+        help="Whether to resume training from checkpoint if available",
+    )
+    parser.add_argument(
+        "--no-resume",
+        action="store_true",
+        dest="resume",
+        help="Whether to start training from scratch",
+    )
+    parser.set_defaults(resume=True)
     args = parser.parse_args()
 
-    train(args.config_file)
+    train(args.config_file, args.resume)
 
 
 if __name__ == "__main__":
