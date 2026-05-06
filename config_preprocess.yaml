@@ -3,7 +3,7 @@ seed: 42
 dataset:
   era5: # data that the era5 monthly single level data will be in
     raw_path: './data/era5'
-    path: './data/era5_processed'
+    path: './data/era5_processed_small'
   kernels: # data that the kernel data will be in
     path: './data/kernels'
   train_years: # even years from 1990-2020
