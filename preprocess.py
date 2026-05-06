@@ -1,4 +1,5 @@
 import os
+from utils import compute_cloud_optical_depth
 import torch
 from omegaconf import OmegaConf
 from preprocessing import XarrayMinMaxScaler
@@ -8,6 +9,21 @@ import argparse
 
 def make_era5_filename(year):
     return f"era5_single_levels_monthly_{year}.nc"
+
+
+def transform_dataset(ds: xr.Dataset):
+    new_ds = ds.copy()
+
+    new_ds["ecod"] = compute_cloud_optical_depth(
+        tclw=ds["tclw"], tciw=ds["tciw"], tcc=ds["tcc"]
+    )
+    new_ds = new_ds.drop_vars(["tcc"])
+    new_ds["ecod_fal"] = new_ds["ecod"] * ds["fal"]
+
+    # 4x downscaling in both lat and lon
+    ds_downscaled = new_ds.coarsen(latitude=4, longitude=4, boundary="trim").mean()
+
+    return ds_downscaled
 
 
 def preprocess(config_path):
@@ -25,11 +41,12 @@ def preprocess(config_path):
     ]
 
     print(f"Loading ERA5 train data from: {train_paths}")
-    train_dataset = xr.open_mfdataset(train_paths, combine="nested", concat_dim="date")
+    train_data = xr.open_mfdataset(train_paths, combine="nested", concat_dim="date")
 
     print(f"Loading ERA5 val data from: {val_paths}")
-    val_dataset = xr.open_mfdataset(val_paths, combine="nested", concat_dim="date")
+    val_data = xr.open_mfdataset(val_paths, combine="nested", concat_dim="date")
     """
+       tcc        (date, latitude, longitude) float64 100MB 
        fal        (date, latitude, longitude) float64 100MB 0.7555 0.7555 ... 0.85
        hcc        (date, latitude, longitude) float64 100MB 0.3654 0.3654 ... 0.085
        mcc        (date, latitude, longitude) float64 100MB 0.474 0.474 ... 0.1886
@@ -43,7 +60,8 @@ def preprocess(config_path):
        tsr        (date, latitude, longitude) float64 100MB 0.0 0.0 ... 1.344e+07
     """
 
-    # TODO: compute ECOD
+    train_dataset = transform_dataset(train_data)
+    val_dataset = transform_dataset(val_data)
 
     scaler_train = XarrayMinMaxScaler(
         dim=("date", "latitude", "longitude"), min=-1, max=1
