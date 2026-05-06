@@ -1,11 +1,11 @@
 #!/bin/bash
-#SBATCH --job-name=my_job
+#SBATCH --job-name=baseline-large-training
 #SBATCH --account=rrg-yihuang-ad
-#SBATCH --time=01:00:0
+#SBATCH --time=13:00:0
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
-#SBATCH --cpus-per-task=4
-#SBATCH --mem=8000M
+#SBATCH --cpus-per-task=2
+#SBATCH --mem=24G
 #SBATCH --output=%x-%j.out
 #SBATCH --error=%x-%j.err
 #SBATCH --mail-type=ALL
