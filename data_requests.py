@@ -25,6 +25,7 @@ def retrieve_era5_years_data(years=[2006, 2008], data_path="data/era5"):
                 "product_type": "monthly_averaged_reanalysis",
                 "variable": [
                     "forecast_albedo",
+                    "total_cloud_cover",
                     "high_cloud_cover",
                     "medium_cloud_cover",
                     "low_cloud_cover",
