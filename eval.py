@@ -80,7 +80,7 @@ def plot_correlation(ax, predictions, actuals):
 def dataset_from_array(arr, date, lon, lat):
     array = xr.Dataset(
         data_vars={
-            "tsr": (("date", "latitude", "longitude"), arr[:, :, :, 0]),
+            "tsr": (("date", "latitude", "longitude"), arr),
         },
         coords={
             "date": date,
@@ -106,9 +106,9 @@ def test_1(
         .permute(3, 2, 1, 0)
         .float()
     )
-    # print(data_torch.shape)
+    print(data_torch.shape)
 
-    model_outputs = model(data_torch[:, :, :, :10]).permute(2, 1, 0, 3).detach().numpy()
+    model_outputs = model(data_torch[:, :, :, :10]).permute(2, 1, 0).detach().numpy()
     # print(model_outputs.shape)
     predictions = scaler.inverse_transform(
         dataset_from_array(
@@ -257,10 +257,10 @@ def test_2(
     )
 
     model_output_base = (
-        model(data_torch_base[:, :, :, :10]).permute(2, 1, 0, 3).detach().numpy()
+        model(data_torch_base[:, :, :, :10]).permute(2, 1, 0).detach().numpy()
     )
     model_output_perturbed = (
-        model(data_torch_perturbed[:, :, :, :10]).permute(2, 1, 0, 3).detach().numpy()
+        model(data_torch_perturbed[:, :, :, :10]).permute(2, 1, 0).detach().numpy()
     )
 
     predictions_base = scaler.inverse_transform(
