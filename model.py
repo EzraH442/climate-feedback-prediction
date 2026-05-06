@@ -17,7 +17,7 @@ class SimpleModel(nn.Module):
         )
 
     def forward(self, x: torch.Tensor):
-        return self.model(x)
+        return self.model(x).squeeze(-1)
 
 
 class SimpleModelTrainer:
