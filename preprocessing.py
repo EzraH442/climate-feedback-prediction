@@ -41,7 +41,7 @@ class ECOD_Calculator(Preprocessor):
         )
         ds["ecod"] = ecod_ds
         ds["ecod_fal"] = ds["ecod"] * ds["fal"]
-        ds = ds.drop_vars('tsr')
+        ds = ds.drop_vars("tcc")
         return ds
 
     def inverse_transform(self, ds):
