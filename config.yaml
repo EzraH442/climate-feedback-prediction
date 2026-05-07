@@ -42,7 +42,7 @@ dataset:
     # - 2019
 
 model:
-  input_dim: 12
+  input_dim: 10
   hidden_dim: 15
 
 optimizer:
