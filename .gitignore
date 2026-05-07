@@ -1,6 +1,7 @@
 __pycache__
 /data
 /checkpoints
+/preprocess_states
 wandb
 .ipynb_checkpoints
 era5_cache.npy
