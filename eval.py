@@ -5,7 +5,7 @@ import numpy as np
 import xarray as xr
 from scipy.stats import linregress
 from dataloader import make_era5_filename
-from preprocessing import XarrayMinMaxScaler
+from preprocessing import Preprocessor, create_2024_preprocessor
 from pathlib import Path
 
 from model import SimpleModel
@@ -89,7 +89,7 @@ def dataset_from_array(arr, date, lon, lat):
 def test_1(
     preprocessed_dataset: xr.Dataset,
     raw_dataset: xr.Dataset,
-    scaler: XarrayMinMaxScaler,
+    preprocessor: Preprocessor,
     model: torch.nn.Module,
     figures_path: Path = Path("."),
 ):
@@ -108,7 +108,7 @@ def test_1(
     # (date, lat, lon)
 
     print(model_outputs.shape)
-    predictions = scaler.inverse_transform(
+    predictions = preprocessor.inverse_transform(
         dataset_from_array(arr=model_outputs.numpy(), date=date, lon=lon, lat=lat)
     )
 
@@ -201,8 +201,8 @@ def test_1(
 
 def test_2(
     preprocessed_dataset: xr.Dataset,
+    preprocessor: Preprocessor,
     date,
-    scaler: XarrayMinMaxScaler,
     model: SimpleModel,
     figures_path: Path = Path("."),
 ):
@@ -230,7 +230,7 @@ def test_2(
         data_torch_perturbed[:, :, :, : model.input_dim]
     ).detach()
 
-    predictions_base = scaler.inverse_transform(
+    predictions_base = preprocessor.inverse_transform(
         dataset_from_array(
             arr=model_output_base.numpy(),
             date=[date],
@@ -238,7 +238,7 @@ def test_2(
             lat=lat,
         )
     ).mean(dim="date").to_dataarray().to_numpy()[0] / (3600 * 24)
-    predictions_perturbed = scaler.inverse_transform(
+    predictions_perturbed = preprocessor.inverse_transform(
         dataset_from_array(
             arr=model_output_perturbed.numpy(),
             date=[date],
@@ -267,7 +267,7 @@ def test_2(
 def test_3(
     dataset: xr.Dataset,
     date,
-    scaler: XarrayMinMaxScaler,
+    preprocessor: Preprocessor,
     model: SimpleModel,
     figures_path: Path = Path("."),
 ):
@@ -340,21 +340,21 @@ def main():
     )
 
     # --- load val preprocessor ---
-    scaler = XarrayMinMaxScaler(dim=("date", "latitude", "longitude"))
-    scaler.load(config.preprocess.params_dir)
+    preprocessor = create_2024_preprocessor()
+    preprocessor.load(config.preprocess.params_dir)
 
     # --- run tests ---
     test_1(
         preprocessed_dataset=preprocessed_dataset,
         raw_dataset=raw_dataset,
-        scaler=scaler,
+        preprocessor=preprocessor,
         model=model,
         figures_path=output_path,
     )
     test_2(
         preprocessed_dataset=preprocessed_dataset,
         date="2005-09",
-        scaler=scaler,
+        preprocessor=preprocessor,
         model=model,
         figures_path=output_path,
     )

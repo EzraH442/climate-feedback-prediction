@@ -1,11 +1,6 @@
 import os
 from omegaconf import OmegaConf
-from preprocessing import (
-    XarrayMinMaxScaler,
-    SequentialPreprocessor,
-    ECOD_Calculator,
-    Downscaler,
-)
+from preprocessing import create_2024_preprocessor, Preprocessor
 import xarray as xr
 import argparse
 
@@ -47,13 +42,7 @@ def preprocess(config_path):
        tsr        (date, latitude, longitude) float64 100MB 0.0 0.0 ... 1.344e+07
     """
 
-    preprocessor = SequentialPreprocessor(
-        [
-            ECOD_Calculator(),
-            Downscaler(factor=[("latitude", 4), ("longitude", 4)]),
-            XarrayMinMaxScaler(dim=("date", "latitude", "longitude")),
-        ]
-    )
+    preprocessor = create_2024_preprocessor()
     print("Fitting preprocessor on training data...")
     preprocessor.fit(train_data)
 

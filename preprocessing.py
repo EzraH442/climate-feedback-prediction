@@ -13,10 +13,10 @@ class Preprocessor:
         pass
 
     def transform(self, ds):
-        pass
+        return ds
 
     def inverse_transform(self, ds):
-        pass
+        return ds
 
     def save(self, path):
         if not os.path.exists(path):
@@ -202,3 +202,13 @@ class SequentialPreprocessor(Preprocessor):
         super().load(path)
         for i, preprocessor in enumerate(self.preprocessors):
             preprocessor.load(Path(path) / f"preprocessor_{i}")
+
+
+def create_2024_preprocessor():
+    return SequentialPreprocessor(
+        preprocessors=[
+            ECOD_Calculator(),
+            Downscaler(factor=[("latitude", 4), ("longitude", 4)]),
+            XarrayMinMaxScaler(dim=("date", "latitude", "longitude")),
+        ]
+    )
