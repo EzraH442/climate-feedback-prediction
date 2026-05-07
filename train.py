@@ -1,10 +1,10 @@
+from comet_ml import ExistingExperiment, Experiment
 import argparse
 import os
 import shutil
 from pathlib import Path
 
 import torch
-from comet_ml import ExistingExperiment, Experiment
 from torch.utils.data import DataLoader
 import omegaconf
 from omegaconf import OmegaConf

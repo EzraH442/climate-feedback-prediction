@@ -9,13 +9,13 @@ class Preprocessor:
     def __init__(self):
         pass
 
-    def fit(self, ds):
+    def fit(self, ds: xr.Dataset):
         pass
 
-    def transform(self, ds):
+    def transform(self, ds: xr.Dataset):
         return ds
 
-    def inverse_transform(self, ds):
+    def inverse_transform(self, ds: xr.Dataset):
         return ds
 
     def save(self, path):
@@ -41,6 +41,7 @@ class ECOD_Calculator(Preprocessor):
         )
         ds["ecod"] = ecod_ds
         ds["ecod_fal"] = ds["ecod"] * ds["fal"]
+        ds = ds.drop_vars('tsr')
         return ds
 
     def inverse_transform(self, ds):
