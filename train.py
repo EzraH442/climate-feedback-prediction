@@ -4,11 +4,17 @@ import shutil
 from pathlib import Path
 
 import torch
+from comet_ml import ExistingExperiment, Experiment
 from torch.utils.data import DataLoader
+import omegaconf
 from omegaconf import OmegaConf
 
 from dataloader import ClimateTorchDataset, make_era5_filename
 from model import SimpleModelTrainer
+
+
+def comet_experiment_key_path(checkpoint_dir: str) -> Path:
+    return Path(checkpoint_dir) / "comet_experiment_key.txt"
 
 
 def stage_training_data(config_path: str) -> str:
@@ -41,9 +47,46 @@ def stage_training_data(config_path: str) -> str:
     return str(runtime_config_path)
 
 
+def create_comet_experiment(config: omegaconf.DictConfig, checkpoint_path: str | None = None):
+    api_key = os.environ.get("COMET_API_KEY")
+    if not api_key:
+        raise EnvironmentError(
+            "COMET_API_KEY is not set. Export it before running train.py."
+        )
+
+    key_path = comet_experiment_key_path(config.train.checkpoint_dir)
+    experiment_key = None
+    if checkpoint_path is not None and key_path.exists():
+        experiment_key = key_path.read_text(encoding="ascii").strip() or None
+
+    if checkpoint_path and experiment_key:
+        experiment = ExistingExperiment(
+            api_key=api_key,
+            previous_experiment=experiment_key,
+            log_env_details=False,
+            log_env_gpu=True,
+            log_env_cpu=True,
+        )
+    else:
+        experiment = Experiment(
+            api_key=api_key,
+            project_name=config.wandb.project,
+            workspace=config.wandb.entity,
+            log_env_details=False,
+            log_env_gpu=True,
+            log_env_cpu=True,
+        )
+        experiment.log_parameters(OmegaConf.to_container(config, resolve=True))
+
+    key_path.parent.mkdir(parents=True, exist_ok=True)
+    key_path.write_text(f"{experiment.get_key()}\n", encoding="ascii")
+    return experiment
+
+
 def train(config_path: str, resume: bool = True):
     staged_config_path = stage_training_data(config_path)
     config = OmegaConf.load(staged_config_path)
+    assert isinstance(config, omegaconf.DictConfig), ""
 
     train_dataset = ClimateTorchDataset(
         config_path=staged_config_path,
@@ -72,7 +115,7 @@ def train(config_path: str, resume: bool = True):
         shuffle=True,
         num_workers=num_workers,
         pin_memory=pin_memory,
-        persistent_workers=True,
+        persistent_workers=num_workers > 0,
     )
     val_dataloader = DataLoader(
         val_dataset,
@@ -80,7 +123,7 @@ def train(config_path: str, resume: bool = True):
         shuffle=False,
         num_workers=num_workers,
         pin_memory=pin_memory,
-        persistent_workers=True,
+        persistent_workers=num_workers > 0,
     )
 
     checkpoint_path = None  # Set to a valid path to resume from checkpoint
@@ -106,8 +149,12 @@ def train(config_path: str, resume: bool = True):
         )
         print(f"Resuming training from checkpoint: {checkpoint_path}")
 
+    experiment = create_comet_experiment(config, checkpoint_path=checkpoint_path)
     trainer = SimpleModelTrainer(
-        config=config, device=device, checkpoint_path=checkpoint_path
+        config=config,
+        experiment=experiment,
+        device=device,
+        checkpoint_path=checkpoint_path,
     )
     trainer.train_model(train_dataloader, val_dataloader)
 
