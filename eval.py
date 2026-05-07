@@ -208,6 +208,7 @@ def test_1(
 
 
 def test_2(
+    raw_dataset: xr.Dataset,
     preprocessed_dataset: xr.Dataset,
     preprocessor: Preprocessor,
     date,
@@ -221,6 +222,8 @@ def test_2(
 
     lon = date_specific_data["longitude"].values
     lat = date_specific_data["latitude"].values
+    raw_lon = raw_dataset['longitude'].values
+    raw_lat = raw_dataset['latitude'].values
 
     data_torch_base = torch.from_numpy(
         date_specific_data.to_dataarray()
@@ -237,6 +240,7 @@ def test_2(
     model_output_perturbed = model(
         data_torch_perturbed[:, :, :, : model.input_dim]
     ).detach()
+    print(model_output_base)
 
     predictions_base = preprocessor.inverse_transform(
         dataset_from_array(
@@ -254,14 +258,16 @@ def test_2(
             lat=lat,
         )
     ).mean(dim="date").to_dataarray().to_numpy()[0] / (3600 * 24)
+    print(predictions_base)
 
     diff = predictions_perturbed - predictions_base
     max_diff = np.max(np.abs(diff))
+    print(max_diff)
 
     fig = plt.figure(figsize=(8, 6), dpi=300)
     m = setup_global_map()
     plot_colormesh_on_map(
-        m, lon, lat, diff, cmap="RdBu_r", vmin=-max_diff, vmax=max_diff
+        m, raw_lon, raw_lat, diff, cmap="RdBu_r", vmin=-max_diff, vmax=max_diff
     )
 
     plt.text(x=300, y=np.max(lat) + 5, s=f"{np.mean(diff):.2f}", fontsize=20)
@@ -360,6 +366,7 @@ def main():
         figures_path=output_path,
     )
     test_2(
+        raw_dataset=raw_dataset,
         preprocessed_dataset=preprocessed_dataset,
         date="2005-09",
         preprocessor=preprocessor,

@@ -75,7 +75,7 @@ class Downscaler(Preprocessor):
         for coord, vals in self.original_dims_sizes.items():
             interp_kwargs[coord] = vals
 
-        ds_upscaled = ds.interp(**interp_kwargs, method="nearest")
+        ds_upscaled = ds.interp(**interp_kwargs, method="nearest", kwargs={"fill_value": "extrapolate"})
         return ds_upscaled
 
     def save(self, path):
