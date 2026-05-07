@@ -112,64 +112,70 @@ def test_1(
         dataset_from_array(arr=model_outputs.numpy(), date=date, lon=lon, lat=lat)
     )
 
-    tsr_mean = raw_dataset["tsr"].mean(dim="date").to_numpy() / (3600 * 24)
-    tsr_pred_mean = predictions.mean(dim="date").to_dataarray().to_numpy()[0] / (
+    tsr_raw = raw_dataset["tsr"].to_numpy() / (3600 * 24)  # (date, lat, lon)
+    tsr_pred = predictions.to_dataarray().to_numpy()[0] / (
         3600 * 24
-    )
+    )  # (date, lat, lon)
+
+    diff_full = tsr_raw - tsr_pred  # (date, lat, lon)
+
+    tsr_mean = np.mean(tsr_raw, axis=0)  # (lat, lon)
+    tsr_pred_mean = np.mean(tsr_pred, axis=0)  # (lat, lon)
+    mbe_map = np.mean(diff_full, axis=0)  # (lat, lon)
+    rmse_map = np.sqrt(np.mean(diff_full**2, axis=0))  # (lat, lon)
+
     max_tsr = max(np.max(tsr_mean), np.max(tsr_pred_mean))
-    print("tsr_mean", tsr_mean)
-    print("tsr_pred_mean", tsr_pred_mean)
-    print("max_tsr", max_tsr)
+    max_abs_mbe = np.max(np.abs(mbe_map))
+    max_rmse = np.max(rmse_map)
+
+    global_tsr_mean = np.mean(tsr_mean)
+    global_tsr_pred_mean = np.mean(tsr_pred_mean)
+    global_mbe = np.mean(mbe_map)
+    global_rmse = np.sqrt(np.mean(rmse_map**2))
+
+    print(f"Global MBE:  {global_mbe:.4f} W/m²")
+    print(f"Global RMSE: {global_rmse:.4f} W/m²")
 
     fig = plt.figure(figsize=(8, 6), dpi=300)
     m = setup_global_map()
-
     plot_colormesh_on_map(m, lon, lat, tsr_mean, cmap="Spectral", vmin=0, vmax=max_tsr)
-
-    plt.text(x=300, y=np.max(lat) + 5, s=f"{np.mean(tsr_mean):.2f}", fontsize=20)
+    plt.text(x=300, y=np.max(lat) + 5, s=f"{global_tsr_mean:.2f}", fontsize=20)
     plt.colorbar(orientation="horizontal", fraction=0.075, label="$W/m^2$")
     plt.title("TSR (ERA5)")
     plt.savefig(figures_path / "tsr_era5.png")
+    plt.close(fig)
 
     fig = plt.figure(figsize=(8, 6), dpi=300)
     m = setup_global_map()
     plot_colormesh_on_map(
         m, lon, lat, tsr_pred_mean, cmap="Spectral", vmin=0, vmax=max_tsr
     )
-
-    plt.text(x=300, y=np.max(lat) + 5, s=f"{np.mean(tsr_pred_mean):.2f}", fontsize=20)
+    plt.text(x=300, y=np.max(lat) + 5, s=f"{global_tsr_pred_mean:.2f}", fontsize=20)
     plt.colorbar(orientation="horizontal", fraction=0.075, label="$W/m^2$")
     plt.title("TSR (NN)")
     plt.savefig(figures_path / "tsr_nn.png")
-
-    diff = tsr_mean - tsr_pred_mean
-    max_abs_diff = np.max(np.abs(diff))
+    plt.close(fig)
 
     fig = plt.figure(figsize=(8, 6), dpi=300)
     m = setup_global_map()
     plot_colormesh_on_map(
-        m, lon, lat, diff, cmap="RdBu_r", vmin=-max_abs_diff, vmax=max_abs_diff
+        m, lon, lat, mbe_map, cmap="RdBu_r", vmin=-max_abs_mbe, vmax=max_abs_mbe
     )
-
-    plt.text(x=300, y=np.max(lat) + 5, s=f"{np.mean(diff):.2f}", fontsize=20)
+    plt.text(x=300, y=np.max(lat) + 5, s=f"{global_mbe:.2f}", fontsize=20)
     plt.colorbar(orientation="horizontal", fraction=0.075, label="$W/m^2$")
     plt.title("MBE")
     plt.savefig(figures_path / "mbe.png")
-
-    mse = np.mean(diff**2)
-    rmse = np.sqrt(mse)
-    max_rmse = np.max(rmse)
+    plt.close(fig)
 
     fig = plt.figure(figsize=(8, 6), dpi=300)
     m = setup_global_map()
-    plot_colormesh_on_map(
-        m, lon, lat, np.abs(diff), cmap="Blues", vmin=0, vmax=max_rmse
-    )
+    plot_colormesh_on_map(m, lon, lat, rmse_map, cmap="Blues", vmin=0, vmax=max_rmse)
 
-    plt.text(x=300, y=np.max(lat) + 5, s=f"{np.mean(rmse):.2f}", fontsize=20)
+    plt.text(x=300, y=np.max(lat) + 5, s=f"{global_rmse:.2f}", fontsize=20)
     plt.colorbar(orientation="horizontal", fraction=0.075, label="$W/m^2$")
     plt.title("RMSE")
     plt.savefig(figures_path / "rmse.png")
+    plt.close(fig)
 
     # slope, intercept, r_value, p_value, std_err = linregress(
     #     predictions_inversed, dataset["tsr"].values
@@ -210,7 +216,7 @@ def test_2(
 
     data_torch_base = torch.from_numpy(
         date_specific_data.to_dataarray()
-        .tranpose("date", "latitude", "longitude", "variable")
+        .transpose("date", "latitude", "longitude", "variable")
         .to_numpy()
     ).float()
     data_torch_perturbed = torch.from_numpy(
@@ -314,7 +320,7 @@ def main():
     #     "config": self.config,
     # }
     model_weights = checkpoint_data["model_state_dict"]
-    model = SimpleModel(config)
+    model = SimpleModel(checkpoint_data["config"])
     model.load_state_dict(model_weights)
     model.eval()
 
