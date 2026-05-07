@@ -1,0 +1,63 @@
+seed: 42
+
+# each kernel variable has dim (t, lat, lon), t is yyyy-mm
+dataset:
+  era5: # data that the era5 monthly single level data will be in
+    raw_path: './data/era5'
+    path: './data/era5_processed_small_with_ecod'
+  kernels: # data that the kernel data will be in
+    path: './data/kernels'
+  train_years: # even years from 1990-2020
+    # - 1990
+    # - 1992
+    # - 1994
+    # - 1996
+    # - 1998
+    # - 2000
+    # - 2002
+    # - 2004
+    - 2006
+    - 2008
+    # - 2010
+    # - 2012
+    # - 2014
+    # - 2016
+    # - 2018
+    # - 2020
+  val_years: # odd years from 1990-2020
+    # - 1991
+    # - 1993
+    # - 1995
+    # - 1997
+    # - 1999
+    # - 2001
+    # - 2003
+    - 2005
+    # - 2007
+    # - 2009
+    # - 2011
+    # - 2013
+    # - 2015
+    # - 2017
+    # - 2019
+
+model:
+  input_dim: 12
+  hidden_dim: 15
+
+optimizer:
+  learning_rate: 0.001
+
+train:
+  epochs: 900
+  checkpoint_dir: './checkpoints/baseline-simple-ecod'
+  batch_size: 256
+  early_stopping_threshold: 0.001
+  max_epochs_without_improvement: 10
+
+preprocess:
+  params_dir: 'preprocess_states/small_with_ecod'
+
+wandb:
+  project: 'climate-feedback-solobev'
+  entity: 'baseline-simple-ecod'
