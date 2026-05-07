@@ -86,6 +86,11 @@ def dataset_from_array(arr, date, lon, lat):
     return array
 
 
+def ordered_dataset(dataset: xr.Dataset, target_var: str = "tsr") -> xr.Dataset:
+    all_vars = [v for v in dataset.data_vars if v != target_var] + [target_var]
+    return dataset[all_vars]
+
+
 def test_1(
     preprocessed_dataset: xr.Dataset,
     raw_dataset: xr.Dataset,
@@ -99,8 +104,9 @@ def test_1(
     processed_lat = preprocessed_dataset["latitude"].values
     processed_lon = preprocessed_dataset["longitude"].values
 
+    ordered_preprocessed = ordered_dataset(preprocessed_dataset)
     data_torch = torch.from_numpy(
-        preprocessed_dataset.to_dataarray()
+        ordered_preprocessed.to_dataarray()
         .transpose("date", "latitude", "longitude", "variable")
         .to_numpy()
     ).float()
@@ -215,23 +221,33 @@ def test_2(
     model: SimpleModel,
     figures_path: Path = Path("."),
 ):
-    date_specific_data = preprocessed_dataset.sel(date=date)
-    date_specific_data_perturbed = date_specific_data.copy(deep=True)
-    date_specific_data_perturbed["fal"] = date_specific_data["fal"] + 0.01
-    # todo clamping
+    raw_date_specific_data = raw_dataset.sel(date=date)
+    raw_date_specific_data_perturbed = raw_date_specific_data.copy(deep=True)
+    raw_date_specific_data_perturbed["fal"] = xr.where(
+        raw_date_specific_data["fal"] + 0.01 > 1.0,
+        1.0,
+        raw_date_specific_data["fal"] + 0.01,
+    )
 
-    lon = date_specific_data["longitude"].values
-    lat = date_specific_data["latitude"].values
-    raw_lon = raw_dataset['longitude'].values
-    raw_lat = raw_dataset['latitude'].values
+    processed_date_specific_data = preprocessor.transform(raw_date_specific_data)
+    processed_date_specific_data_perturbed = preprocessor.transform(
+        raw_date_specific_data_perturbed
+    )
 
+    lon = processed_date_specific_data["longitude"].values
+    lat = processed_date_specific_data["latitude"].values
+    raw_lon = raw_dataset["longitude"].values
+    raw_lat = raw_dataset["latitude"].values
+
+    ordered_base = ordered_dataset(processed_date_specific_data)
+    ordered_perturbed = ordered_dataset(processed_date_specific_data_perturbed)
     data_torch_base = torch.from_numpy(
-        date_specific_data.to_dataarray()
+        ordered_base.to_dataarray()
         .transpose("date", "latitude", "longitude", "variable")
         .to_numpy()
     ).float()
     data_torch_perturbed = torch.from_numpy(
-        date_specific_data_perturbed.to_dataarray()
+        ordered_perturbed.to_dataarray()
         .transpose("date", "latitude", "longitude", "variable")
         .to_numpy()
     ).float()
