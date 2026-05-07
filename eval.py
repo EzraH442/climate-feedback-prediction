@@ -94,8 +94,10 @@ def test_1(
     figures_path: Path = Path("."),
 ):
     date = raw_dataset["date"].values
-    lat = raw_dataset["latitude"].values
-    lon = raw_dataset["longitude"].values
+    raw_lat = raw_dataset["latitude"].values
+    raw_lon = raw_dataset["longitude"].values
+    processed_lat = preprocessed_dataset["latitude"].values
+    processed_lon = preprocessed_dataset["longitude"].values
 
     data_torch = torch.from_numpy(
         preprocessed_dataset.to_dataarray()
@@ -109,7 +111,9 @@ def test_1(
 
     print(model_outputs.shape)
     predictions = preprocessor.inverse_transform(
-        dataset_from_array(arr=model_outputs.numpy(), date=date, lon=lon, lat=lat)
+        dataset_from_array(
+            arr=model_outputs.numpy(), date=date, lon=processed_lon, lat=processed_lat
+        )
     )
 
     tsr_raw = raw_dataset["tsr"].to_numpy() / (3600 * 24)  # (date, lat, lon)
@@ -138,8 +142,10 @@ def test_1(
 
     fig = plt.figure(figsize=(8, 6), dpi=300)
     m = setup_global_map()
-    plot_colormesh_on_map(m, lon, lat, tsr_mean, cmap="Spectral", vmin=0, vmax=max_tsr)
-    plt.text(x=300, y=np.max(lat) + 5, s=f"{global_tsr_mean:.2f}", fontsize=20)
+    plot_colormesh_on_map(
+        m, raw_lon, raw_lat, tsr_mean, cmap="Spectral", vmin=0, vmax=max_tsr
+    )
+    plt.text(x=300, y=np.max(raw_lat) + 5, s=f"{global_tsr_mean:.2f}", fontsize=20)
     plt.colorbar(orientation="horizontal", fraction=0.075, label="$W/m^2$")
     plt.title("TSR (ERA5)")
     plt.savefig(figures_path / "tsr_era5.png")
@@ -148,9 +154,9 @@ def test_1(
     fig = plt.figure(figsize=(8, 6), dpi=300)
     m = setup_global_map()
     plot_colormesh_on_map(
-        m, lon, lat, tsr_pred_mean, cmap="Spectral", vmin=0, vmax=max_tsr
+        m, raw_lon, raw_lat, tsr_pred_mean, cmap="Spectral", vmin=0, vmax=max_tsr
     )
-    plt.text(x=300, y=np.max(lat) + 5, s=f"{global_tsr_pred_mean:.2f}", fontsize=20)
+    plt.text(x=300, y=np.max(raw_lat) + 5, s=f"{global_tsr_pred_mean:.2f}", fontsize=20)
     plt.colorbar(orientation="horizontal", fraction=0.075, label="$W/m^2$")
     plt.title("TSR (NN)")
     plt.savefig(figures_path / "tsr_nn.png")
@@ -159,9 +165,9 @@ def test_1(
     fig = plt.figure(figsize=(8, 6), dpi=300)
     m = setup_global_map()
     plot_colormesh_on_map(
-        m, lon, lat, mbe_map, cmap="RdBu_r", vmin=-max_abs_mbe, vmax=max_abs_mbe
+        m, raw_lon, raw_lat, mbe_map, cmap="RdBu_r", vmin=-max_abs_mbe, vmax=max_abs_mbe
     )
-    plt.text(x=300, y=np.max(lat) + 5, s=f"{global_mbe:.2f}", fontsize=20)
+    plt.text(x=300, y=np.max(raw_lat) + 5, s=f"{global_mbe:.2f}", fontsize=20)
     plt.colorbar(orientation="horizontal", fraction=0.075, label="$W/m^2$")
     plt.title("MBE")
     plt.savefig(figures_path / "mbe.png")
@@ -169,9 +175,11 @@ def test_1(
 
     fig = plt.figure(figsize=(8, 6), dpi=300)
     m = setup_global_map()
-    plot_colormesh_on_map(m, lon, lat, rmse_map, cmap="Blues", vmin=0, vmax=max_rmse)
+    plot_colormesh_on_map(
+        m, raw_lon, raw_lat, rmse_map, cmap="Blues", vmin=0, vmax=max_rmse
+    )
 
-    plt.text(x=300, y=np.max(lat) + 5, s=f"{global_rmse:.2f}", fontsize=20)
+    plt.text(x=300, y=np.max(raw_lat) + 5, s=f"{global_rmse:.2f}", fontsize=20)
     plt.colorbar(orientation="horizontal", fraction=0.075, label="$W/m^2$")
     plt.title("RMSE")
     plt.savefig(figures_path / "rmse.png")
