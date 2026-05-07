@@ -1,9 +1,9 @@
 import os
 import torch
 import torch.nn as nn
-import wandb
-import omegaconf
 import time
+from comet_ml import Experiment
+import omegaconf
 
 
 class SimpleModel(nn.Module):
@@ -25,7 +25,8 @@ class SimpleModel(nn.Module):
 class SimpleModelTrainer:
     def __init__(
         self,
-        config,
+        config: omegaconf.DictConfig,
+        experiment: Experiment,
         checkpoint_path: str | None = None,
         device: str = "cpu",
     ):
@@ -35,6 +36,7 @@ class SimpleModelTrainer:
         self.epoch = 0  # Track current epoch for checkpointing
         self.best_epoch = 0  # Track epoch of the best model
         self.total_training_time = 0.0  # Track total training time across epochs
+        self.experiment = experiment
 
         if checkpoint_path is not None:
             checkpoint = torch.load(checkpoint_path, map_location=self.device)
@@ -57,17 +59,9 @@ class SimpleModelTrainer:
                 self.model.parameters(), lr=self.config.optimizer.learning_rate
             )
 
-        # --- WandB Setup ---
-        wandb.init(
-            project=self.config.wandb.project,
-            entity=self.config.wandb.entity,
-            config=omegaconf.OmegaConf.to_container(self.config, resolve=True),
-            resume="allow" if checkpoint_path else None,
-        )
-
     def checkpoint(self, epoch, is_best=False):
         if not os.path.exists(self.config.train.checkpoint_dir):
-            os.makedirs(self.config.train.checkpoint_dir)
+            os.makedirs(self.config.train.checkpoint_dir, exist_ok=True)
 
         checkpoint_data = {
             "epoch": epoch,
@@ -122,12 +116,13 @@ class SimpleModelTrainer:
             # --- VALIDATION PHASE ---
             self.model.eval()
             val_loss = 0
-            with torch.no_grad():  # Disable gradient calculation to save memory/time
+            with torch.no_grad():
                 for i, (x_val, y_val) in enumerate(val_loader):
                     x_val, y_val = x_val.to(self.device), y_val.to(self.device)
                     val_pred = self.model(x_val)
                     v_loss = self.loss_fn(val_pred, y_val)
                     val_loss += v_loss.item()
+
                     if i % 100 == 0:
                         print(
                             f"Val Batch {i}/{len(val_loader)} | Val Loss: {v_loss.item():.4e}"
@@ -145,14 +140,14 @@ class SimpleModelTrainer:
             )
 
             # --- LOGGING & CHECKPOINTING ---
-            wandb.log(
+            self.experiment.log_metrics(
                 {
-                    "epoch": epoch,
                     "train/loss": avg_train_loss,
                     "val/loss": avg_val_loss,
                     "time/epoch_duration": epoch_duration,
                     "time/total_training_time_hours": self.total_training_time / 3600,
-                }
+                },
+                epoch=epoch,
             )
 
             is_best = avg_val_loss < self.best_val_loss
@@ -183,4 +178,4 @@ class SimpleModelTrainer:
                 break
 
         print(f"Training complete. Total time: {self.total_training_time/3600:.2f}h")
-        wandb.finish()
+        self.experiment.end()
