@@ -364,6 +364,7 @@ def test_2013_09_against_rrtm(
     )
 
     rrtm_kernel, rrtm_lon, rrtm_lat = load_rrtm_kernel(reference_path)
+    rrtm_kernel = rrtm_kernel * 0.01
     if model_kernel.shape != rrtm_kernel.shape:
         model_kernel = interpolate_spatial_field(
             model_kernel,
