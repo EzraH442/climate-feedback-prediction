@@ -128,13 +128,14 @@ def main():
     )
     parser.add_argument(
         "--no-resume",
-        action="store_true",
+        action="store_false",
         dest="resume",
         help="Whether to start training from scratch",
     )
     parser.set_defaults(resume=True)
     args = parser.parse_args()
 
+    
     train(args.config_file, args.resume)
 
 
