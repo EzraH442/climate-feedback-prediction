@@ -74,11 +74,10 @@ class SimpleModelTrainer:
         }
 
         # Save regular checkpoint
-        if epoch % 10 == 0:
-            torch.save(
-                checkpoint_data,
-                f"{self.config.train.checkpoint_dir}/model_epoch_{epoch}.pt",
-            )
+        torch.save(
+            checkpoint_data,
+            f"{self.config.train.checkpoint_dir}/model_epoch_{epoch}.pt",
+        )
 
         # Save "best" model separately
         if is_best:
@@ -155,11 +154,7 @@ class SimpleModelTrainer:
                 self.best_val_loss = avg_val_loss
                 self.best_epoch = epoch
 
-            if epoch % 10 == 0 or is_best:
-                print(
-                    f"Epoch {epoch:04d} | Train: {avg_train_loss:.4e} | Val: {avg_val_loss:.4e}"
-                )
-                self.checkpoint(epoch, is_best=is_best)
+            self.checkpoint(epoch, is_best=is_best)
 
             # --- EARLY STOPPING ---
             if avg_val_loss < self.config.train.early_stopping_threshold:
