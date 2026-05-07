@@ -1,8 +1,11 @@
 import os
-from utils import compute_cloud_optical_depth
-import torch
 from omegaconf import OmegaConf
-from preprocessing import XarrayMinMaxScaler
+from preprocessing import (
+    XarrayMinMaxScaler,
+    SequentialPreprocessor,
+    ECOD_Calculator,
+    Downscaler,
+)
 import xarray as xr
 import argparse
 
@@ -11,24 +14,8 @@ def make_era5_filename(year):
     return f"era5_single_levels_monthly_{year}.nc"
 
 
-def transform_dataset(ds: xr.Dataset):
-    new_ds = ds.copy()
-
-    new_ds["ecod"] = compute_cloud_optical_depth(
-        tclw=ds["tclw"], tciw=ds["tciw"], tcc=ds["tcc"]
-    )
-    new_ds = new_ds.drop_vars(["tcc"])
-    new_ds["ecod_fal"] = new_ds["ecod"] * ds["fal"]
-
-    # 4x downscaling in both lat and lon
-    ds_downscaled = new_ds.coarsen(latitude=4, longitude=4, boundary="trim").mean()
-
-    return ds_downscaled
-
-
 def preprocess(config_path):
     conf = OmegaConf.load(config_path)
-    torch.manual_seed(conf.seed)
 
     train_paths = [
         f"{conf.dataset.era5.raw_path}/{make_era5_filename(year)}"
@@ -60,17 +47,22 @@ def preprocess(config_path):
        tsr        (date, latitude, longitude) float64 100MB 0.0 0.0 ... 1.344e+07
     """
 
-    train_dataset = transform_dataset(train_data)
-    val_dataset = transform_dataset(val_data)
-
-    scaler_train = XarrayMinMaxScaler(
-        dim=("date", "latitude", "longitude"), min=-1, max=1
+    preprocessor = SequentialPreprocessor(
+        [
+            ECOD_Calculator(),
+            Downscaler(factor=[("latitude", 4), ("longitude", 4)]),
+            XarrayMinMaxScaler(dim=("date", "latitude", "longitude")),
+        ]
     )
-    scaler_train.fit(train_dataset)
-    train_scaled = scaler_train.transform(train_dataset)
-    scaler_train.save(conf.preprocess.params_dir)
+    print("Fitting preprocessor on training data...")
+    preprocessor.fit(train_data)
 
-    val_scaled = scaler_train.transform(val_dataset)
+    print("Saving preprocessor state...")
+    preprocessor.save(conf.preprocess.params_dir)
+
+    print("Transforming training and validation data...")
+    train_preprocessed = preprocessor.transform(train_data)
+    val_preprocessed = preprocessor.transform(val_data)
 
     if not os.path.exists(conf.dataset.era5.path):
         os.makedirs(conf.dataset.era5.path)
@@ -78,12 +70,12 @@ def preprocess(config_path):
     for year in conf.dataset.train_years:
         path = f"{conf.dataset.era5.path}/era5_single_levels_monthly_{year}.nc"
         print(f"Saving scaled data for year {year} to {path}...")
-        train_scaled.sel(date=str(year)).to_netcdf(path)
+        train_preprocessed.sel(date=str(year)).to_netcdf(path)
 
     for year in conf.dataset.val_years:
         path = f"{conf.dataset.era5.path}/era5_single_levels_monthly_{year}.nc"
         print(f"Saving scaled data for year {year} to {path}...")
-        val_scaled.sel(date=str(year)).to_netcdf(path)
+        val_preprocessed.sel(date=str(year)).to_netcdf(path)
 
 
 def main():
