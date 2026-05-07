@@ -17,13 +17,11 @@ module load python/3.11
 module load cuda/12.2
 module load mpi4py/4.1.0
 module load scipy-stack
+module load httpproxy
 
 virtualenv --no-download $SLURM_TMPDIR/env
 source $SLURM_TMPDIR/env/bin/activate
 pip install --no-index --upgrade pip
 pip install --no-index -r requirements.txt
-
-export WANDB_MODE=offline
-wandb offline
 
 python train.py
