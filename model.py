@@ -37,17 +37,23 @@ class SimpleModelTrainer:
         self.best_epoch = 0  # Track epoch of the best model
         self.total_training_time = 0.0  # Track total training time across epochs
         self.experiment = experiment
+        self.scheduler = None
 
         if checkpoint_path is not None:
-            checkpoint = torch.load(checkpoint_path, map_location=self.device, weights_only=False)
+            checkpoint = torch.load(
+                checkpoint_path, map_location=self.device, weights_only=False
+            )
             self.config = checkpoint["config"]
             self.model = SimpleModel(self.config).to(self.device)
             self.model.load_state_dict(checkpoint["model_state_dict"])
             self.optimizer = torch.optim.Adam(
                 self.model.parameters(), lr=self.config.optimizer.learning_rate
             )
+            self.scheduler = self._build_scheduler()
             if "optimizer_state_dict" in checkpoint:
                 self.optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
+            if self.scheduler is not None and "scheduler_state_dict" in checkpoint:
+                self.scheduler.load_state_dict(checkpoint["scheduler_state_dict"])
             self.best_val_loss = checkpoint["best_val_loss"]
             self.epoch = checkpoint["epoch"] + 1
             self.best_epoch = checkpoint["best_epoch"]
@@ -58,6 +64,22 @@ class SimpleModelTrainer:
             self.optimizer = torch.optim.Adam(
                 self.model.parameters(), lr=self.config.optimizer.learning_rate
             )
+            self.scheduler = self._build_scheduler()
+
+    def _build_scheduler(self):
+        scheduler_config = getattr(self.config.optimizer, "scheduler", None)
+        if scheduler_config is None:
+            return None
+
+        scheduler_type = scheduler_config.type
+        if scheduler_type == "cosine_annealing":
+            return torch.optim.lr_scheduler.CosineAnnealingLR(
+                self.optimizer,
+                T_max=scheduler_config.t_max,
+                eta_min=scheduler_config.eta_min,
+            )
+
+        raise ValueError(f"Unsupported scheduler type: {scheduler_type}")
 
     def checkpoint(self, epoch, is_best=False):
         if not os.path.exists(self.config.train.checkpoint_dir):
@@ -72,6 +94,8 @@ class SimpleModelTrainer:
             "optimizer_state_dict": self.optimizer.state_dict(),
             "config": self.config,
         }
+        if self.scheduler is not None:
+            checkpoint_data["scheduler_state_dict"] = self.scheduler.state_dict()
 
         # Save regular checkpoint
         torch.save(
@@ -134,8 +158,9 @@ class SimpleModelTrainer:
             epoch_end_time = time.perf_counter()
             epoch_duration = epoch_end_time - epoch_start_time
             self.total_training_time += epoch_duration
+            current_lr = self.optimizer.param_groups[0]["lr"]
             print(
-                f"Epoch {epoch} completed in {epoch_duration:.2f} seconds. Total training time: {self.total_training_time:.2f} seconds."
+                f"Epoch {epoch} completed in {epoch_duration:.2f} seconds. Total training time: {self.total_training_time:.2f} seconds. Learning rate: {current_lr:.4e}"
             )
 
             # --- LOGGING & CHECKPOINTING ---
@@ -143,6 +168,7 @@ class SimpleModelTrainer:
                 {
                     "train/loss": avg_train_loss,
                     "val/loss": avg_val_loss,
+                    "optimizer/learning_rate": current_lr,
                     "time/epoch_duration": epoch_duration,
                     "time/total_training_time_hours": self.total_training_time / 3600,
                 },
@@ -155,6 +181,8 @@ class SimpleModelTrainer:
                 self.best_epoch = epoch
 
             self.checkpoint(epoch, is_best=is_best)
+            if self.scheduler is not None:
+                self.scheduler.step()
 
             # --- EARLY STOPPING ---
             if avg_val_loss < self.config.train.early_stopping_threshold:

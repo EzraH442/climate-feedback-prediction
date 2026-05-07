@@ -8,3 +8,6 @@ era5_cache.npy
 *.grib
 *.nc
 .vscode
+
+*.png
+old_data
