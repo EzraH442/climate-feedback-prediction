@@ -15,7 +15,7 @@ def make_kernel_filename(year):
 
 
 class ClimateTorchDataset(torch.utils.data.Dataset):
-    def __init__(self, config_path="config.yaml", data_type="train"):
+    def __init__(self, config_path="config.yaml", data_type="train", target_var="tsr"):
         """
         Args:
             config_path (str): Path to OmegaConf YAML config
@@ -38,10 +38,13 @@ class ClimateTorchDataset(torch.utils.data.Dataset):
         self.dataset_era5 = xr.open_mfdataset(
             era5_paths, combine="nested", concat_dim="date"
         )
+        all_vars = [v for v in self.dataset_era5.data_vars if v != target_var] + [
+            target_var
+        ]
         self.n_dates = len(self.dataset_era5.date)
         self.n_lat = len(self.dataset_era5.latitude)
         self.n_lon = len(self.dataset_era5.longitude)
-        self.n_vars = len(self.dataset_era5.data_vars)
+        self.n_vars = len(all_vars)
 
         expected_shape = (self.n_dates, self.n_lat, self.n_lon, self.n_vars)
         slurm_tmpdir = os.getenv("SLURM_TMPDIR")
@@ -54,12 +57,18 @@ class ClimateTorchDataset(torch.utils.data.Dataset):
                 mmap_path, mode="w+", dtype=np.float32, shape=expected_shape
             )
             for t in range(self.n_dates):
-                data_slice = self.dataset_era5.isel(date=t).to_dataarray().transpose(
-                    "latitude", "longitude", "variable"
-                ).values
+                data_slice = (
+                    self.dataset_era5[all_vars]
+                    .isel(date=t)
+                    .to_dataarray()
+                    .transpose("latitude", "longitude", "variable")
+                    .values
+                )
                 mmap[t] = data_slice
                 if t % 12 == 0:
-                    print(f"Processed {t}/{self.n_dates} dates into memory-mapped file.")
+                    print(
+                        f"Processed {t}/{self.n_dates} dates into memory-mapped file."
+                    )
             mmap.flush()  # Ensure data is written to disk
             del mmap  # Close the memmap
             print(f"Data successfully written to memory-mapped file: {mmap_path}")
@@ -70,7 +79,7 @@ class ClimateTorchDataset(torch.utils.data.Dataset):
                     f"Existing memory-mapped file shape {existing.shape} does not match expected shape {expected_shape}."
                 )
 
-        self.dataset_era5.close()  
+        self.dataset_era5.close()
         self.data = np.load(mmap_path, mmap_mode="r")  # OS handles paging
         self.shape = (self.n_dates, self.n_lat, self.n_lon, self.n_vars)
 
@@ -107,4 +116,3 @@ class ClimateTorchDataset(torch.utils.data.Dataset):
         X = tensor_data[:-1]  # All but last variable as input
         y = tensor_data[-1]  # Last variable as target
         return X, y
-
