@@ -91,6 +91,42 @@ def ordered_dataset(dataset: xr.Dataset, target_var: str = "tsr") -> xr.Dataset:
     return dataset[all_vars]
 
 
+def load_rrtm_kernel(reference_path: Path) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    dataset = xr.open_dataset(reference_path)
+    data_array = dataset["TOA"].sel(up_down_net=3, band=1)
+    data_array = data_array.transpose('latitude', 'longitude')
+    return (
+        data_array.to_numpy(),
+        dataset['longitude'].values,
+        dataset['latitude'].values,
+    )
+
+
+def interpolate_spatial_field(
+    data: np.ndarray,
+    src_lon: np.ndarray,
+    src_lat: np.ndarray,
+    dst_lon: np.ndarray,
+    dst_lat: np.ndarray,
+) -> np.ndarray:
+    dataset = xr.Dataset(
+        data_vars={"field": (("latitude", "longitude"), data)},
+        coords={"longitude": src_lon, "latitude": src_lat},
+    )
+    return dataset.interp(
+        longitude=dst_lon,
+        latitude=dst_lat,
+        method="linear",
+    )["field"].to_numpy()
+
+
+def load_raw_date_dataset(raw_root: str, date: str) -> xr.Dataset:
+    year = int(date.split("-")[0])
+    raw_path = Path(raw_root) / make_era5_filename(year)
+    raw_dataset = xr.open_dataset(raw_path)
+    return raw_dataset.sel(date=[date])
+
+
 def test_1(
     preprocessed_dataset: xr.Dataset,
     raw_dataset: xr.Dataset,
@@ -215,13 +251,12 @@ def test_1(
 
 def test_2(
     raw_dataset: xr.Dataset,
-    preprocessed_dataset: xr.Dataset,
     preprocessor: Preprocessor,
     date,
     model: SimpleModel,
     figures_path: Path = Path("."),
 ):
-    raw_date_specific_data = raw_dataset.sel(date=date)
+    raw_date_specific_data = raw_dataset.sel(date=[date])
     raw_date_specific_data_perturbed = raw_date_specific_data.copy(deep=True)
     raw_date_specific_data_perturbed["fal"] = xr.where(
         raw_date_specific_data["fal"] + 0.01 > 1.0,
@@ -256,7 +291,6 @@ def test_2(
     model_output_perturbed = model(
         data_torch_perturbed[:, :, :, : model.input_dim]
     ).detach()
-    print(model_output_base)
 
     predictions_base = preprocessor.inverse_transform(
         dataset_from_array(
@@ -274,11 +308,9 @@ def test_2(
             lat=lat,
         )
     ).mean(dim="date").to_dataarray().to_numpy()[0] / (3600 * 24)
-    print(predictions_base)
 
     diff = predictions_perturbed - predictions_base
     max_diff = np.max(np.abs(diff))
-    print(max_diff)
 
     fig = plt.figure(figsize=(8, 6), dpi=300)
     m = setup_global_map()
@@ -291,7 +323,99 @@ def test_2(
     plt.title(f"NN Surface Albedo Kernel\n{date}")
     plt.savefig(figures_path / f"nn_kernel_{date}.png")
 
-    pass
+    plt.close(fig)
+    return diff, raw_lon, raw_lat
+
+
+def test_2_raw_date(
+    raw_root: str,
+    preprocessor: Preprocessor,
+    date: str,
+    model: SimpleModel,
+    figures_path: Path = Path("."),
+):
+    raw_date_specific_data = load_raw_date_dataset(raw_root, date)
+    test_2(
+        raw_dataset=raw_date_specific_data,
+        preprocessor=preprocessor,
+        date=date,
+        model=model,
+        figures_path=figures_path,
+    )
+
+
+def test_2013_09_against_rrtm(
+    raw_root: str,
+    preprocessor: Preprocessor,
+    model: SimpleModel,
+    figures_path: Path = Path("."),
+    reference_path: Path = Path("old_data/RRTM_2013_cld_alb_TOA_SFC_09.nc"),
+):
+    if not reference_path.exists():
+        print(f"Skipping 2013-09 RRTM comparison; missing file: {reference_path}")
+        return
+
+    model_kernel, raw_lon, raw_lat = test_2(
+        raw_dataset=load_raw_date_dataset(raw_root, "2013-09"),
+        preprocessor=preprocessor,
+        date="2013-09",
+        model=model,
+        figures_path=figures_path,
+    )
+
+    rrtm_kernel, rrtm_lon, rrtm_lat = load_rrtm_kernel(reference_path)
+    if model_kernel.shape != rrtm_kernel.shape:
+        model_kernel = interpolate_spatial_field(
+            model_kernel,
+            raw_lon,
+            raw_lat,
+            rrtm_lon,
+            rrtm_lat,
+        )
+        raw_lon = rrtm_lon
+        raw_lat = rrtm_lat
+
+    comparison_diff = model_kernel - rrtm_kernel
+    max_abs_kernel = max(np.max(np.abs(model_kernel)), np.max(np.abs(rrtm_kernel)))
+    max_abs_comparison = np.max(np.abs(comparison_diff))
+
+    fig = plt.figure(figsize=(8, 6), dpi=300)
+    m = setup_global_map()
+    plot_colormesh_on_map(
+        m,
+        rrtm_lon,
+        rrtm_lat,
+        rrtm_kernel,
+        cmap="RdBu_r",
+        vmin=-max_abs_kernel,
+        vmax=max_abs_kernel,
+    )
+    plt.text(
+        x=300, y=np.max(rrtm_lat) + 5, s=f"{np.mean(rrtm_kernel):.2f}", fontsize=20
+    )
+    plt.colorbar(orientation="horizontal", fraction=0.075, label=r"$W/m^2 1\%$")
+    plt.title("RRTM Surface Albedo Kernel\n2013-09")
+    plt.savefig(figures_path / "rrtm_kernel_2013-09.png")
+    plt.close(fig)
+
+    fig = plt.figure(figsize=(8, 6), dpi=300)
+    m = setup_global_map()
+    plot_colormesh_on_map(
+        m,
+        raw_lon,
+        raw_lat,
+        comparison_diff,
+        cmap="RdBu_r",
+        vmin=-max_abs_comparison,
+        vmax=max_abs_comparison,
+    )
+    plt.text(
+        x=300, y=np.max(raw_lat) + 5, s=f"{np.mean(comparison_diff):.2f}", fontsize=20
+    )
+    plt.colorbar(orientation="horizontal", fraction=0.075, label=r"$W/m^2 1\%$")
+    plt.title("NN - RRTM Surface Albedo Kernel\n2013-09")
+    plt.savefig(figures_path / "nn_vs_rrtm_kernel_2013-09.png")
+    plt.close(fig)
 
 
 def test_3(
@@ -383,11 +507,24 @@ def main():
     )
     test_2(
         raw_dataset=raw_dataset,
-        preprocessed_dataset=preprocessed_dataset,
         date="2005-09",
         preprocessor=preprocessor,
         model=model,
         figures_path=output_path,
+    )
+    test_2_raw_date(
+        raw_root=config.dataset.era5.raw_path,
+        date="2013-09",
+        preprocessor=preprocessor,
+        model=model,
+        figures_path=output_path,
+    )
+    test_2013_09_against_rrtm(
+        raw_root=config.dataset.era5.raw_path,
+        preprocessor=preprocessor,
+        model=model,
+        figures_path=output_path,
+        reference_path=Path("data/other/RRTM_2013_cld_alb_TOA_SFC_09.nc"),
     )
 
 
