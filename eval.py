@@ -525,7 +525,7 @@ def main():
         preprocessor=preprocessor,
         model=model,
         figures_path=output_path,
-        reference_path=Path("data/other/RRTM_2013_cld_alb_TOA_SFC_09.nc"),
+        reference_path=Path("data/other/RRTM_kernel_2013_cld_alb_TOA_SFC_09.nc"),
     )
 
 
