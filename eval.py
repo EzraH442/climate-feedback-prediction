@@ -38,10 +38,28 @@ def setup_global_map():
     return m
 
 
+def setup_north_pole_map():
+    m = Basemap(
+        projection="npstere",
+        boundinglat=60,
+        lon_0=0,
+        round=True,
+        resolution="l",
+    )
+    m.drawcoastlines()
+    m.drawcountries()
+    m.drawmapboundary(fill_color="white")
+    m.drawparallels(np.arange(60.0, 91.0, 30.0))
+    m.drawmeridians(np.arange(0.0, 360.0, 60.0))
+    return m
+
+
 def plot_colormesh_on_map(m, lon, lat, data, cmap, vmin, vmax):
+    lon_grid, lat_grid = np.meshgrid(np.asarray(lon), np.asarray(lat))
+    x, y = m(lon_grid, lat_grid)
     m.pcolormesh(
-        np.asarray(lon),
-        np.asarray(lat),
+        x,
+        y,
         np.asarray(data),
         shading="nearest",
         cmap=cmap,
@@ -94,11 +112,11 @@ def ordered_dataset(dataset: xr.Dataset, target_var: str = "tsr") -> xr.Dataset:
 def load_rrtm_kernel(reference_path: Path) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     dataset = xr.open_dataset(reference_path)
     data_array = dataset["TOA"].sel(up_down_net=3, band=1)
-    data_array = data_array.transpose('latitude', 'longitude')
+    data_array = data_array.transpose("latitude", "longitude")
     return (
         data_array.to_numpy(),
-        dataset['longitude'].values,
-        dataset['latitude'].values,
+        dataset["longitude"].values,
+        dataset["latitude"].values,
     )
 
 
