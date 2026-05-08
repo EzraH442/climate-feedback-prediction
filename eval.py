@@ -278,6 +278,7 @@ def test_2(
     date,
     model: SimpleModel,
     figures_path: Path = Path("."),
+    max_true_kernel=0,
 ):
     raw_date_specific_data = raw_dataset.sel(date=[date])
     raw_date_specific_data_perturbed = raw_date_specific_data.copy(deep=True)
@@ -333,7 +334,7 @@ def test_2(
     ).mean(dim="date").to_dataarray().to_numpy()[0] / (3600 * 24)
 
     diff = predictions_perturbed - predictions_base
-    max_diff = np.max(np.abs(diff))
+    max_diff = np.max(max_true_kernel, np.max(np.abs(diff)))
 
     fig = plt.figure(figsize=(8, 6), dpi=300)
     m = setup_global_map()
@@ -361,16 +362,18 @@ def test_2013_09_against_rrtm(
         print(f"Skipping 2013-09 RRTM comparison; missing file: {reference_path}")
         return
 
+    rrtm_kernel, rrtm_lon, rrtm_lat = load_rrtm_kernel(reference_path)
+    rrtm_kernel = rrtm_kernel * 0.01
+
     model_kernel, raw_lon, raw_lat = test_2(
         raw_dataset=load_raw_date_dataset(raw_root, "2013-09"),
         preprocessor=preprocessor,
         date="2013-09",
         model=model,
         figures_path=figures_path,
+        max_true_kernel=np.max(np.abs(rrtm_kernel)),  # for same colorbar
     )
 
-    rrtm_kernel, rrtm_lon, rrtm_lat = load_rrtm_kernel(reference_path)
-    rrtm_kernel = rrtm_kernel * 0.01
     if model_kernel.shape != rrtm_kernel.shape:
         model_kernel = interpolate_spatial_field(
             model_kernel,
@@ -385,6 +388,7 @@ def test_2013_09_against_rrtm(
     comparison_diff = model_kernel - rrtm_kernel
     max_abs_kernel = max(np.max(np.abs(model_kernel)), np.max(np.abs(rrtm_kernel)))
     max_abs_comparison = np.max(np.abs(comparison_diff))
+    max_rrtm_lat = np.max(rrtm_lat)
 
     fig = plt.figure(figsize=(8, 6), dpi=300)
     m = setup_global_map()
@@ -397,9 +401,7 @@ def test_2013_09_against_rrtm(
         vmin=-max_abs_kernel,
         vmax=max_abs_kernel,
     )
-    plt.text(
-        x=300, y=np.max(rrtm_lat) + 5, s=f"{np.mean(rrtm_kernel):.2f}", fontsize=20
-    )
+    plt.text(x=300, y=max_rrtm_lat + 5, s=f"{np.mean(rrtm_kernel):.2f}", fontsize=20)
     plt.colorbar(orientation="horizontal", fraction=0.075, label=r"$W/m^2 1\%$")
     plt.title("RRTM Surface Albedo Kernel\n2013-09")
     plt.savefig(figures_path / "rrtm_kernel_2013-09.png")
@@ -417,7 +419,7 @@ def test_2013_09_against_rrtm(
         vmax=max_abs_comparison,
     )
     plt.text(
-        x=300, y=np.max(raw_lat) + 5, s=f"{np.mean(comparison_diff):.2f}", fontsize=20
+        x=300, y=max_rrtm_lat + 5, s=f"{np.mean(comparison_diff):.2f}", fontsize=20
     )
     plt.colorbar(orientation="horizontal", fraction=0.075, label=r"$W/m^2 1\%$")
     plt.title("NN - RRTM Surface Albedo Kernel\n2013-09")
@@ -481,12 +483,51 @@ def test_3(
         plot_lat = nn_lat_2013
 
     delta_k_diff = delta_k_nn - delta_k_era5
-    max_abs_diff = np.max(np.abs(delta_k_diff))
 
-    print(f"Delta K NN - Delta K ERA5 mean: {np.mean(delta_k_diff):.4f} W/m^2 1%")
-    print(
-        f"Delta K NN - Delta K ERA5 RMSE: {np.sqrt(np.mean(delta_k_diff**2)):.4f} W/m^2 1%"
+    north_mask = plot_lat >= 60
+    delta_k_nn = delta_k_nn[north_mask, :]
+    delta_k_era5 = delta_k_nn[north_mask, :]
+    delta_k_diff = delta_k_diff[north_mask, :]
+
+    max_kernel = np.max(np.abs(delta_k_nn), np.abs(delta_k_era5))
+    max_abs_diff = np.max(np.abs(delta_k_diff))
+    plot_lat = plot_lat[north_mask]
+
+    fig = plt.figure(figsize=(8, 8), dpi=300)
+    m = setup_north_pole_map()
+    plot_colormesh_on_map(
+        m,
+        plot_lon,
+        plot_lat,
+        delta_k_nn,
+        cmap="RdBu_r",
+        vmin=-max_kernel,
+        vmax=max_kernel,
     )
+    plt.title(r"NN surface albedo kernel difference" + "(2013-09 minus 2012-09)")
+    plt.colorbar(
+        orientation="horizontal", fraction=0.05, pad=0.07, label=r"$W/m^2 1\%$"
+    )
+    plt.savefig(figures_path / "delta_k_nn_np.png")
+    plt.close(fig)
+
+    fig = plt.figure(figsize=(8, 8), dpi=300)
+    m = setup_north_pole_map()
+    plot_colormesh_on_map(
+        m,
+        plot_lon,
+        plot_lat,
+        delta_k_era5,
+        cmap="RdBu_r",
+        vmin=-max_kernel,
+        vmax=max_kernel,
+    )
+    plt.title(r"ERA5 surface albedo kernel difference" + "(2013-09 minus 2012-09)")
+    plt.colorbar(
+        orientation="horizontal", fraction=0.05, pad=0.07, label=r"$W/m^2 1\%$"
+    )
+    plt.savefig(figures_path / "delta_k_era5_np.png")
+    plt.close(fig)
 
     fig = plt.figure(figsize=(8, 8), dpi=300)
     m = setup_north_pole_map()
