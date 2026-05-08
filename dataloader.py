@@ -99,7 +99,7 @@ class ClimateTorchDataset(torch.utils.data.Dataset):
            tclw       (date, latitude, longitude) float64 100MB 0.005785 ... 2.902e-05
            tco3       (date, latitude, longitude) float64 100MB 0.006788 ... 0.005639
            tcwv       (date, latitude, longitude) float64 100MB 2.86 2.86 ... 1.031
-           totalx     (date, latitude, longitude) float64 100MB 33.78 33.78 ... 24.45
+           tisr       (date, latitude, longitude) float64 100MB 33.78 33.78 ... 24.45
            tsr        (date, latitude, longitude) float64 100MB 0.0 0.0 ... 1.344e+07
         """
 

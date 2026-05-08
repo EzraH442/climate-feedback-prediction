@@ -34,7 +34,7 @@ def retrieve_era5_years_data(years=[2006, 2008], data_path="data/era5"):
                     "total_column_cloud_liquid_water",
                     "total_column_ozone",
                     "total_column_water_vapour",
-                    "total_toa_incident_solar_radiation",
+                    "toa_incident_solar_radiation",
                     "top_net_solar_radiation",
                 ],
                 "year": year,
