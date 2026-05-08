@@ -15,7 +15,12 @@ def make_kernel_filename(year):
 
 
 class ClimateTorchDataset(torch.utils.data.Dataset):
-    def __init__(self, config_path="config.yaml", data_type="train", target_var="tsr"):
+    def __init__(
+        self,
+        config_path="configs/model/small.yaml",
+        data_type="train",
+        target_var="tsr",
+    ):
         """
         Args:
             config_path (str): Path to OmegaConf YAML config
