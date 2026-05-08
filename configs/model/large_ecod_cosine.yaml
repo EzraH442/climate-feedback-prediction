@@ -43,14 +43,18 @@ dataset:
 
 model:
   input_dim: 12
-  hidden_dim: 15
+  hidden_dim: 11
 
 optimizer:
   learning_rate: 0.001
+  scheduler:
+    type: cosine_annealing
+    t_max: 100
+    eta_min: 1.0e-6
 
 train:
-  epochs: 900
-  checkpoint_dir: './checkpoints/baseline-large-ecod'
+  epochs: 100
+  checkpoint_dir: './checkpoints/baseline-large-ecod-cosine'
   batch_size: 256
   early_stopping_threshold: 0.001
   max_epochs_without_improvement: 10

@@ -40,17 +40,23 @@ dataset:
     # - 2015
     # - 2017
     # - 2019
+  test_years:
+    - 2005
 
 model:
   input_dim: 12
-  hidden_dim: 15
+  hidden_dim: 11
 
 optimizer:
   learning_rate: 0.001
+  scheduler:
+    type: cosine_annealing
+    t_max: 100
+    eta_min: 1.0e-6
 
 train:
-  epochs: 900
-  checkpoint_dir: './checkpoints/baseline-simple-ecod'
+  epochs: 100
+  checkpoint_dir: './checkpoints/baseline-simple-ecod-cosine'
   batch_size: 256
   early_stopping_threshold: 0.001
   max_epochs_without_improvement: 10
