@@ -636,6 +636,11 @@ def main():
         help="Path to OmegaConf YAML config",
     )
     parser.add_argument(
+        "--checkpoint_path",
+        type=str,
+        help="Path to a training checkpoint (.pt) or imported PyTorch weights (.pth)",
+    )
+    parser.add_argument(
         "--output_dir",
         type=str,
         help="Path to output directory (optional)",
@@ -646,28 +651,32 @@ def main():
     config = OmegaConf.load(args.config_file)
 
     # --- load model checkpoint ---
-    checkpoint_path = Path(config.train.checkpoint_dir) / "best_model.pt"
+    checkpoint_path = (
+        Path(args.checkpoint_path)
+        if args.checkpoint_path
+        else Path(config.train.checkpoint_dir) / "best_model.pt"
+    )
     checkpoint_data = torch.load(
         checkpoint_path, map_location="cpu", weights_only=False
     )
-    # checkpoint_data = {
-    #     "epoch": epoch,
-    #     "best_epoch": self.best_epoch,
-    #     "best_val_loss": self.best_val_loss,
-    #     "total_training_time": self.total_training_time,
-    #     "model_state_dict": self.model.state_dict(),
-    #     "optimizer_state_dict": self.optimizer.state_dict(),
-    #     "config": self.config,
-    # }
-    model_weights = checkpoint_data["model_state_dict"]
-    model = SimpleModel(checkpoint_data["config"])
+
+    checkpoint_epoch_label = checkpoint_path.stem
+    if isinstance(checkpoint_data, dict) and "model_state_dict" in checkpoint_data:
+        model_weights = checkpoint_data["model_state_dict"]
+        model_config = checkpoint_data.get("config", config)
+        checkpoint_epoch_label = str(
+            checkpoint_data.get("best_epoch", checkpoint_data.get("epoch", checkpoint_path.stem))
+        )
+    else:
+        model_weights = checkpoint_data
+        model_config = config
+
+    model = SimpleModel(model_config)
     model.load_state_dict(model_weights)
     model.eval()
 
     # --- setup output directory ---
-    epoch = checkpoint_data["best_epoch"]
-
-    output_dir = Path(config.train.checkpoint_dir) / "figures" / epoch
+    output_dir = Path(config.train.checkpoint_dir) / "figures" / checkpoint_epoch_label
     if args.output_dir:
         output_dir = Path(args.output_dir)
 
