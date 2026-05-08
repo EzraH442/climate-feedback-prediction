@@ -593,6 +593,7 @@ def test_4(
     total_samples = flattened_inputs.shape[0]
 
     for start in range(0, total_samples, batch_size):
+        print(f"{start}/{total_samples}")
         end = min(start + batch_size, total_samples)
         batch_inputs = flattened_inputs[start:end]
         batch_baselines = baselines[start:end]
@@ -670,10 +671,9 @@ def main():
     model.eval()
 
     # --- load test data ---
-    test_years = getattr(config.dataset, "test_years", config.dataset.val_years)
     raw_era5_paths = [
         f"{config.dataset.era5.raw_path}/{make_era5_filename(year)}"
-        for year in test_years
+        for year in range(1990, 2021)
     ]
     raw_dataset = xr.open_mfdataset(raw_era5_paths, combine="nested", concat_dim="date")
 
@@ -714,6 +714,7 @@ def main():
         preprocessor=preprocessor,
         model=model,
         figures_path=output_path,
+        batch_size=256,
     )
 
 
