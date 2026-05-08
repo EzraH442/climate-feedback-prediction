@@ -72,9 +72,9 @@ def main():
     parser.add_argument(
         "--config_file",
         type=str,
-        required=True,
+        required=False,
         help="Path to config file",
-        default="config_preprocess.yaml",
+        default="configs/preprocess/small.yaml",
     )
     args = parser.parse_args()
 
