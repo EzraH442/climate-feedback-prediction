@@ -587,6 +587,7 @@ def test_4(
     flattened_inputs = inputs.reshape(-1, model.input_dim)
     baselines = torch.zeros_like(flattened_inputs)
 
+    print("Running integrated gradients...")
     ig = IntegratedGradients(model)
     feature_sums = torch.zeros(model.input_dim, dtype=torch.float32)
     total_samples = flattened_inputs.shape[0]
@@ -674,14 +675,7 @@ def main():
         f"{config.dataset.era5.raw_path}/{make_era5_filename(year)}"
         for year in test_years
     ]
-    processed_era5_paths = [
-        f"{config.dataset.era5.path}/{make_era5_filename(year)}" for year in test_years
-    ]
-    print(f"Loading ERA5 data from: {raw_era5_paths} and {processed_era5_paths}")
     raw_dataset = xr.open_mfdataset(raw_era5_paths, combine="nested", concat_dim="date")
-    preprocessed_dataset = xr.open_mfdataset(
-        processed_era5_paths, combine="nested", concat_dim="date"
-    )
 
     # --- load preprocessor ---
     preprocessor = create_2024_preprocessor()
@@ -716,7 +710,7 @@ def main():
         figures_path=output_path,
     )
     test_4(
-        raw_dataset=filter_by_years(raw_dataset, list(range(1991, 2021, 2))),
+        raw_dataset=filter_by_years(raw_dataset, [2015]),
         preprocessor=preprocessor,
         model=model,
         figures_path=output_path,
