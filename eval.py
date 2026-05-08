@@ -120,6 +120,10 @@ def load_rrtm_kernel(reference_path: Path) -> tuple[np.ndarray, np.ndarray, np.n
     )
 
 
+def filter_by_years(ds, years, time_coord="date"):
+    return ds.sel({time_coord: ds[time_coord].dt.year.isin(years)})
+
+
 def interpolate_spatial_field(
     data: np.ndarray,
     src_lon: np.ndarray,
@@ -146,7 +150,6 @@ def load_raw_date_dataset(raw_root: str, date: str) -> xr.Dataset:
 
 
 def test_1(
-    preprocessed_dataset: xr.Dataset,
     raw_dataset: xr.Dataset,
     preprocessor: Preprocessor,
     model: torch.nn.Module,
@@ -155,6 +158,8 @@ def test_1(
     date = raw_dataset["date"].values
     raw_lat = raw_dataset["latitude"].values
     raw_lon = raw_dataset["longitude"].values
+
+    preprocessed_dataset = preprocessor.transform(raw_dataset)
     processed_lat = preprocessed_dataset["latitude"].values
     processed_lon = preprocessed_dataset["longitude"].values
 
@@ -345,23 +350,6 @@ def test_2(
     return diff, raw_lon, raw_lat
 
 
-def test_2_raw_date(
-    raw_root: str,
-    preprocessor: Preprocessor,
-    date: str,
-    model: SimpleModel,
-    figures_path: Path = Path("."),
-):
-    raw_date_specific_data = load_raw_date_dataset(raw_root, date)
-    test_2(
-        raw_dataset=raw_date_specific_data,
-        preprocessor=preprocessor,
-        date=date,
-        model=model,
-        figures_path=figures_path,
-    )
-
-
 def test_2013_09_against_rrtm(
     raw_root: str,
     preprocessor: Preprocessor,
@@ -438,15 +426,87 @@ def test_2013_09_against_rrtm(
 
 
 def test_3(
-    dataset: xr.Dataset,
-    date,
+    raw_root: str,
+    kernels_root: Path,
     preprocessor: Preprocessor,
     model: SimpleModel,
     figures_path: Path = Path("."),
 ):
-    # Second-Order Test: Radiative Sensitivity Difference
-    # \Delta K^* =
-    pass
+    nn_kernel_2013, nn_lon_2013, nn_lat_2013 = test_2(
+        raw_dataset=load_raw_date_dataset(raw_root, "2013-09"),
+        preprocessor=preprocessor,
+        date="2013-09",
+        model=model,
+        figures_path=figures_path,
+    )
+    nn_kernel_2012, _, _ = test_2(
+        raw_dataset=load_raw_date_dataset(raw_root, "2012-09"),
+        preprocessor=preprocessor,
+        date="2012-09",
+        model=model,
+        figures_path=figures_path,
+    )
+
+    delta_k_nn = nn_kernel_2013 - nn_kernel_2012
+
+    kernels_root_path = Path(kernels_root)
+    era5_kernel_2013_path = kernels_root_path / "ERA5_2013_cld_alb_TOA_SFC_09.nc"
+    era5_kernel_2012_path = kernels_root_path / "ERA5_2012_cld_alb_TOA_SFC_09.nc"
+    if not era5_kernel_2013_path.exists() or not era5_kernel_2012_path.exists():
+        missing = []
+        if not era5_kernel_2013_path.exists():
+            missing.append(str(era5_kernel_2013_path))
+        if not era5_kernel_2012_path.exists():
+            missing.append(str(era5_kernel_2012_path))
+        raise FileNotFoundError("Missing ERA5 kernel file(s): " + ", ".join(missing))
+
+    era5_kernel_2013, era5_lon_2013, era5_lat_2013 = load_rrtm_kernel(
+        era5_kernel_2013_path
+    )
+    era5_kernel_2012, _, _ = load_rrtm_kernel(era5_kernel_2012_path)
+    delta_k_era5 = era5_kernel_2013 - era5_kernel_2012
+
+    if delta_k_nn.shape != delta_k_era5.shape:
+        delta_k_nn = interpolate_spatial_field(
+            delta_k_nn,
+            nn_lon_2013,
+            nn_lat_2013,
+            era5_lon_2013,
+            era5_lat_2013,
+        )
+        plot_lon = era5_lon_2013
+        plot_lat = era5_lat_2013
+    else:
+        plot_lon = nn_lon_2013
+        plot_lat = nn_lat_2013
+
+    delta_k_diff = delta_k_nn - delta_k_era5
+    max_abs_diff = np.max(np.abs(delta_k_diff))
+
+    print(f"Delta K NN - Delta K ERA5 mean: {np.mean(delta_k_diff):.4f} W/m^2 1%")
+    print(
+        f"Delta K NN - Delta K ERA5 RMSE: {np.sqrt(np.mean(delta_k_diff**2)):.4f} W/m^2 1%"
+    )
+
+    fig = plt.figure(figsize=(8, 8), dpi=300)
+    m = setup_north_pole_map()
+    plot_colormesh_on_map(
+        m,
+        plot_lon,
+        plot_lat,
+        delta_k_diff,
+        cmap="RdBu_r",
+        vmin=-max_abs_diff,
+        vmax=max_abs_diff,
+    )
+    plt.title(r"$\Delta K_{NN} - \Delta K_{ERA5}$" + "\n2013-09 minus 2012-09")
+    plt.colorbar(
+        orientation="horizontal", fraction=0.05, pad=0.07, label=r"$W/m^2 1\%$"
+    )
+    plt.savefig(
+        figures_path / "delta_k_nn_minus_era5_north_pole_2013-09_minus_2012-09.png"
+    )
+    plt.close(fig)
 
 
 def main():
@@ -497,14 +557,14 @@ def main():
     model.load_state_dict(model_weights)
     model.eval()
 
-    # --- load val data ---
+    # --- load test data ---
+    test_years = getattr(config.dataset, "test_years", config.dataset.val_years)
     raw_era5_paths = [
         f"{config.dataset.era5.raw_path}/{make_era5_filename(year)}"
-        for year in config.dataset.val_years
+        for year in test_years
     ]
     processed_era5_paths = [
-        f"{config.dataset.era5.path}/{make_era5_filename(year)}"
-        for year in config.dataset.val_years
+        f"{config.dataset.era5.path}/{make_era5_filename(year)}" for year in test_years
     ]
     print(f"Loading ERA5 data from: {raw_era5_paths} and {processed_era5_paths}")
     raw_dataset = xr.open_mfdataset(raw_era5_paths, combine="nested", concat_dim="date")
@@ -512,28 +572,20 @@ def main():
         processed_era5_paths, combine="nested", concat_dim="date"
     )
 
-    # --- load val preprocessor ---
+    # --- load preprocessor ---
     preprocessor = create_2024_preprocessor()
     preprocessor.load(config.preprocess.params_dir)
 
     # --- run tests ---
     test_1(
-        preprocessed_dataset=preprocessed_dataset,
-        raw_dataset=raw_dataset,
+        raw_dataset=filter_by_years(raw_dataset, list(range(1991, 2021, 2))),
         preprocessor=preprocessor,
         model=model,
         figures_path=output_path,
     )
     test_2(
-        raw_dataset=raw_dataset,
+        raw_dataset=load_raw_date_dataset(config.dataset.era5.raw_path, "2005-09"),
         date="2005-09",
-        preprocessor=preprocessor,
-        model=model,
-        figures_path=output_path,
-    )
-    test_2_raw_date(
-        raw_root=config.dataset.era5.raw_path,
-        date="2013-09",
         preprocessor=preprocessor,
         model=model,
         figures_path=output_path,
@@ -544,6 +596,13 @@ def main():
         model=model,
         figures_path=output_path,
         reference_path=Path("data/other/RRTM_2013_cld_alb_TOA_SFC_09.nc"),
+    )
+    test_3(
+        raw_root=config.dataset.era5.raw_path,
+        kernels_root=Path("data/other"),
+        preprocessor=preprocessor,
+        model=model,
+        figures_path=output_path,
     )
 
 
