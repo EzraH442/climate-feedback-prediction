@@ -334,7 +334,7 @@ def test_2(
     ).mean(dim="date").to_dataarray().to_numpy()[0] / (3600 * 24)
 
     diff = predictions_perturbed - predictions_base
-    max_diff = np.max(max_true_kernel, np.max(np.abs(diff)))
+    max_diff = max(max_true_kernel, np.max(np.abs(diff)))
 
     fig = plt.figure(figsize=(8, 6), dpi=300)
     m = setup_global_map()
@@ -550,6 +550,66 @@ def test_3(
     plt.close(fig)
 
 
+def test_4(
+    raw_dataset: xr.Dataset,
+    preprocessor: Preprocessor,
+    model: SimpleModel,
+    figures_path: Path = Path("."),
+    batch_size: int = 8192,
+):
+    try:
+        from captum.attr import IntegratedGradients
+    except ImportError as exc:
+        raise ImportError(
+            "Captum is required for test_4. Install the `captum` package first."
+        ) from exc
+
+    preprocessed_dataset = preprocessor.transform(raw_dataset)
+    ordered_preprocessed = ordered_dataset(preprocessed_dataset)
+    feature_names = [v for v in ordered_preprocessed.data_vars if v != "tsr"]
+
+    data = (
+        ordered_preprocessed.to_dataarray()
+        .transpose("date", "latitude", "longitude", "variable")
+        .to_numpy()
+    )
+    inputs = torch.from_numpy(data[..., : model.input_dim]).float()
+    flattened_inputs = inputs.reshape(-1, model.input_dim)
+    baselines = torch.zeros_like(flattened_inputs)
+
+    ig = IntegratedGradients(model)
+    feature_sums = torch.zeros(model.input_dim, dtype=torch.float32)
+    total_samples = flattened_inputs.shape[0]
+
+    for start in range(0, total_samples, batch_size):
+        end = min(start + batch_size, total_samples)
+        batch_inputs = flattened_inputs[start:end]
+        batch_baselines = baselines[start:end]
+        attributions = ig.attribute(batch_inputs, baselines=batch_baselines)
+        feature_sums += attributions.abs().sum(dim=0).cpu()
+
+    mean_feature_importance = (feature_sums / total_samples).numpy()
+
+    print("Average Captum feature importance over validation data:")
+    for name, value in zip(feature_names, mean_feature_importance):
+        print(f"  {name}: {value:.6e}")
+
+    fig, ax = plt.subplots(figsize=(10, 5), dpi=300)
+    ax.bar(feature_names, mean_feature_importance)
+    ax.set_ylabel("Mean absolute attribution")
+    ax.set_title("Captum Feature Importance on Validation Data")
+    ax.tick_params(axis="x", rotation=45)
+    fig.tight_layout()
+    fig.savefig(figures_path / "captum_feature_importance_validation.png")
+    plt.close(fig)
+
+    output_csv = figures_path / "captum_feature_importance_validation.csv"
+    with output_csv.open("w", encoding="ascii") as f:
+        f.write("feature,mean_absolute_attribution\n")
+        for name, value in zip(feature_names, mean_feature_importance):
+            f.write(f"{name},{value:.10e}\n")
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Test the trained model on validation data."
@@ -641,6 +701,12 @@ def main():
     test_3(
         raw_root=config.dataset.era5.raw_path,
         kernels_root=Path("data/other"),
+        preprocessor=preprocessor,
+        model=model,
+        figures_path=output_path,
+    )
+    test_4(
+        raw_dataset=filter_by_years(raw_dataset, list(range(1991, 2021, 2))),
         preprocessor=preprocessor,
         model=model,
         figures_path=output_path,
