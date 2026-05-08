@@ -450,8 +450,8 @@ def test_3(
     delta_k_nn = nn_kernel_2013 - nn_kernel_2012
 
     kernels_root_path = Path(kernels_root)
-    era5_kernel_2013_path = kernels_root_path / "ERA5_2013_cld_alb_TOA_SFC_09.nc"
-    era5_kernel_2012_path = kernels_root_path / "ERA5_2012_cld_alb_TOA_SFC_09.nc"
+    era5_kernel_2013_path = kernels_root_path / "RRTM_kernel_2013_cld_alb_TOA_SFC_09.nc"
+    era5_kernel_2012_path = kernels_root_path / "RRTM_kernel_2012_cld_alb_TOA_SFC_09.nc"
     if not era5_kernel_2013_path.exists() or not era5_kernel_2012_path.exists():
         missing = []
         if not era5_kernel_2013_path.exists():
