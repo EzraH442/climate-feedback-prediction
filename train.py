@@ -164,9 +164,9 @@ def main():
     parser.add_argument(
         "--config_file",
         type=str,
-        required=True,
+        required=False,
         help="Path to config file",
-        default="config_train.yaml",
+        default="configs/model/small.yaml",
     )
     parser.add_argument(
         "--resume",
@@ -182,7 +182,6 @@ def main():
     parser.set_defaults(resume=True)
     args = parser.parse_args()
 
-    
     train(args.config_file, args.resume)
 
 
