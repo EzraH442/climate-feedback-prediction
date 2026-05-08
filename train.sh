@@ -11,6 +11,8 @@
 #SBATCH --mail-type=ALL
 #SBATCH --mail-user=ezra.huang@mail.mcgill.ca
 
+export OMP_NUM_THREADS=$SLURM_CPUS_PER_TASK
+
 module purge
 module load StdEnv/2023
 module load python/3.11
