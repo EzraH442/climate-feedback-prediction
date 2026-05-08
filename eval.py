@@ -584,8 +584,11 @@ def test_4(
         .to_numpy()
     )
     inputs = torch.from_numpy(data[..., : model.input_dim]).float()
+    baselines_inputs = inputs.mean(dim=0).expand(inputs.shape)
+
     flattened_inputs = inputs.reshape(-1, model.input_dim)
-    baselines = torch.zeros_like(flattened_inputs)
+    baselines = baselines_inputs.reshape(-1, model.input_dim)
+    # baselines = torch.zeros_like(flattened_inputs) gives different results
 
     print("Running integrated gradients...")
     ig = IntegratedGradients(model)
@@ -642,15 +645,6 @@ def main():
     # --- load config ---
     config = OmegaConf.load(args.config_file)
 
-    # --- setup output directory ---
-    output_dir = Path(config.train.checkpoint_dir) / "figures"
-    if args.output_dir:
-        output_dir = args.output_dir
-
-    output_path = Path(output_dir)
-    if not output_path.exists():
-        output_path.mkdir(parents=True, exist_ok=True)
-
     # --- load model checkpoint ---
     checkpoint_path = Path(config.train.checkpoint_dir) / "best_model.pt"
     checkpoint_data = torch.load(
@@ -670,6 +664,16 @@ def main():
     model.load_state_dict(model_weights)
     model.eval()
 
+    # --- setup output directory ---
+    epoch = checkpoint_data["best_epoch"]
+
+    output_dir = Path(config.train.checkpoint_dir) / "figures" / epoch
+    if args.output_dir:
+        output_dir = Path(args.output_dir)
+
+    if not output_dir.exists():
+        output_dir.mkdir(parents=True, exist_ok=True)
+
     # --- load test data ---
     raw_era5_paths = [
         f"{config.dataset.era5.raw_path}/{make_era5_filename(year)}"
@@ -686,20 +690,20 @@ def main():
         raw_dataset=filter_by_years(raw_dataset, list(range(1991, 2021, 2))),
         preprocessor=preprocessor,
         model=model,
-        figures_path=output_path,
+        figures_path=output_dir,
     )
     test_2(
         raw_dataset=load_raw_date_dataset(config.dataset.era5.raw_path, "2005-09"),
         date="2005-09",
         preprocessor=preprocessor,
         model=model,
-        figures_path=output_path,
+        figures_path=output_dir,
     )
     test_2013_09_against_rrtm(
         raw_root=config.dataset.era5.raw_path,
         preprocessor=preprocessor,
         model=model,
-        figures_path=output_path,
+        figures_path=output_dir,
         reference_path=Path("data/other/RRTM_kernel_2013_cld_alb_TOA_SFC_09.nc"),
     )
     test_3(
@@ -707,13 +711,13 @@ def main():
         kernels_root=Path("data/other"),
         preprocessor=preprocessor,
         model=model,
-        figures_path=output_path,
+        figures_path=output_dir,
     )
     test_4(
         raw_dataset=filter_by_years(raw_dataset, [2015]),
         preprocessor=preprocessor,
         model=model,
-        figures_path=output_path,
+        figures_path=output_dir,
         batch_size=256,
     )
 
