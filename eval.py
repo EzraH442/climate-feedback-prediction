@@ -43,7 +43,7 @@ def setup_north_pole_map():
         projection="npstere",
         boundinglat=60,
         lon_0=0,
-        round=True,
+        # round=True,
         resolution="l",
     )
     m.drawcoastlines()
@@ -282,11 +282,12 @@ def test_2(
 ):
     raw_date_specific_data = raw_dataset.sel(date=[date])
     raw_date_specific_data_perturbed = raw_date_specific_data.copy(deep=True)
-    raw_date_specific_data_perturbed["fal"] = xr.where(
-        raw_date_specific_data["fal"] + 0.01 > 1.0,
-        1.0,
-        raw_date_specific_data["fal"] + 0.01,
-    )
+    raw_date_specific_data_perturbed["fal"] = raw_date_specific_data["fal"] + 0.01
+    # raw_date_specific_data_perturbed["fal"] = xr.where(
+    #     raw_date_specific_data["fal"] + 0.01 > 1.0,
+    #     1.0,
+    #     raw_date_specific_data["fal"] + 0.01,
+    # )
 
     processed_date_specific_data = preprocessor.transform(raw_date_specific_data)
     processed_date_specific_data_perturbed = preprocessor.transform(
@@ -334,7 +335,7 @@ def test_2(
     ).mean(dim="date").to_dataarray().to_numpy()[0] / (3600 * 24)
 
     diff = predictions_perturbed - predictions_base
-    max_diff = np.max(max_true_kernel, np.max(np.abs(diff)))
+    max_diff = max(max_true_kernel, np.max(np.abs(diff)))
 
     fig = plt.figure(figsize=(8, 6), dpi=300)
     m = setup_global_map()
@@ -389,6 +390,12 @@ def test_2013_09_against_rrtm(
     max_abs_kernel = max(np.max(np.abs(model_kernel)), np.max(np.abs(rrtm_kernel)))
     max_abs_comparison = np.max(np.abs(comparison_diff))
     max_rrtm_lat = np.max(rrtm_lat)
+
+    print(model_kernel)
+    print(rrtm_kernel)
+    print(np.max(np.abs(model_kernel)), np.max(np.abs(rrtm_kernel)))
+    print(max_abs_kernel)
+    print(max_abs_comparison)
 
     fig = plt.figure(figsize=(8, 6), dpi=300)
     m = setup_global_map()
@@ -466,6 +473,9 @@ def test_3(
         era5_kernel_2013_path
     )
     era5_kernel_2012, _, _ = load_rrtm_kernel(era5_kernel_2012_path)
+    era5_kernel_2013 = era5_kernel_2013 * 0.01
+    era5_kernel_2012 = era5_kernel_2012 * 0.01
+
     delta_k_era5 = era5_kernel_2013 - era5_kernel_2012
 
     if delta_k_nn.shape != delta_k_era5.shape:
@@ -486,10 +496,10 @@ def test_3(
 
     north_mask = plot_lat >= 60
     delta_k_nn = delta_k_nn[north_mask, :]
-    delta_k_era5 = delta_k_nn[north_mask, :]
+    delta_k_era5 = delta_k_era5[north_mask, :]
     delta_k_diff = delta_k_diff[north_mask, :]
 
-    max_kernel = np.max(np.abs(delta_k_nn), np.abs(delta_k_era5))
+    max_kernel = max(np.max(np.abs(delta_k_nn)), np.max(np.abs(delta_k_era5)))
     max_abs_diff = np.max(np.abs(delta_k_diff))
     plot_lat = plot_lat[north_mask]
 
