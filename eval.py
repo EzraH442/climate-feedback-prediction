@@ -711,7 +711,7 @@ def test_5(
 
     summary_csv = figures_path / "loss_landscape_summary.csv"
     with summary_csv.open("w", encoding="ascii") as f:
-        f.write("feature,feature_mean,mean_loss,sample_count\n")
+        f.write("feature,feature_mean,mean_loss,loss_std,sample_count\n")
 
         for feature_index, feature_name in enumerate(feature_names):
             feature_values = inputs[:, feature_index]
@@ -737,6 +737,7 @@ def test_5(
             bin_indices = np.digitize(feature_values, bin_edges[1:-1], right=False)
             bin_centers = []
             bin_losses = []
+            bin_loss_stds = []
             bin_counts = []
 
             for bin_index in range(bin_edges.size - 1):
@@ -745,25 +746,28 @@ def test_5(
                     continue
                 bin_centers.append(feature_values_unprocessed[mask].mean())
                 bin_losses.append(losses[mask].mean())
+                bin_loss_stds.append(losses[mask].std())
                 bin_counts.append(mask.sum())
                 f.write(
-                    f"{feature_name},{bin_centers[-1]:.10e},{bin_losses[-1]:.10e},{bin_counts[-1]}\n"
+                    f"{feature_name},{bin_centers[-1]:.10e},{bin_losses[-1]:.10e},{bin_loss_stds[-1]:.10e},{bin_counts[-1]}\n"
                 )
 
             fig, ax = plt.subplots(figsize=(7, 4), dpi=300)
-            loss_mean = losses.mean()
-            loss_std = losses.std()
-            lower_2std = max(0.0, loss_mean - 2 * loss_std)
-            upper_2std = loss_mean + 2 * loss_std
-            plot_max_loss = max(np.max(bin_losses), losses.max())
+            bin_centers = np.asarray(bin_centers)
+            bin_losses = np.asarray(bin_losses)
+            bin_loss_stds = np.asarray(bin_loss_stds)
+            lower_band = np.clip(bin_losses - 2 * bin_loss_stds, a_min=0.0, a_max=None)
+            upper_band = bin_losses + 2 * bin_loss_stds
 
-            ax.axhspan(0.0, lower_2std, color="tab:blue", alpha=0.06)
-            ax.axhspan(lower_2std, upper_2std, color="tab:green", alpha=0.08)
-            ax.axhspan(upper_2std, plot_max_loss, color="tab:red", alpha=0.08)
+            ax.fill_between(
+                bin_centers,
+                lower_band,
+                upper_band,
+                color="tab:blue",
+                alpha=0.18,
+                linewidth=0,
+            )
             ax.plot(bin_centers, bin_losses, marker="o", markersize=2, linewidth=1)
-            ax.axhline(loss_mean, color="black", linestyle="--", linewidth=1)
-            ax.axhline(lower_2std, color="tab:red", linestyle=":", linewidth=1)
-            ax.axhline(upper_2std, color="tab:red", linestyle=":", linewidth=1)
             ax.set_xlabel(f"{feature_name} (unpreprocessed)")
             ax.set_ylabel("Mean squared error")
             ax.set_title(f"Loss vs {feature_name}")
