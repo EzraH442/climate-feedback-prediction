@@ -81,4 +81,4 @@ def load_all_era5_data(years):
 if __name__ == "__main__":
     years = range(1990,2021)
     retrieve_era5_years_data(years)
-    ds = load_all_era5_data(years)
+
