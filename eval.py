@@ -751,28 +751,19 @@ def test_5(
                 )
 
             fig, ax = plt.subplots(figsize=(7, 4), dpi=300)
-            feature_mean = feature_values_unprocessed.mean()
-            feature_std = feature_values_unprocessed.std()
-            lower_2std = feature_mean - 2 * feature_std
-            upper_2std = feature_mean + 2 * feature_std
+            loss_mean = losses.mean()
+            loss_std = losses.std()
+            lower_2std = max(0.0, loss_mean - 2 * loss_std)
+            upper_2std = loss_mean + 2 * loss_std
+            plot_max_loss = max(np.max(bin_losses), losses.max())
 
-            ax.axvspan(
-                feature_values_unprocessed.min(),
-                lower_2std,
-                color="tab:red",
-                alpha=0.08,
-            )
-            ax.axvspan(lower_2std, upper_2std, color="tab:green", alpha=0.08)
-            ax.axvspan(
-                upper_2std,
-                feature_values_unprocessed.max(),
-                color="tab:red",
-                alpha=0.08,
-            )
+            ax.axhspan(0.0, lower_2std, color="tab:blue", alpha=0.06)
+            ax.axhspan(lower_2std, upper_2std, color="tab:green", alpha=0.08)
+            ax.axhspan(upper_2std, plot_max_loss, color="tab:red", alpha=0.08)
             ax.plot(bin_centers, bin_losses, marker="o", markersize=2, linewidth=1)
-            ax.axvline(feature_mean, color="black", linestyle="--", linewidth=1)
-            ax.axvline(lower_2std, color="tab:red", linestyle=":", linewidth=1)
-            ax.axvline(upper_2std, color="tab:red", linestyle=":", linewidth=1)
+            ax.axhline(loss_mean, color="black", linestyle="--", linewidth=1)
+            ax.axhline(lower_2std, color="tab:red", linestyle=":", linewidth=1)
+            ax.axhline(upper_2std, color="tab:red", linestyle=":", linewidth=1)
             ax.set_xlabel(f"{feature_name} (unpreprocessed)")
             ax.set_ylabel("Mean squared error")
             ax.set_title(f"Loss vs {feature_name}")
