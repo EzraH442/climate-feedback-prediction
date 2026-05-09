@@ -65,10 +65,10 @@ optimizer:
   learning_rate: 0.001
 
 train:
-  epochs: 900
+  epochs: 100
   checkpoint_dir: './checkpoints/baseline-large-ecod'
   batch_size: 256
-  early_stopping_threshold: 0.001
+  early_stopping_threshold: 0.0001
   max_epochs_without_improvement: 10
 
 preprocess:
