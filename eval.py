@@ -1,15 +1,17 @@
 import argparse
-from omegaconf import OmegaConf
-import torch
-import numpy as np
-import xarray as xr
-from scipy.stats import linregress
-from dataloader import make_era5_filename
-from preprocessing import Preprocessor, create_2024_preprocessor
 from pathlib import Path
 
-from model import SimpleModel
 import matplotlib.pyplot as plt
+import numpy as np
+import torch
+import xarray as xr
+from omegaconf import OmegaConf
+from scipy.stats import linregress, rankdata
+
+from dataloader import make_era5_filename
+from preprocessing import Preprocessor, create_2024_preprocessor
+
+from model import SimpleModel
 
 from mpl_toolkits.basemap import Basemap
 
@@ -147,6 +149,30 @@ def load_raw_date_dataset(raw_root: str, date: str) -> xr.Dataset:
     raw_path = Path(raw_root) / make_era5_filename(year)
     raw_dataset = xr.open_dataset(raw_path)
     return raw_dataset.sel(date=[date])
+
+
+def preprocessed_feature_target_arrays(
+    raw_dataset: xr.Dataset,
+    preprocessor: Preprocessor,
+    model: SimpleModel,
+) -> tuple[np.ndarray, np.ndarray, list[str]]:
+    preprocessed_dataset = preprocessor.transform(raw_dataset)
+    ordered_preprocessed = ordered_dataset(preprocessed_dataset)
+    feature_names = [v for v in ordered_preprocessed.data_vars if v != "tsr"]
+    data = (
+        ordered_preprocessed.to_dataarray()
+        .transpose("date", "latitude", "longitude", "variable")
+        .to_numpy()
+    )
+
+    inputs = data[..., : model.input_dim].reshape(-1, model.input_dim)
+    targets = data[..., model.input_dim].reshape(-1)
+    return inputs, targets, feature_names
+
+
+def empirical_copula_values(values: np.ndarray) -> np.ndarray:
+    ranks = rankdata(values, method="average")
+    return (ranks - 0.5) / len(values)
 
 
 def test_1(
@@ -625,6 +651,91 @@ def test_4(
             f.write(f"{name},{value:.10e}\n")
 
 
+def test_5(
+    raw_dataset: xr.Dataset,
+    preprocessor: Preprocessor,
+    model: SimpleModel,
+    figures_path: Path = Path("."),
+    num_bins: int = 100,
+    max_scatter_points: int = 50000,
+):
+    inputs, targets, feature_names = preprocessed_feature_target_arrays(
+        raw_dataset=raw_dataset,
+        preprocessor=preprocessor,
+        model=model,
+    )
+
+    with torch.no_grad():
+        predictions = model(torch.from_numpy(inputs).float()).cpu().numpy()
+    losses = (predictions - targets) ** 2
+
+    rng = np.random.default_rng(0)
+    scatter_indices = np.arange(len(losses))
+    if len(scatter_indices) > max_scatter_points:
+        scatter_indices = rng.choice(
+            scatter_indices, size=max_scatter_points, replace=False
+        )
+
+    summary_csv = figures_path / "loss_landscape_summary.csv"
+    with summary_csv.open("w", encoding="ascii") as f:
+        f.write("feature,feature_mean,mean_loss,sample_count\n")
+
+        for feature_index, feature_name in enumerate(feature_names):
+            feature_values = inputs[:, feature_index]
+
+            bin_edges = np.quantile(feature_values, np.linspace(0.0, 1.0, num_bins + 1))
+            if np.unique(bin_edges).size < 2:
+                bin_edges = np.linspace(
+                    feature_values.min(), feature_values.max(), num_bins + 1
+                )
+            bin_edges = np.unique(bin_edges)
+
+            if bin_edges.size < 2:
+                print(
+                    f"Skipping loss-landscape plots for {feature_name}; feature is constant."
+                )
+                continue
+
+            bin_indices = np.digitize(feature_values, bin_edges[1:-1], right=False)
+            bin_centers = []
+            bin_losses = []
+            bin_counts = []
+
+            for bin_index in range(bin_edges.size - 1):
+                mask = bin_indices == bin_index
+                if not np.any(mask):
+                    continue
+                bin_centers.append(feature_values[mask].mean())
+                bin_losses.append(losses[mask].mean())
+                bin_counts.append(mask.sum())
+                f.write(
+                    f"{feature_name},{bin_centers[-1]:.10e},{bin_losses[-1]:.10e},{bin_counts[-1]}\n"
+                )
+
+            fig, ax = plt.subplots(figsize=(7, 4), dpi=300)
+            ax.plot(bin_centers, bin_losses, marker="o", markersize=2, linewidth=1)
+            ax.set_xlabel(feature_name)
+            ax.set_ylabel("Mean squared error")
+            ax.set_title(f"Loss vs {feature_name}")
+            fig.tight_layout()
+            fig.savefig(figures_path / f"loss_vs_{feature_name}.png")
+            plt.close(fig)
+
+            feature_copula = empirical_copula_values(feature_values[scatter_indices])
+            loss_copula = empirical_copula_values(losses[scatter_indices])
+
+            fig, ax = plt.subplots(figsize=(6, 6), dpi=300)
+            ax.scatter(feature_copula, loss_copula, s=4, alpha=0.2, linewidths=0)
+            ax.set_xlabel(f"Empirical copula of {feature_name}")
+            ax.set_ylabel("Empirical copula of loss")
+            ax.set_title(f"Loss copula vs {feature_name}")
+            fig.tight_layout()
+            fig.savefig(
+                figures_path / f"empirical_copula_loss_vs_{feature_name}.png"
+            )
+            plt.close(fig)
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Test the trained model on validation data."
@@ -728,6 +839,12 @@ def main():
         model=model,
         figures_path=output_dir,
         batch_size=256,
+    )
+    test_5(
+        raw_dataset=filter_by_years(raw_dataset, [2015]),
+        preprocessor=preprocessor,
+        model=model,
+        figures_path=output_dir,
     )
 
 
