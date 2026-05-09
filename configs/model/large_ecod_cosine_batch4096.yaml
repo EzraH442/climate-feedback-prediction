@@ -72,7 +72,7 @@ train:
   epochs: 100
   checkpoint_dir: './checkpoints/baseline-large-ecod-cosine-batch4096'
   batch_size: 4096
-  early_stopping_threshold: 0.001
+  early_stopping_threshold: 0.0001
   max_epochs_without_improvement: 10
 
 preprocess:
