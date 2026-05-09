@@ -9,7 +9,13 @@ from omegaconf import OmegaConf
 from scipy.stats import linregress, rankdata
 
 from dataloader import make_era5_filename
-from preprocessing import Preprocessor, create_2024_preprocessor
+from preprocessing import (
+    Preprocessor,
+    SequentialPreprocessor,
+    XarrayMinMaxScaler,
+    XarrayStandardScaler,
+    create_2024_preprocessor,
+)
 
 from model import SimpleModel
 
@@ -173,6 +179,33 @@ def preprocessed_feature_target_arrays(
 def empirical_copula_values(values: np.ndarray) -> np.ndarray:
     ranks = rankdata(values, method="average")
     return (ranks - 0.5) / len(values)
+
+
+def unpreprocess_feature_values(
+    feature_values: np.ndarray,
+    feature_name: str,
+    preprocessor: Preprocessor,
+) -> np.ndarray:
+    if isinstance(preprocessor, SequentialPreprocessor):
+        values = feature_values.copy()
+        for child in reversed(preprocessor.preprocessors):
+            if isinstance(child, XarrayMinMaxScaler):
+                data_min = child.data_min_[feature_name].to_numpy().item()
+                data_max = child.data_max_[feature_name].to_numpy().item()
+                denom = data_max - data_min
+                if denom == 0:
+                    return np.full_like(values, fill_value=data_min, dtype=np.float64)
+                values = (
+                    (values - child.min_val) / (child.max_val - child.min_val) * denom
+                    + data_min
+                )
+            elif isinstance(child, XarrayStandardScaler):
+                mean = child.mean_[feature_name].to_numpy().item()
+                std = child.std_[feature_name].to_numpy().item()
+                values = values * std + mean
+        return values
+
+    return feature_values
 
 
 def test_1(
@@ -682,6 +715,11 @@ def test_5(
 
         for feature_index, feature_name in enumerate(feature_names):
             feature_values = inputs[:, feature_index]
+            feature_values_unprocessed = unpreprocess_feature_values(
+                feature_values=feature_values,
+                feature_name=feature_name,
+                preprocessor=preprocessor,
+            )
 
             bin_edges = np.quantile(feature_values, np.linspace(0.0, 1.0, num_bins + 1))
             if np.unique(bin_edges).size < 2:
@@ -705,7 +743,7 @@ def test_5(
                 mask = bin_indices == bin_index
                 if not np.any(mask):
                     continue
-                bin_centers.append(feature_values[mask].mean())
+                bin_centers.append(feature_values_unprocessed[mask].mean())
                 bin_losses.append(losses[mask].mean())
                 bin_counts.append(mask.sum())
                 f.write(
@@ -714,7 +752,7 @@ def test_5(
 
             fig, ax = plt.subplots(figsize=(7, 4), dpi=300)
             ax.plot(bin_centers, bin_losses, marker="o", markersize=2, linewidth=1)
-            ax.set_xlabel(feature_name)
+            ax.set_xlabel(f"{feature_name} (unpreprocessed)")
             ax.set_ylabel("Mean squared error")
             ax.set_title(f"Loss vs {feature_name}")
             fig.tight_layout()
@@ -725,10 +763,18 @@ def test_5(
             loss_copula = empirical_copula_values(losses[scatter_indices])
 
             fig, ax = plt.subplots(figsize=(6, 6), dpi=300)
-            ax.scatter(feature_copula, loss_copula, s=4, alpha=0.2, linewidths=0)
+            density = ax.hexbin(
+                feature_copula,
+                loss_copula,
+                gridsize=60,
+                cmap="viridis",
+                bins="log",
+                mincnt=1,
+            )
             ax.set_xlabel(f"Empirical copula of {feature_name}")
             ax.set_ylabel("Empirical copula of loss")
             ax.set_title(f"Loss copula vs {feature_name}")
+            fig.colorbar(density, ax=ax, label="log10(count)")
             fig.tight_layout()
             fig.savefig(
                 figures_path / f"empirical_copula_loss_vs_{feature_name}.png"
