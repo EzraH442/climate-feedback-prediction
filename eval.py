@@ -161,7 +161,7 @@ def preprocessed_feature_target_arrays(
     raw_dataset: xr.Dataset,
     preprocessor: Preprocessor,
     model: SimpleModel,
-) -> tuple[np.ndarray, np.ndarray, list[str]]:
+) -> tuple[np.ndarray, np.ndarray, list[str], np.ndarray, xr.Dataset]:
     preprocessed_dataset = preprocessor.transform(raw_dataset)
     ordered_preprocessed = ordered_dataset(preprocessed_dataset)
     feature_names = [v for v in ordered_preprocessed.data_vars if v != "tsr"]
@@ -173,7 +173,11 @@ def preprocessed_feature_target_arrays(
 
     inputs = data[..., : model.input_dim].reshape(-1, model.input_dim)
     targets = data[..., model.input_dim].reshape(-1)
-    return inputs, targets, feature_names
+    latitudes = np.broadcast_to(
+        ordered_preprocessed["latitude"].to_numpy()[None, :, None],
+        data.shape[:3],
+    ).reshape(-1)
+    return inputs, targets, feature_names, latitudes, ordered_preprocessed
 
 
 def empirical_copula_values(values: np.ndarray) -> np.ndarray:
@@ -779,15 +783,32 @@ def test_5(
     num_bins: int = 100,
     max_scatter_points: int = 50000,
 ):
-    inputs, targets, feature_names = preprocessed_feature_target_arrays(
+    inputs, targets, feature_names, latitudes, ordered_preprocessed = (
+        preprocessed_feature_target_arrays(
         raw_dataset=raw_dataset,
         preprocessor=preprocessor,
         model=model,
+        )
     )
 
     with torch.no_grad():
         predictions = model(torch.from_numpy(inputs).float()).cpu().numpy()
     losses = (predictions - targets) ** 2
+    squared_errors = losses
+
+    target_unprocessed = inverse_transform_without_upsampling(
+        dataset_from_array(
+            arr=targets.reshape(
+                len(ordered_preprocessed["date"]),
+                len(ordered_preprocessed["latitude"]),
+                len(ordered_preprocessed["longitude"]),
+            ),
+            date=ordered_preprocessed["date"].values,
+            lon=ordered_preprocessed["longitude"].values,
+            lat=ordered_preprocessed["latitude"].values,
+        ),
+        preprocessor,
+    )["tsr"].to_numpy().reshape(-1)
 
     rng = np.random.default_rng(0)
     scatter_indices = np.arange(len(losses))
@@ -824,9 +845,20 @@ def test_5(
     }
     # ─────────────────────────────────────────────────────────────────────────
 
+    latitude_bands = [
+        ("0-30", (np.abs(latitudes) >= 0) & (np.abs(latitudes) < 30)),
+        ("30-60", (np.abs(latitudes) >= 30) & (np.abs(latitudes) < 60)),
+        ("60-90", (np.abs(latitudes) >= 60) & (np.abs(latitudes) <= 90)),
+    ]
+    band_colors = {
+        "0-30": "#4FC3F7",
+        "30-60": "#A6E22E",
+        "60-90": "#FFB86C",
+    }
+
     summary_csv = figures_path / "loss_landscape_summary.csv"
     with summary_csv.open("w", encoding="ascii") as f:
-        f.write("feature,feature_mean,mean_loss,loss_std,sample_count\n")
+        f.write("feature,latitude_band,x_mean,y_mean,y_std,sample_count\n")
 
         for feature_index, feature_name in enumerate(feature_names):
             feature_values = inputs[:, feature_index]
@@ -849,60 +881,181 @@ def test_5(
                 )
                 continue
 
-            bin_indices = np.digitize(feature_values, bin_edges[1:-1], right=False)
-            bin_centers = []
-            bin_losses = []
-            bin_loss_stds = []
-            bin_counts = []
-
-            for bin_index in range(bin_edges.size - 1):
-                mask = bin_indices == bin_index
-                if not np.any(mask):
-                    continue
-                bin_centers.append(feature_values_unprocessed[mask].mean())
-                bin_losses.append(losses[mask].mean())
-                bin_loss_stds.append(losses[mask].std())
-                bin_counts.append(mask.sum())
-                f.write(
-                    f"{feature_name},{bin_centers[-1]:.10e},{bin_losses[-1]:.10e},{bin_loss_stds[-1]:.10e},{bin_counts[-1]}\n"
-                )
-
             # ── loss landscape plot ───────────────────────────────────────────
             with plt.rc_context(style):
                 fig, ax = plt.subplots(figsize=(7, 4), dpi=300)
 
-                bin_centers = np.asarray(bin_centers)
-                bin_losses = np.asarray(bin_losses)
-                bin_loss_stds = np.asarray(bin_loss_stds)
-                lower_band = np.clip(bin_losses - bin_loss_stds, a_min=0.0, a_max=None)
-                upper_band = bin_losses + bin_loss_stds
+                for band_name, band_mask in latitude_bands:
+                    band_feature_values = feature_values[band_mask]
+                    if band_feature_values.size == 0:
+                        continue
 
-                ax.fill_between(
-                    bin_centers,
-                    lower_band,
-                    upper_band,
-                    color=BAND,
-                    alpha=0.12,
-                    linewidth=0,
+                    band_bin_edges = np.quantile(
+                        band_feature_values,
+                        np.linspace(0.0, 1.0, num_bins + 1),
+                    )
+                    if np.unique(band_bin_edges).size < 2:
+                        band_bin_edges = np.linspace(
+                            band_feature_values.min(),
+                            band_feature_values.max(),
+                            num_bins + 1,
+                        )
+                    band_bin_edges = np.unique(band_bin_edges)
+                    if band_bin_edges.size < 2:
+                        continue
+
+                    band_bin_indices = np.digitize(
+                        feature_values[band_mask],
+                        band_bin_edges[1:-1],
+                        right=False,
+                    )
+                    band_x = []
+                    band_y = []
+                    band_y_std = []
+                    band_counts = []
+
+                    for bin_index in range(band_bin_edges.size - 1):
+                        mask = band_bin_indices == bin_index
+                        if not np.any(mask):
+                            continue
+
+                        x_values = feature_values_unprocessed[band_mask][mask]
+                        if feature_name == "tsr":
+                            x_values = target_unprocessed[band_mask][mask]
+                            rmse = np.sqrt(np.mean(squared_errors[band_mask][mask]))
+                            normalization = np.mean(np.abs(x_values))
+                            y_mean = (
+                                rmse / normalization if normalization > 0 else np.nan
+                            )
+                            y_std = 0.0
+                        else:
+                            y_values = losses[band_mask][mask]
+                            y_mean = y_values.mean()
+                            y_std = y_values.std()
+
+                        band_x.append(x_values.mean())
+                        band_y.append(y_mean)
+                        band_y_std.append(y_std)
+                        band_counts.append(mask.sum())
+                        f.write(
+                            f"{feature_name},{band_name},{band_x[-1]:.10e},{band_y[-1]:.10e},{band_y_std[-1]:.10e},{band_counts[-1]}\n"
+                        )
+
+                    if not band_x:
+                        continue
+
+                    band_x = np.asarray(band_x)
+                    band_y = np.asarray(band_y)
+                    band_y_std = np.asarray(band_y_std)
+                    lower_band = np.clip(band_y - band_y_std, a_min=0.0, a_max=None)
+                    upper_band = band_y + band_y_std
+                    color = band_colors[band_name]
+
+                    ax.fill_between(
+                        band_x,
+                        lower_band,
+                        upper_band,
+                        color=color,
+                        alpha=0.12,
+                        linewidth=0,
+                    )
+                    ax.plot(
+                        band_x,
+                        band_y,
+                        color=color,
+                        linewidth=1.2,
+                        marker="o",
+                        markersize=2.5,
+                        markerfacecolor=color,
+                        markeredgewidth=0,
+                        label=band_name,
+                    )
+
+                ax.set_xlabel(
+                    "tsr target value (unpreprocessed)"
+                    if feature_name == "tsr"
+                    else f"{feature_name}  (unpreprocessed)"
                 )
-                ax.plot(
-                    bin_centers,
-                    bin_losses,
-                    color=ACCENT,
-                    linewidth=1.2,
-                    marker="o",
-                    markersize=2.5,
-                    markerfacecolor=ACCENT,
-                    markeredgewidth=0,
+                ax.set_ylabel(
+                    "Normalized RMSE" if feature_name == "tsr" else "Mean squared error"
                 )
-                ax.set_xlabel(f"{feature_name}  (unpreprocessed)")
-                ax.set_ylabel("Mean squared error")
-                ax.set_title(f"Loss landscape — {feature_name}")
+                ax.set_title(
+                    f"Loss landscape — {feature_name}"
+                    if feature_name != "tsr"
+                    else "Normalized RMSE vs tsr"
+                )
                 ax.spines[["top", "right", "left"]].set_visible(False)
                 ax.tick_params(length=0)
+                ax.legend(frameon=False, fontsize=8)
                 fig.tight_layout()
                 fig.savefig(
                     figures_path / f"loss_vs_{feature_name}.png",
+                    facecolor=BG,
+                )
+                plt.close(fig)
+
+        if "tsr" not in feature_names:
+            with plt.rc_context(style):
+                fig, ax = plt.subplots(figsize=(7, 4), dpi=300)
+                for band_name, band_mask in latitude_bands:
+                    band_target_values = target_unprocessed[band_mask]
+                    if band_target_values.size == 0:
+                        continue
+                    band_bin_edges = np.quantile(
+                        band_target_values, np.linspace(0.0, 1.0, num_bins + 1)
+                    )
+                    if np.unique(band_bin_edges).size < 2:
+                        band_bin_edges = np.linspace(
+                            band_target_values.min(),
+                            band_target_values.max(),
+                            num_bins + 1,
+                        )
+                    band_bin_edges = np.unique(band_bin_edges)
+                    if band_bin_edges.size < 2:
+                        continue
+                    band_bin_indices = np.digitize(
+                        band_target_values, band_bin_edges[1:-1], right=False
+                    )
+
+                    band_x = []
+                    band_y = []
+                    for bin_index in range(band_bin_edges.size - 1):
+                        mask = band_bin_indices == bin_index
+                        if not np.any(mask):
+                            continue
+                        x_values = band_target_values[mask]
+                        rmse = np.sqrt(np.mean(squared_errors[band_mask][mask]))
+                        normalization = np.mean(np.abs(x_values))
+                        band_x.append(x_values.mean())
+                        band_y.append(rmse / normalization if normalization > 0 else np.nan)
+                        f.write(
+                            f"tsr,{band_name},{band_x[-1]:.10e},{band_y[-1]:.10e},{0.0:.10e},{int(mask.sum())}\n"
+                        )
+
+                    if not band_x:
+                        continue
+                    color = band_colors[band_name]
+                    ax.plot(
+                        band_x,
+                        band_y,
+                        color=color,
+                        linewidth=1.2,
+                        marker="o",
+                        markersize=2.5,
+                        markerfacecolor=color,
+                        markeredgewidth=0,
+                        label=band_name,
+                    )
+
+                ax.set_xlabel("tsr target value (unpreprocessed)")
+                ax.set_ylabel("Normalized RMSE")
+                ax.set_title("Normalized RMSE vs tsr")
+                ax.spines[["top", "right", "left"]].set_visible(False)
+                ax.tick_params(length=0)
+                ax.legend(frameon=False, fontsize=8)
+                fig.tight_layout()
+                fig.savefig(
+                    figures_path / "loss_vs_tsr.png",
                     facecolor=BG,
                 )
                 plt.close(fig)
