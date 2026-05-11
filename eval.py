@@ -796,6 +796,34 @@ def test_5(
             scatter_indices, size=max_scatter_points, replace=False
         )
 
+    # ── shared style ──────────────────────────────────────────────────────────
+    ACCENT = "#4FC3F7"  # sky blue line
+    BAND = "#4FC3F7"
+    BG = "#0F1117"
+    GRID = "#1E2130"
+    TEXT = "#CDD6F4"
+    style = {
+        "figure.facecolor": BG,
+        "axes.facecolor": BG,
+        "axes.edgecolor": GRID,
+        "axes.labelcolor": TEXT,
+        "axes.titlecolor": TEXT,
+        "axes.grid": True,
+        "axes.grid.axis": "y",
+        "grid.color": GRID,
+        "grid.linewidth": 0.6,
+        "xtick.color": TEXT,
+        "ytick.color": TEXT,
+        "xtick.labelsize": 8,
+        "ytick.labelsize": 8,
+        "axes.labelsize": 9,
+        "axes.titlesize": 10,
+        "axes.titlepad": 10,
+        "font.family": "monospace",
+        "text.color": TEXT,
+    }
+    # ─────────────────────────────────────────────────────────────────────────
+
     summary_csv = figures_path / "loss_landscape_summary.csv"
     with summary_csv.open("w", encoding="ascii") as f:
         f.write("feature,feature_mean,mean_loss,loss_std,sample_count\n")
@@ -839,48 +867,92 @@ def test_5(
                     f"{feature_name},{bin_centers[-1]:.10e},{bin_losses[-1]:.10e},{bin_loss_stds[-1]:.10e},{bin_counts[-1]}\n"
                 )
 
-            fig, ax = plt.subplots(figsize=(7, 4), dpi=300)
-            bin_centers = np.asarray(bin_centers)
-            bin_losses = np.asarray(bin_losses)
-            bin_loss_stds = np.asarray(bin_loss_stds)
-            lower_band = np.clip(bin_losses - 2 * bin_loss_stds, a_min=0.0, a_max=None)
-            upper_band = bin_losses + 2 * bin_loss_stds
+            # ── loss landscape plot ───────────────────────────────────────────
+            with plt.rc_context(style):
+                fig, ax = plt.subplots(figsize=(7, 4), dpi=300)
 
-            ax.fill_between(
-                bin_centers,
-                lower_band,
-                upper_band,
-                color="tab:blue",
-                alpha=0.18,
-                linewidth=0,
-            )
-            ax.plot(bin_centers, bin_losses, marker="o", markersize=2, linewidth=1)
-            ax.set_xlabel(f"{feature_name} (unpreprocessed)")
-            ax.set_ylabel("Mean squared error")
-            ax.set_title(f"Loss vs {feature_name}")
-            fig.tight_layout()
-            fig.savefig(figures_path / f"loss_vs_{feature_name}.png")
-            plt.close(fig)
+                bin_centers = np.asarray(bin_centers)
+                bin_losses = np.asarray(bin_losses)
+                bin_loss_stds = np.asarray(bin_loss_stds)
+                lower_band = np.clip(bin_losses - bin_loss_stds, a_min=0.0, a_max=None)
+                upper_band = bin_losses + bin_loss_stds
 
+                ax.fill_between(
+                    bin_centers,
+                    lower_band,
+                    upper_band,
+                    color=BAND,
+                    alpha=0.12,
+                    linewidth=0,
+                )
+                ax.plot(
+                    bin_centers,
+                    bin_losses,
+                    color=ACCENT,
+                    linewidth=1.2,
+                    marker="o",
+                    markersize=2.5,
+                    markerfacecolor=ACCENT,
+                    markeredgewidth=0,
+                )
+                ax.set_xlabel(f"{feature_name}  (unpreprocessed)")
+                ax.set_ylabel("Mean squared error")
+                ax.set_title(f"Loss landscape — {feature_name}")
+                ax.spines[["top", "right", "left"]].set_visible(False)
+                ax.tick_params(length=0)
+                fig.tight_layout()
+                fig.savefig(
+                    figures_path / f"loss_vs_{feature_name}.png",
+                    facecolor=BG,
+                )
+                plt.close(fig)
+
+            # ── copula plot ───────────────────────────────────────────────────
             feature_copula = empirical_copula_values(feature_values[scatter_indices])
             loss_copula = empirical_copula_values(losses[scatter_indices])
 
-            fig, ax = plt.subplots(figsize=(6, 6), dpi=300)
-            density = ax.hexbin(
-                feature_copula,
-                loss_copula,
-                gridsize=60,
-                cmap="viridis",
-                bins="log",
-                mincnt=1,
-            )
-            ax.set_xlabel(f"Empirical copula of {feature_name}")
-            ax.set_ylabel("Empirical copula of loss")
-            ax.set_title(f"Loss copula vs {feature_name}")
-            fig.colorbar(density, ax=ax, label="log10(count)")
-            fig.tight_layout()
-            fig.savefig(figures_path / f"empirical_copula_loss_vs_{feature_name}.png")
-            plt.close(fig)
+            with plt.rc_context(style):
+                fig, ax = plt.subplots(figsize=(5.5, 5.5), dpi=300)
+
+                hb = ax.hexbin(
+                    feature_copula,
+                    loss_copula,
+                    gridsize=60,
+                    cmap="inferno",
+                    bins="log",
+                    mincnt=1,
+                    linewidths=0.2,
+                )
+                # diagonal = independence reference
+                ax.plot(
+                    [0, 1],
+                    [0, 1],
+                    color="white",
+                    linewidth=0.7,
+                    linestyle="--",
+                    alpha=0.4,
+                    label="independence",
+                )
+
+                ax.set_xlabel(f"Copula rank: {feature_name}")
+                ax.set_ylabel("Copula rank: loss")
+                ax.set_title(f"Loss-feature copula: {feature_name}")
+                ax.set_aspect("equal")
+                ax.set_xlim(0, 1)
+                ax.set_ylim(0, 1)
+                ax.spines[["top", "right"]].set_visible(False)
+                ax.tick_params(length=0)
+
+                cb = fig.colorbar(hb, ax=ax, fraction=0.035, pad=0.02)
+                cb.set_label("log₁₀(count)", fontsize=8)
+                cb.ax.yaxis.set_tick_params(color=TEXT, labelsize=7)
+
+                fig.tight_layout()
+                fig.savefig(
+                    figures_path / f"empirical_copula_loss_vs_{feature_name}.png",
+                    facecolor=BG,
+                )
+                plt.close(fig)
 
 
 def main():
