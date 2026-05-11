@@ -14,7 +14,7 @@ if missing_paths:
     raise FileNotFoundError(f"Missing ERA5 file(s):\n{missing}")
 
 dataset = xr.open_mfdataset(raw_paths, combine="nested", concat_dim="date")
-tsr_mean = dataset["tsr"].mean().item()
+tsr_mean = dataset["tsr"].mean().to_numpy().item()
 
-print(f"Mean tsr over odd years 1991-2019: {tsr_mean}")
+print(f"Mean tsr over odd years 1991-2019: {tsr_mean / (3600*24)}")
 
