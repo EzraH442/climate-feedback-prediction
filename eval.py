@@ -195,10 +195,7 @@ def unpreprocess_feature_values(
                 denom = data_max - data_min
                 if denom == 0:
                     return np.full_like(values, fill_value=data_min, dtype=np.float64)
-                values = (
-                    (values - child.min_val) / (child.max_val - child.min_val) * denom
-                    + data_min
-                )
+                values = (values - child.min_val) / (child.max_val - child.min_val) * denom + data_min
             elif isinstance(child, XarrayStandardScaler):
                 mean = child.mean_[feature_name].to_numpy().item()
                 std = child.std_[feature_name].to_numpy().item()
@@ -208,19 +205,34 @@ def unpreprocess_feature_values(
     return feature_values
 
 
+def inverse_transform_without_upsampling(
+    dataset: xr.Dataset,
+    preprocessor: Preprocessor,
+) -> xr.Dataset:
+    if isinstance(preprocessor, SequentialPreprocessor):
+        transformed = dataset
+        for child in reversed(preprocessor.preprocessors):
+            if child.__class__.__name__ == "Downscaler":
+                continue
+            transformed = child.inverse_transform(transformed)
+        return transformed
+
+    return preprocessor.inverse_transform(dataset)
+
+
 def test_1(
     raw_dataset: xr.Dataset,
     preprocessor: Preprocessor,
     model: torch.nn.Module,
     figures_path: Path = Path("."),
 ):
+    assert isinstance(preprocessor, SequentialPreprocessor)
+
     date = raw_dataset["date"].values
-    raw_lat = raw_dataset["latitude"].values
-    raw_lon = raw_dataset["longitude"].values
 
     preprocessed_dataset = preprocessor.transform(raw_dataset)
-    processed_lat = preprocessed_dataset["latitude"].values
-    processed_lon = preprocessed_dataset["longitude"].values
+    lat = preprocessed_dataset["latitude"].values
+    lon = preprocessed_dataset["longitude"].values
 
     ordered_preprocessed = ordered_dataset(preprocessed_dataset)
     data_torch = torch.from_numpy(
@@ -234,20 +246,20 @@ def test_1(
     # (date, lat, lon)
 
     print(model_outputs.shape)
-    predictions = preprocessor.inverse_transform(
-        dataset_from_array(
-            arr=model_outputs.numpy(), date=date, lon=processed_lon, lat=processed_lat
-        )
+    predictions = inverse_transform_without_upsampling(
+        dataset_from_array(arr=model_outputs.numpy(), date=date, lon=lon, lat=lat),
+        preprocessor,
     )
 
-    tsr_raw = raw_dataset["tsr"].to_numpy() / (3600 * 24)  # (date, lat, lon)
-    tsr_pred = predictions.to_dataarray().to_numpy()[0] / (
-        3600 * 24
-    )  # (date, lat, lon)
+    targets = preprocessor.preprocessors[1].inverse_transform(raw_dataset)
 
-    diff_full = tsr_raw - tsr_pred  # (date, lat, lon)
+    # (date, lat, lon)
+    tsr_true = targets.to_dataarray().to_numpy()[0] / (3600 * 24)
+    tsr_pred = predictions.to_dataarray().to_numpy()[0] / (3600 * 24)
 
-    tsr_mean = np.mean(tsr_raw, axis=0)  # (lat, lon)
+    diff_full = tsr_true - tsr_pred  # (date, lat, lon)
+
+    tsr_mean = np.mean(tsr_true, axis=0)  # (lat, lon)
     tsr_pred_mean = np.mean(tsr_pred, axis=0)  # (lat, lon)
     mbe_map = np.mean(diff_full, axis=0)  # (lat, lon)
     rmse_map = np.sqrt(np.mean(diff_full**2, axis=0))  # (lat, lon)
@@ -261,15 +273,15 @@ def test_1(
     global_mbe = np.mean(mbe_map)
     global_rmse = np.sqrt(np.mean(rmse_map**2))
 
-    print(f"Global MBE:  {global_mbe:.4f} W/m²")
-    print(f"Global RMSE: {global_rmse:.4f} W/m²")
+    print(f"Global MBE :  {global_mbe:.4f} W/m²")
+    print(f"Max MBE    :  {max_abs_mbe:.4f} W/m²")
+    print(f"Global RMSE:  {global_rmse:.4f} W/m²")
+    print(f"Max RMSE   :  {max_rmse:.4f} W/m²")
 
     fig = plt.figure(figsize=(8, 6), dpi=300)
     m = setup_global_map()
-    plot_colormesh_on_map(
-        m, raw_lon, raw_lat, tsr_mean, cmap="Spectral", vmin=0, vmax=max_tsr
-    )
-    plt.text(x=300, y=np.max(raw_lat) + 5, s=f"{global_tsr_mean:.2f}", fontsize=20)
+    plot_colormesh_on_map(m, lon, lat, tsr_mean, cmap="Spectral", vmin=0, vmax=max_tsr)
+    plt.text(x=300, y=np.max(lat) + 5, s=f"{global_tsr_mean:.2f}", fontsize=20)
     plt.colorbar(orientation="horizontal", fraction=0.075, label="$W/m^2$")
     plt.title("TSR (ERA5)")
     plt.savefig(figures_path / "tsr_era5.png")
@@ -278,9 +290,9 @@ def test_1(
     fig = plt.figure(figsize=(8, 6), dpi=300)
     m = setup_global_map()
     plot_colormesh_on_map(
-        m, raw_lon, raw_lat, tsr_pred_mean, cmap="Spectral", vmin=0, vmax=max_tsr
+        m, lon, lat, tsr_pred_mean, cmap="Spectral", vmin=0, vmax=max_tsr
     )
-    plt.text(x=300, y=np.max(raw_lat) + 5, s=f"{global_tsr_pred_mean:.2f}", fontsize=20)
+    plt.text(x=300, y=np.max(lat) + 5, s=f"{global_tsr_pred_mean:.2f}", fontsize=20)
     plt.colorbar(orientation="horizontal", fraction=0.075, label="$W/m^2$")
     plt.title("TSR (NN)")
     plt.savefig(figures_path / "tsr_nn.png")
@@ -289,9 +301,9 @@ def test_1(
     fig = plt.figure(figsize=(8, 6), dpi=300)
     m = setup_global_map()
     plot_colormesh_on_map(
-        m, raw_lon, raw_lat, mbe_map, cmap="RdBu_r", vmin=-max_abs_mbe, vmax=max_abs_mbe
+        m, lon, lat, mbe_map, cmap="RdBu_r", vmin=-max_abs_mbe, vmax=max_abs_mbe
     )
-    plt.text(x=300, y=np.max(raw_lat) + 5, s=f"{global_mbe:.2f}", fontsize=20)
+    plt.text(x=300, y=np.max(lat) + 5, s=f"{global_mbe:.2f}", fontsize=20)
     plt.colorbar(orientation="horizontal", fraction=0.075, label="$W/m^2$")
     plt.title("MBE")
     plt.savefig(figures_path / "mbe.png")
@@ -299,11 +311,9 @@ def test_1(
 
     fig = plt.figure(figsize=(8, 6), dpi=300)
     m = setup_global_map()
-    plot_colormesh_on_map(
-        m, raw_lon, raw_lat, rmse_map, cmap="Blues", vmin=0, vmax=max_rmse
-    )
+    plot_colormesh_on_map(m, lon, lat, rmse_map, cmap="Blues", vmin=0, vmax=max_rmse)
 
-    plt.text(x=300, y=np.max(raw_lat) + 5, s=f"{global_rmse:.2f}", fontsize=20)
+    plt.text(x=300, y=np.max(lat) + 5, s=f"{global_rmse:.2f}", fontsize=20)
     plt.colorbar(orientation="horizontal", fraction=0.075, label="$W/m^2$")
     plt.title("RMSE")
     plt.savefig(figures_path / "rmse.png")
@@ -338,6 +348,9 @@ def test_2(
     model: SimpleModel,
     figures_path: Path = Path("."),
     max_true_kernel=0,
+    true_kernel: np.ndarray | None = None,
+    true_lon: np.ndarray | None = None,
+    true_lat: np.ndarray | None = None,
 ):
     raw_date_specific_data = raw_dataset.sel(date=[date])
     raw_date_specific_data_perturbed = raw_date_specific_data.copy(deep=True)
@@ -408,6 +421,42 @@ def test_2(
     plt.savefig(figures_path / f"nn_kernel_{date}.png")
 
     plt.close(fig)
+
+    if true_kernel is not None and true_lon is not None and true_lat is not None:
+        model_kernel_for_diff = diff
+        plot_lon = raw_lon
+        plot_lat = raw_lat
+
+        if model_kernel_for_diff.shape != true_kernel.shape:
+            model_kernel_for_diff = interpolate_spatial_field(
+                model_kernel_for_diff, raw_lon, raw_lat, true_lon, true_lat
+            )
+            plot_lon = true_lon
+            plot_lat = true_lat
+
+        north_mask = plot_lat >= 60
+        kernel_diff_north_pole = (true_kernel - model_kernel_for_diff)[north_mask, :]
+        plot_lat_north = plot_lat[north_mask]
+        max_abs_diff = np.max(np.abs(kernel_diff_north_pole))
+
+        fig = plt.figure(figsize=(8, 8), dpi=300)
+        m = setup_north_pole_map()
+        plot_colormesh_on_map(
+            m,
+            plot_lon,
+            plot_lat_north,
+            kernel_diff_north_pole,
+            cmap="RdBu_r",
+            vmin=-max_abs_diff,
+            vmax=max_abs_diff,
+        )
+        plt.title(rf"$K_{{ERA5}}({date}) - K_{{NN}}({date})$")
+        plt.colorbar(
+            orientation="horizontal", fraction=0.05, pad=0.07, label=r"$W/m^2 1\%$"
+        )
+        plt.savefig(figures_path / f"k_era5_minus_k_nn_north_pole_{date}.png")
+        plt.close(fig)
+
     return diff, raw_lon, raw_lat
 
 
@@ -432,6 +481,9 @@ def test_2013_09_against_rrtm(
         model=model,
         figures_path=figures_path,
         max_true_kernel=np.max(np.abs(rrtm_kernel)),  # for same colorbar
+        true_kernel=rrtm_kernel,
+        true_lon=rrtm_lon,
+        true_lat=rrtm_lat,
     )
 
     if model_kernel.shape != rrtm_kernel.shape:
@@ -516,6 +568,7 @@ def test_3(
     )
 
     delta_k_nn = nn_kernel_2013 - nn_kernel_2012
+    kernel_2013_diff = None
 
     kernels_root_path = Path(kernels_root)
     era5_kernel_2013_path = kernels_root_path / "RRTM_kernel_2013_cld_alb_TOA_SFC_09.nc"
@@ -538,6 +591,13 @@ def test_3(
     delta_k_era5 = era5_kernel_2013 - era5_kernel_2012
 
     if delta_k_nn.shape != delta_k_era5.shape:
+        nn_kernel_2013 = interpolate_spatial_field(
+            nn_kernel_2013,
+            nn_lon_2013,
+            nn_lat_2013,
+            era5_lon_2013,
+            era5_lat_2013,
+        )
         delta_k_nn = interpolate_spatial_field(
             delta_k_nn,
             nn_lon_2013,
@@ -552,15 +612,36 @@ def test_3(
         plot_lat = nn_lat_2013
 
     delta_k_diff = delta_k_nn - delta_k_era5
+    kernel_2013_diff = era5_kernel_2013 - nn_kernel_2013
 
     north_mask = plot_lat >= 60
+    kernel_2013_diff = kernel_2013_diff[north_mask, :]
     delta_k_nn = delta_k_nn[north_mask, :]
     delta_k_era5 = delta_k_era5[north_mask, :]
     delta_k_diff = delta_k_diff[north_mask, :]
 
+    max_abs_kernel_2013_diff = np.max(np.abs(kernel_2013_diff))
     max_kernel = max(np.max(np.abs(delta_k_nn)), np.max(np.abs(delta_k_era5)))
     max_abs_diff = np.max(np.abs(delta_k_diff))
     plot_lat = plot_lat[north_mask]
+
+    fig = plt.figure(figsize=(8, 8), dpi=300)
+    m = setup_north_pole_map()
+    plot_colormesh_on_map(
+        m,
+        plot_lon,
+        plot_lat,
+        kernel_2013_diff,
+        cmap="RdBu_r",
+        vmin=-max_abs_kernel_2013_diff,
+        vmax=max_abs_kernel_2013_diff,
+    )
+    plt.title(r"$K_{ERA5}(2013\mathrm{-}09) - K_{NN}(2013\mathrm{-}09)$")
+    plt.colorbar(
+        orientation="horizontal", fraction=0.05, pad=0.07, label=r"$W/m^2 1\%$"
+    )
+    plt.savefig(figures_path / "k_era5_minus_k_nn_north_pole_2013-09.png")
+    plt.close(fig)
 
     fig = plt.figure(figsize=(8, 8), dpi=300)
     m = setup_north_pole_map()
@@ -573,7 +654,7 @@ def test_3(
         vmin=-max_kernel,
         vmax=max_kernel,
     )
-    plt.title(r"NN surface albedo kernel difference" + "(2013-09 minus 2012-09)")
+    plt.title("NN surface albedo kernel difference" + "\n(2013-09 minus 2012-09)")
     plt.colorbar(
         orientation="horizontal", fraction=0.05, pad=0.07, label=r"$W/m^2 1\%$"
     )
@@ -591,7 +672,7 @@ def test_3(
         vmin=-max_kernel,
         vmax=max_kernel,
     )
-    plt.title(r"ERA5 surface albedo kernel difference" + "(2013-09 minus 2012-09)")
+    plt.title(r"ERA5 surface albedo kernel difference" + "\n(2013-09 minus 2012-09)")
     plt.colorbar(
         orientation="horizontal", fraction=0.05, pad=0.07, label=r"$W/m^2 1\%$"
     )
@@ -604,12 +685,12 @@ def test_3(
         m,
         plot_lon,
         plot_lat,
-        delta_k_diff,
+        -delta_k_diff,
         cmap="RdBu_r",
         vmin=-max_abs_diff,
         vmax=max_abs_diff,
     )
-    plt.title(r"$\Delta K_{NN} - \Delta K_{ERA5}$" + "\n2013-09 minus 2012-09")
+    plt.title(r"$K_{ERA5} - K_{NN}$" + "\n2013-09 minus 2012-09")
     plt.colorbar(
         orientation="horizontal", fraction=0.05, pad=0.07, label=r"$W/m^2 1\%$"
     )
@@ -792,9 +873,7 @@ def test_5(
             ax.set_title(f"Loss copula vs {feature_name}")
             fig.colorbar(density, ax=ax, label="log10(count)")
             fig.tight_layout()
-            fig.savefig(
-                figures_path / f"empirical_copula_loss_vs_{feature_name}.png"
-            )
+            fig.savefig(figures_path / f"empirical_copula_loss_vs_{feature_name}.png")
             plt.close(fig)
 
 
@@ -838,7 +917,9 @@ def main():
         model_weights = checkpoint_data["model_state_dict"]
         model_config = checkpoint_data.get("config", config)
         checkpoint_epoch_label = str(
-            checkpoint_data.get("best_epoch", checkpoint_data.get("epoch", checkpoint_path.stem))
+            checkpoint_data.get(
+                "best_epoch", checkpoint_data.get("epoch", checkpoint_path.stem)
+            )
         )
     else:
         model_weights = checkpoint_data
