@@ -396,8 +396,8 @@ def test_2(
         .to_numpy()
     ).float()
 
-    model_output_base = model(data_torch_base[... : model.input_dim]).detach()
-    model_output_perturbed = model(data_torch_perturbed[... : model.input_dim]).detach()
+    model_output_base = model(data_torch_base[... ,: model.input_dim]).detach()
+    model_output_perturbed = model(data_torch_perturbed[... ,: model.input_dim]).detach()
 
     predictions_base = preprocessor.inverse_transform(
         dataset_from_array(
@@ -406,7 +406,7 @@ def test_2(
             lon=lon,
             lat=lat,
         )
-    ).squeeze(dim="date").to_dataarray().to_numpy() / (3600 * 24)
+    ).squeeze(dim='date').to_dataarray().to_numpy()[0] / (3600 * 24)
     predictions_perturbed = preprocessor.inverse_transform(
         dataset_from_array(
             arr=model_output_perturbed.numpy(),
@@ -414,7 +414,7 @@ def test_2(
             lon=lon,
             lat=lat,
         )
-    ).squeeze(dim="date").to_dataarray().to_numpy() / (3600 * 24)
+    ).squeeze(dim='date').to_dataarray().to_numpy()[0] / (3600 * 24)
 
     diff = predictions_perturbed - predictions_base
     max_diff = max(max_true_kernel, np.max(np.abs(diff)))
@@ -752,6 +752,8 @@ def test_4(
         batch_baselines = baselines[start:end]
         attributions = ig.attribute(batch_inputs, baselines=batch_baselines)
         feature_sums += attributions.abs().sum(dim=0).cpu()
+        if start > 1000:
+            break
 
     mean_feature_importance = (feature_sums / total_samples).numpy()
 
