@@ -819,33 +819,12 @@ def test_5(
             scatter_indices, size=max_scatter_points, replace=False
         )
 
-    # ── shared style ──────────────────────────────────────────────────────────
-    ACCENT = "#4FC3F7"  # sky blue line
-    BAND = "#4FC3F7"
-    BG = "#0F1117"
-    GRID = "#1E2130"
-    TEXT = "#CDD6F4"
     style = {
-        "figure.facecolor": BG,
-        "axes.facecolor": BG,
-        "axes.edgecolor": GRID,
-        "axes.labelcolor": TEXT,
-        "axes.titlecolor": TEXT,
         "axes.grid": True,
         "axes.grid.axis": "y",
-        "grid.color": GRID,
-        "grid.linewidth": 0.6,
-        "xtick.color": TEXT,
-        "ytick.color": TEXT,
-        "xtick.labelsize": 8,
-        "ytick.labelsize": 8,
-        "axes.labelsize": 9,
-        "axes.titlesize": 10,
-        "axes.titlepad": 10,
-        "font.family": "monospace",
-        "text.color": TEXT,
+        "grid.alpha": 0.3,
+        "grid.linewidth": 0.8,
     }
-    # ─────────────────────────────────────────────────────────────────────────
 
     latitude_bands = [
         ("0-30", (np.abs(latitudes) >= 0) & (np.abs(latitudes) < 30)),
@@ -986,14 +965,9 @@ def test_5(
                     if feature_name != "tsr"
                     else "Normalized RMSE vs tsr"
                 )
-                ax.spines[["top", "right", "left"]].set_visible(False)
-                ax.tick_params(length=0)
                 ax.legend(frameon=False, fontsize=8)
                 fig.tight_layout()
-                fig.savefig(
-                    figures_path / f"loss_vs_{feature_name}.png",
-                    facecolor=BG,
-                )
+                fig.savefig(figures_path / f"loss_vs_{feature_name}.png")
                 plt.close(fig)
 
         if "tsr" not in feature_names:
@@ -1052,14 +1026,9 @@ def test_5(
                 ax.set_xlabel("tsr target value (unpreprocessed)")
                 ax.set_ylabel("Normalized RMSE")
                 ax.set_title("Normalized RMSE vs tsr")
-                ax.spines[["top", "right", "left"]].set_visible(False)
-                ax.tick_params(length=0)
                 ax.legend(frameon=False, fontsize=8)
                 fig.tight_layout()
-                fig.savefig(
-                    figures_path / "loss_vs_tsr.png",
-                    facecolor=BG,
-                )
+                fig.savefig(figures_path / "loss_vs_tsr.png")
                 plt.close(fig)
 
             # ── copula plot ───────────────────────────────────────────────────
@@ -1095,18 +1064,12 @@ def test_5(
                 ax.set_aspect("equal")
                 ax.set_xlim(0, 1)
                 ax.set_ylim(0, 1)
-                ax.spines[["top", "right"]].set_visible(False)
-                ax.tick_params(length=0)
 
                 cb = fig.colorbar(hb, ax=ax, fraction=0.035, pad=0.02)
-                cb.set_label("log₁₀(count)", fontsize=8)
-                cb.ax.yaxis.set_tick_params(color=TEXT, labelsize=7)
+                cb.set_label("log10(count)", fontsize=8)
 
                 fig.tight_layout()
-                fig.savefig(
-                    figures_path / f"empirical_copula_loss_vs_{feature_name}.png",
-                    facecolor=BG,
-                )
+                fig.savefig(figures_path / f"empirical_copula_loss_vs_{feature_name}.png")
                 plt.close(fig)
 
 
