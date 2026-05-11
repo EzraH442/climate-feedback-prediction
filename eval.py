@@ -360,7 +360,7 @@ def test_2(
     true_lon: np.ndarray | None = None,
     true_lat: np.ndarray | None = None,
 ):
-    raw_date_specific_data = raw_dataset.sel(date=[date])
+    raw_date_specific_data = raw_dataset.sel(date=[date], drop=True)
     raw_date_specific_data_perturbed = raw_date_specific_data.copy(deep=True)
     raw_date_specific_data_perturbed["fal"] = raw_date_specific_data["fal"] + 0.01
     # raw_date_specific_data_perturbed["fal"] = xr.where(
@@ -383,18 +383,18 @@ def test_2(
     ordered_perturbed = ordered_dataset(processed_date_specific_data_perturbed)
     data_torch_base = torch.from_numpy(
         ordered_base.to_dataarray()
-        .transpose("date", "latitude", "longitude", "variable")
+        .transpose("latitude", "longitude", "variable")
         .to_numpy()
     ).float()
     data_torch_perturbed = torch.from_numpy(
         ordered_perturbed.to_dataarray()
-        .transpose("date", "latitude", "longitude", "variable")
+        .transpose("latitude", "longitude", "variable")
         .to_numpy()
     ).float()
 
-    model_output_base = model(data_torch_base[:, :, :, : model.input_dim]).detach()
+    model_output_base = model(data_torch_base[:, :, : model.input_dim]).detach()
     model_output_perturbed = model(
-        data_torch_perturbed[:, :, :, : model.input_dim]
+        data_torch_perturbed[:, :, : model.input_dim]
     ).detach()
 
     predictions_base = preprocessor.inverse_transform(
@@ -404,7 +404,7 @@ def test_2(
             lon=lon,
             lat=lat,
         )
-    ).mean(dim="date").to_dataarray().to_numpy()[0] / (3600 * 24)
+    ).squeeze(dim="date").to_dataarray().to_numpy() / (3600 * 24)
     predictions_perturbed = preprocessor.inverse_transform(
         dataset_from_array(
             arr=model_output_perturbed.numpy(),
@@ -412,7 +412,7 @@ def test_2(
             lon=lon,
             lat=lat,
         )
-    ).mean(dim="date").to_dataarray().to_numpy()[0] / (3600 * 24)
+    ).squeeze(dim="date").to_dataarray().to_numpy() / (3600 * 24)
 
     diff = predictions_perturbed - predictions_base
     max_diff = max(max_true_kernel, np.max(np.abs(diff)))
