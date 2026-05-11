@@ -195,7 +195,9 @@ def unpreprocess_feature_values(
                 denom = data_max - data_min
                 if denom == 0:
                     return np.full_like(values, fill_value=data_min, dtype=np.float64)
-                values = (values - child.min_val) / (child.max_val - child.min_val) * denom + data_min
+                values = (values - child.min_val) / (
+                    child.max_val - child.min_val
+                ) * denom + data_min
             elif isinstance(child, XarrayStandardScaler):
                 mean = child.mean_[feature_name].to_numpy().item()
                 std = child.std_[feature_name].to_numpy().item()
@@ -221,41 +223,47 @@ def inverse_transform_without_upsampling(
 
 
 def test_1(
-    raw_dataset: xr.Dataset,
+    ds: xr.Dataset,
     preprocessor: Preprocessor,
     model: torch.nn.Module,
     figures_path: Path = Path("."),
 ):
+    # preprocessors=[
+    #    ECOD_Calculator(),
+    #    Downscaler(factor=[("latitude", 4), ("longitude", 4)]),
+    #    XarrayMinMaxScaler(dim=("date", "latitude", "longitude")),
+    # ]
     assert isinstance(preprocessor, SequentialPreprocessor)
 
-    date = raw_dataset["date"].values
+    date = ds["date"].values
+    lat = ds["latitude"].values
+    lon = ds["longitude"].values
 
-    preprocessed_dataset = preprocessor.transform(raw_dataset)
-    lat = preprocessed_dataset["latitude"].values
-    lon = preprocessed_dataset["longitude"].values
-
-    ordered_preprocessed = ordered_dataset(preprocessed_dataset)
-    data_torch = torch.from_numpy(
-        ordered_preprocessed.to_dataarray()
+    ds_ordered_np = (
+        ordered_dataset(ds)
+        .to_dataarray()
         .transpose("date", "latitude", "longitude", "variable")
         .to_numpy()
-    ).float()
-    print(data_torch.shape)
-
-    model_outputs = model(data_torch[:, :, :, : model.input_dim]).detach()
-    # (date, lat, lon)
-
-    print(model_outputs.shape)
-    predictions = inverse_transform_without_upsampling(
-        dataset_from_array(arr=model_outputs.numpy(), date=date, lon=lon, lat=lat),
-        preprocessor,
     )
 
-    targets = preprocessor.preprocessors[1].inverse_transform(raw_dataset)
+    data_torch = torch.from_numpy(ds_ordered_np).float()
 
     # (date, lat, lon)
-    tsr_true = targets.to_dataarray().to_numpy()[0] / (3600 * 24)
-    tsr_pred = predictions.to_dataarray().to_numpy()[0] / (3600 * 24)
+    model_outputs = model(data_torch[:, :, :, : model.input_dim]).detach()
+
+    pred = (
+        preprocessor.preprocessors[-1]
+        .inverse_transform(
+            dataset_from_array(arr=model_outputs.numpy(), date=date, lon=lon, lat=lat),
+        )
+        .to_dataarray()
+        .squeeze(dim="variable", drop=True)
+    )
+    true = preprocessor.preprocessors[-1].inverse_transform(ds)["tsr"]
+
+    # (date, lat, lon)
+    tsr_true = true.to_numpy() / (3600 * 24)
+    tsr_pred = pred.to_numpy() / (3600 * 24)
 
     diff_full = tsr_true - tsr_pred  # (date, lat, lon)
 
@@ -942,7 +950,14 @@ def main():
         f"{config.dataset.era5.raw_path}/{make_era5_filename(year)}"
         for year in range(1990, 2021)
     ]
+    test_era5_paths = [
+        f"{config.dataset.era5.path}/{make_era5_filename(year)}"
+        for year in config.dataset.test_years
+    ]
     raw_dataset = xr.open_mfdataset(raw_era5_paths, combine="nested", concat_dim="date")
+    processed_dataset = xr.open_mfdataset(
+        test_era5_paths, combine="nested", concat_dim="date"
+    )
 
     # --- load preprocessor ---
     preprocessor = create_2024_preprocessor()
@@ -950,7 +965,7 @@ def main():
 
     # --- run tests ---
     test_1(
-        raw_dataset=filter_by_years(raw_dataset, list(range(1991, 2021, 2))),
+        ds=processed_dataset,
         preprocessor=preprocessor,
         model=model,
         figures_path=output_dir,
