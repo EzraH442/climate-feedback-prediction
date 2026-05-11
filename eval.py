@@ -360,7 +360,7 @@ def test_2(
     true_lon: np.ndarray | None = None,
     true_lat: np.ndarray | None = None,
 ):
-    raw_date_specific_data = raw_dataset.sel(date=[date], drop=True)
+    raw_date_specific_data = raw_dataset.sel(date=[date])
     raw_date_specific_data_perturbed = raw_date_specific_data.copy(deep=True)
     raw_date_specific_data_perturbed["fal"] = raw_date_specific_data["fal"] + 0.01
     # raw_date_specific_data_perturbed["fal"] = xr.where(
@@ -383,19 +383,17 @@ def test_2(
     ordered_perturbed = ordered_dataset(processed_date_specific_data_perturbed)
     data_torch_base = torch.from_numpy(
         ordered_base.to_dataarray()
-        .transpose("latitude", "longitude", "variable")
+        .transpose("date", "latitude", "longitude", "variable")
         .to_numpy()
     ).float()
     data_torch_perturbed = torch.from_numpy(
         ordered_perturbed.to_dataarray()
-        .transpose("latitude", "longitude", "variable")
+        .transpose("date", "latitude", "longitude", "variable")
         .to_numpy()
     ).float()
 
-    model_output_base = model(data_torch_base[:, :, : model.input_dim]).detach()
-    model_output_perturbed = model(
-        data_torch_perturbed[:, :, : model.input_dim]
-    ).detach()
+    model_output_base = model(data_torch_base[... : model.input_dim]).detach()
+    model_output_perturbed = model(data_torch_perturbed[... : model.input_dim]).detach()
 
     predictions_base = preprocessor.inverse_transform(
         dataset_from_array(
