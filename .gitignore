@@ -11,3 +11,5 @@ era5_cache.npy
 
 *.png
 old_data
+*.err
+*.out
