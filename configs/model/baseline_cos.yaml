@@ -21,4 +21,5 @@ model:
     - 11
 
 train:
+  name: "baseline_cos"
   checkpoint_dir: './checkpoints/baseline_cosine_annealing'

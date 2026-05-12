@@ -17,4 +17,5 @@ model:
     - 8
 
 train:
+  name: "deep"
   checkpoint_dir: "./checkpoints/deep"

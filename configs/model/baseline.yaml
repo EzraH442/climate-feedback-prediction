@@ -15,4 +15,5 @@ model:
     - 11
 
 train:
+  name: "baseline"
   checkpoint_dir: "./checkpoints/baseline"

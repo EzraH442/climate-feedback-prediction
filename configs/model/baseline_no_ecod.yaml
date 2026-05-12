@@ -15,4 +15,5 @@ model:
     - 11
 
 train:
+  name: "baseline_no_ecod"
   checkpoint_dir: "./checkpoints/baseline_no_ecod"
