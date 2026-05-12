@@ -27,17 +27,14 @@ class ClimateTorchDataset(torch.utils.data.Dataset):
             data_type (str): Type of data to load ("train" or "val")
         """
         conf = OmegaConf.load(config_path)
+        years = (
+            conf.dataset.train_years if data_type == "train" else conf.dataset.val_years
+        )
 
-        if data_type == "train":
-            era5_paths = [
-                f"{conf.dataset.era5.path}/{make_era5_filename(year)}"
-                for year in conf.dataset.train_years
-            ]
-        else:
-            era5_paths = [
-                f"{conf.dataset.era5.path}/{make_era5_filename(year)}"
-                for year in conf.dataset.val_years
-            ]
+        era5_paths = [
+            Path(conf.dataset.era5.path) / make_era5_filename(year) for year in years
+        ]
+
         print(f"Loading ERA5 data from: {era5_paths}")
 
         self.dataset_era5 = xr.open_mfdataset(
