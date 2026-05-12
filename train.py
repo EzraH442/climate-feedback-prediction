@@ -9,6 +9,7 @@ from torch.utils.data import DataLoader
 import omegaconf
 from omegaconf import OmegaConf
 
+from config_utils import load_config
 from dataloader import ClimateTorchDataset, make_era5_filename
 from model import SimpleModelTrainer
 
@@ -18,7 +19,7 @@ def comet_experiment_key_path(checkpoint_dir: str) -> Path:
 
 
 def stage_training_data(config_path: str) -> str:
-    config = OmegaConf.load(config_path)
+    config = load_config(config_path)
     slurm_tmpdir = Path(
         os.environ.get("SLURM_TMPDIR", Path(config.dataset.era5.path).resolve())
     )
@@ -85,7 +86,7 @@ def create_comet_experiment(config: omegaconf.DictConfig, checkpoint_path: str |
 
 def train(config_path: str, resume: bool = True):
     staged_config_path = stage_training_data(config_path)
-    config = OmegaConf.load(staged_config_path)
+    config = load_config(staged_config_path)
     assert isinstance(config, omegaconf.DictConfig), ""
 
     train_dataset = ClimateTorchDataset(
@@ -166,7 +167,7 @@ def main():
         type=str,
         required=False,
         help="Path to config file",
-        default="configs/model/small.yaml",
+        default="configs/model/baseline.yaml",
     )
     parser.add_argument(
         "--resume",

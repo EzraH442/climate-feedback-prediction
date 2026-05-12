@@ -1,7 +1,8 @@
 import torch
 import numpy as np
 from model import SimpleModel
-from omegaconf import OmegaConf
+
+from config_utils import load_config
 
 # 1. Load the weights from your previously saved .npz file
 # (Or use the dictionary you created in memory)
@@ -9,7 +10,7 @@ data = np.load('model_weights.npz')
 print(data)
 
 # 2. Initialize your PyTorch model
-config = OmegaConf.load("configs/model/large_ecod.yaml")
+config = load_config("configs/model/baseline.yaml")
 model = SimpleModel(config)
 
 # 3. Map the names and apply the Transpose

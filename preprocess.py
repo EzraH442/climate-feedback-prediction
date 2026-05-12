@@ -1,8 +1,9 @@
 import os
-from omegaconf import OmegaConf
 from preprocessing import create_2024_preprocessor, Preprocessor
 import xarray as xr
 import argparse
+
+from config_utils import load_config
 
 
 def make_era5_filename(year):
@@ -10,7 +11,7 @@ def make_era5_filename(year):
 
 
 def preprocess(config_path):
-    conf = OmegaConf.load(config_path)
+    conf = load_config(config_path)
 
     train_paths = [
         f"{conf.dataset.era5.raw_path}/{make_era5_filename(year)}"
@@ -74,7 +75,7 @@ def main():
         type=str,
         required=False,
         help="Path to config file",
-        default="configs/preprocess/small.yaml",
+        default="configs/preprocess/baseline.yaml",
     )
     args = parser.parse_args()
 

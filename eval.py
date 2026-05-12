@@ -8,6 +8,7 @@ import xarray as xr
 from omegaconf import OmegaConf
 from scipy.stats import linregress, rankdata
 
+from config_utils import load_config
 from dataloader import make_era5_filename
 from preprocessing import (
     Preprocessor,
@@ -1096,7 +1097,7 @@ def main():
     args = parser.parse_args()
 
     # --- load config ---
-    config = OmegaConf.load(args.config_file)
+    config = load_config(args.config_file)
 
     # --- load model checkpoint ---
     checkpoint_path = (
