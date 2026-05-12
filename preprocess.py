@@ -48,7 +48,9 @@ def preprocess(config_path):
     ]
 
     all_kern_years = [
-        y for y in sorted(train_paths + val_paths) if y in list(range(2011, 2016))
+        y
+        for y in sorted(conf.dataset.train_years + conf.dataset.val_years)
+        if y in list(range(2011, 2016))
     ]
     kernel_paths = [
         Path(conf.dataset.kernels.raw_path) / make_kernel_filename(year)
