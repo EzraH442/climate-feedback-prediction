@@ -19,6 +19,13 @@ def make_mmap_stem(model_name: str, data_type: str, suffix: str) -> str:
     return f"{model_name}_{data_type}_{suffix}.npy"
 
 
+def ordered_vars(dataset: xr.Dataset, target_var: str) -> list[str]:
+    vars_without_target = [v for v in dataset.data_vars if v != target_var]
+    if "fal" not in vars_without_target:
+        raise ValueError("'fal' was not found in dataset variables")
+    return ["fal", *[v for v in vars_without_target if v != "fal"], target_var]
+
+
 class ClimateTorchDataset(torch.utils.data.Dataset):
     def __init__(
         self,
@@ -46,9 +53,7 @@ class ClimateTorchDataset(torch.utils.data.Dataset):
         self.dataset_era5 = xr.open_mfdataset(
             era5_paths, combine="nested", concat_dim="date"
         )
-        all_vars = [v for v in self.dataset_era5.data_vars if v != target_var] + [
-            target_var
-        ]
+        all_vars = ordered_vars(self.dataset_era5, target_var)
         self.n_dates = len(self.dataset_era5.date)
         self.n_lat = len(self.dataset_era5.latitude)
         self.n_lon = len(self.dataset_era5.longitude)
@@ -164,7 +169,7 @@ class KernelDataset(torch.utils.data.Dataset):
         )
 
         # --- dimension setup ---
-        all_vars = [v for v in dataset_era5.data_vars if v != target_var] + [target_var]
+        all_vars = ordered_vars(dataset_era5, target_var)
 
         self.n_dates = len(dataset_era5.date)
         self.n_lat = len(dataset_era5.latitude)
