@@ -12,6 +12,27 @@ def make_era5_filename(year):
     return f"era5_single_levels_monthly_{year}.nc"
 
 
+def make_kernel_filename(year):
+    return f"RRTM_kernel_monthly_{year}_cld_alb_TOA_SFC.nc"
+
+
+def interpolate_kernel_dataset(
+    raw_kernel: xr.Dataset,
+    target_latitude: xr.DataArray,
+    target_longitude: xr.DataArray,
+) -> xr.Dataset:
+    if "latitude" not in raw_kernel.coords or "longitude" not in raw_kernel.coords:
+        raise ValueError(
+            "Kernel dataset must expose 'latitude' and 'longitude' coordinates before interpolation."
+        )
+
+    return raw_kernel.interp(
+        latitude=target_latitude,
+        longitude=target_longitude,
+        method="linear",
+    )
+
+
 def preprocess(config_path):
     conf = load_config(config_path)
 
@@ -26,6 +47,15 @@ def preprocess(config_path):
         for year in conf.dataset.val_years
     ]
 
+    all_kern_years = [
+        y for y in sorted(train_paths + val_paths) if y in list(range(2011, 2016))
+    ]
+    kernel_paths = [
+        Path(conf.dataset.kernels.raw_path) / make_kernel_filename(year)
+        for year in all_kern_years
+    ]
+
+    # --- load data ---
     print(f"Loading ERA5 train data from: {train_paths}")
     train_data = xr.open_mfdataset(train_paths, combine="nested", concat_dim="date")
 
@@ -46,6 +76,10 @@ def preprocess(config_path):
        tsr        (date, latitude, longitude) float64 100MB 0.0 0.0 ... 1.344e+07
     """
 
+    print(f"Loading raw kernel data from: {conf.dataset.kernels.raw_path}")
+    kern_data = xr.open_mfdataset(kernel_paths, combine="nested", concat_dim="date")
+
+    # --- preprocess era5 data ---
     preprocessor = create_2024_preprocessor()
     print("Fitting preprocessor on training data...")
     preprocessor.fit(train_data)
@@ -59,6 +93,8 @@ def preprocess(config_path):
 
     if not os.path.exists(conf.dataset.era5.path):
         os.makedirs(conf.dataset.era5.path)
+    if not os.path.exists(conf.dataset.kernels.path):
+        os.makedirs(conf.dataset.kernels.path)
 
     for year in conf.dataset.train_years:
         path = f"{conf.dataset.era5.path}/era5_single_levels_monthly_{year}.nc"
@@ -69,6 +105,32 @@ def preprocess(config_path):
         path = f"{conf.dataset.era5.path}/era5_single_levels_monthly_{year}.nc"
         print(f"Saving scaled data for year {year} to {path}...")
         val_preprocessed.sel(date=str(year)).to_netcdf(path)
+
+    # --- preprocess kernel data ---
+    target_latitude = train_preprocessed["latitude"]
+    target_longitude = train_preprocessed["longitude"]
+
+    processed_kernel = interpolate_kernel_dataset(
+        kern_data,
+        target_latitude=target_latitude,
+        target_longitude=target_longitude,
+    )
+
+    for year in all_kern_years:
+        output_kernel_path = Path(conf.dataset.kernels.path) / make_kernel_filename(
+            year
+        )
+        yearly_kernel = processed_kernel.sel(date=processed_kernel.date.dt.year == year)
+        if int(yearly_kernel.sizes.get("date", 0)) == 0:
+            raise ValueError(
+                f"No kernel dates found for year {year} in raw kernel dataset."
+            )
+        print(
+            f"Saving interpolated kernel data for year {year} to {output_kernel_path}..."
+        )
+        yearly_kernel.to_netcdf(output_kernel_path)
+
+    processed_kernel.close()
 
 
 def main():
