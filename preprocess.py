@@ -1,5 +1,7 @@
 import os
-from preprocessing import create_2024_preprocessor, Preprocessor
+from pathlib import Path
+
+from preprocessing import create_2024_preprocessor
 import xarray as xr
 import argparse
 
@@ -13,13 +15,14 @@ def make_era5_filename(year):
 def preprocess(config_path):
     conf = load_config(config_path)
 
+    # --- make paths ---
     train_paths = [
-        f"{conf.dataset.era5.raw_path}/{make_era5_filename(year)}"
+        Path(conf.dataset.era5.raw_path) / make_era5_filename(year)
         for year in conf.dataset.train_years
     ]
 
     val_paths = [
-        f"{conf.dataset.era5.raw_path}/{make_era5_filename(year)}"
+        Path(conf.dataset.era5.raw_path) / make_era5_filename(year)
         for year in conf.dataset.val_years
     ]
 
