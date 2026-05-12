@@ -1,0 +1,18 @@
+base: ../base/model/common.yaml
+
+dataset:
+  era5:
+    path: './data/era5_processed'
+  kernels:
+    path: './data/kernels_processed'
+
+preprocess:
+  params_dir: 'preprocess_states/baseline'
+
+model:
+  input_dim: 12
+  hidden_dim_sizes:
+    - 11
+
+train:
+  checkpoint_dir: "./checkpoints/baseline"

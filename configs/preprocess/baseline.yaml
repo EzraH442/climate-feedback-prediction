@@ -1,0 +1,10 @@
+base: ../base/preprocess/common.yaml
+
+dataset:
+  era5:
+    path: './data/era5_processed'
+  kernels:
+    path: './data/kernels_processed'
+
+preprocess:
+  params_dir: 'preprocess_states/baseline'

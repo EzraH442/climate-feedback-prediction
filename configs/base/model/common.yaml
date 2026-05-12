@@ -1,12 +1,11 @@
 seed: 42
-# each kernel variable has dim (t, lat, lon), t is yyyy-mm
+
 dataset:
-  era5: # data that the era5 monthly single level data will be in
+  era5:
     raw_path: './data/era5'
-    path: './data/era5_processed'
-  kernels: # data that the kernel data will be in
-    path: './data/kernels'
-  train_years: # even years from 1990-2020
+  kernels:
+    raw_path: './data/kernels'
+  train_years:
     - 1990
     - 1992
     - 1994
@@ -23,7 +22,11 @@ dataset:
     - 2016
     - 2018
     - 2020
-  val_years: # odd years from 1990-2020
+  val_years:
+    - 1997
+    - 2005
+    - 2013
+  test_years:
     - 1991
     - 1993
     - 1995
@@ -40,5 +43,15 @@ dataset:
     - 2017
     - 2019
 
-preprocess:
-  params_dir: 'preprocess_states/large'
+optimizer:
+  learning_rate: 0.001
+
+train:
+  max_epochs_without_improvement: 10
+  early_stopping_threshold: 0.001
+  epochs: 100
+  batch_size: 256
+
+wandb:
+  project: 'climate-feedback-sobolev'
+  entity: 'ezrah442'

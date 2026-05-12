@@ -1,0 +1,10 @@
+base: ../base/preprocess/common.yaml
+
+dataset:
+  era5:
+    path: "./data/era5_processed_no_ecod"
+  kernels:
+    path: "./data/kernels_processed_no_ecod"
+
+preprocess:
+  params_dir: "preprocess_states/baseline_no_ecod"
