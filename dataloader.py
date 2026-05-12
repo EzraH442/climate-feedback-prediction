@@ -17,7 +17,7 @@ def make_kernel_filename(year):
 class ClimateTorchDataset(torch.utils.data.Dataset):
     def __init__(
         self,
-        config_path="configs/model/small.yaml",
+        config_path="configs/model/baseline.yaml",
         data_type="train",
         target_var="tsr",
     ):
