@@ -76,7 +76,7 @@ def preprocess(config_path):
        tsr        (date, latitude, longitude) float64 100MB 0.0 0.0 ... 1.344e+07
     """
 
-    print(f"Loading raw kernel data from: {conf.dataset.kernels.raw_path}")
+    print(f"Loading raw kernel data from: {kernel_paths}")
     kern_data = xr.open_mfdataset(kernel_paths, combine="nested", concat_dim="date")
 
     # --- preprocess era5 data ---
