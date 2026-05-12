@@ -11,7 +11,7 @@ from omegaconf import OmegaConf
 
 from config_utils import load_config
 from dataloader import ClimateTorchDataset, make_era5_filename
-from model import SimpleModelTrainer
+from model import SimpleModelTrainer, SimpleModelSobolevTrainer
 
 
 def comet_experiment_key_path(checkpoint_dir: str) -> Path:
@@ -48,7 +48,9 @@ def stage_training_data(config_path: str) -> str:
     return str(runtime_config_path)
 
 
-def create_comet_experiment(config: omegaconf.DictConfig, checkpoint_path: str | None = None):
+def create_comet_experiment(
+    config: omegaconf.DictConfig, checkpoint_path: str | None = None
+):
     api_key = os.environ.get("COMET_API_KEY")
     if not api_key:
         raise EnvironmentError(
@@ -151,12 +153,21 @@ def train(config_path: str, resume: bool = True):
         print(f"Resuming training from checkpoint: {checkpoint_path}")
 
     experiment = create_comet_experiment(config, checkpoint_path=checkpoint_path)
-    trainer = SimpleModelTrainer(
-        config=config,
-        experiment=experiment,
-        device=device,
-        checkpoint_path=checkpoint_path,
-    )
+
+    if config.train.sobolev:
+        trainer = SimpleModelSobolevTrainer(
+            config=config,
+            experiment=experiment,
+            device=device,
+            checkpoint_path=checkpoint_path,
+        )
+    else:
+        trainer = SimpleModelTrainer(
+            config=config,
+            experiment=experiment,
+            device=device,
+            checkpoint_path=checkpoint_path,
+        )
     trainer.train_model(train_dataloader, val_dataloader)
 
 
