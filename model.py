@@ -12,12 +12,20 @@ class SimpleModel(nn.Module):
         super(SimpleModel, self).__init__()
         self.config = config
         self.input_dim = config.model.input_dim
-        self.hidden_dim = config.model.hidden_dim
-        self.model = nn.Sequential(
-            nn.Linear(config.model.input_dim, config.model.hidden_dim),
-            nn.Tanh(),
-            nn.Linear(config.model.hidden_dim, 1),
-        )
+        hidden_dim_sizes = list(config.model.hidden_dim_sizes)
+        if len(hidden_dim_sizes) == 0:
+            raise ValueError("config.model.hidden_dim_sizes must not be empty")
+
+        self.hidden_dim_sizes = hidden_dim_sizes
+
+        layers = []
+        in_dim = self.input_dim
+        for hidden_dim in hidden_dim_sizes:
+            layers.append(nn.Linear(in_dim, hidden_dim))
+            layers.append(nn.Tanh())
+            in_dim = hidden_dim
+        layers.append(nn.Linear(in_dim, 1))
+        self.model = nn.Sequential(*layers)
 
     def forward(self, x: torch.Tensor):
         return self.model(x).squeeze(-1)
