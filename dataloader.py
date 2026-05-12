@@ -15,6 +15,10 @@ def make_kernel_path(year):
     return f"RRTM_kernel_monthly_{year}_cld_alb_TOA_SFC.nc"
 
 
+def make_mmap_stem(model_name: str, data_type: str, suffix: str) -> str:
+    return f"{model_name}_{data_type}_{suffix}.npy"
+
+
 class ClimateTorchDataset(torch.utils.data.Dataset):
     def __init__(
         self,
@@ -28,6 +32,7 @@ class ClimateTorchDataset(torch.utils.data.Dataset):
             data_type (str): Type of data to load ("train" or "val")
         """
         conf = load_config(config_path)
+        model_name = conf.train.name
         years = (
             conf.dataset.train_years if data_type == "train" else conf.dataset.val_years
         )
@@ -54,7 +59,9 @@ class ClimateTorchDataset(torch.utils.data.Dataset):
         if not slurm_tmpdir:
             raise EnvironmentError("SLURM_TMPDIR environment variable is not set.")
 
-        mmap_path = Path(slurm_tmpdir) / f"{data_type}_data_mmap.npy"
+        mmap_path = Path(slurm_tmpdir) / make_mmap_stem(
+            model_name, data_type, "data_mmap"
+        )
         if not mmap_path.exists():
             mmap = np.lib.format.open_memmap(
                 mmap_path, mode="w+", dtype=np.float32, shape=expected_shape
@@ -133,6 +140,7 @@ class KernelDataset(torch.utils.data.Dataset):
             data_type (str): Type of data to load ("train" or "val")
         """
         conf = load_config(config_path)
+        model_name = conf.train.name
         years = (
             conf.dataset.train_years if data_type == "train" else conf.dataset.val_years
         )
@@ -171,8 +179,12 @@ class KernelDataset(torch.utils.data.Dataset):
         if not slurm_tmpdir:
             raise EnvironmentError("SLURM_TMPDIR environment variable is not set.")
 
-        mmap_path_era5 = Path(slurm_tmpdir) / f"{data_type}_era5.npy"
-        mmap_path_kern = Path(slurm_tmpdir) / f"{data_type}_kern.npy"
+        mmap_path_era5 = Path(slurm_tmpdir) / make_mmap_stem(
+            model_name, data_type, "mmap_era5"
+        )
+        mmap_path_kern = Path(slurm_tmpdir) / make_mmap_stem(
+            model_name, data_type, "mmap_kern"
+        )
 
         if not mmap_path_era5.exists():
             mmap = np.lib.format.open_memmap(
