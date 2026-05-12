@@ -7,6 +7,15 @@ from comet_ml import Experiment
 import omegaconf
 
 
+def build_activation(name: str) -> nn.Module:
+    normalized = name.lower()
+    if normalized == "tanh":
+        return nn.Tanh()
+    if normalized == "relu":
+        return nn.ReLU()
+    raise ValueError(f"Unsupported activation: {name}")
+
+
 class SimpleModel(nn.Module):
     def __init__(self, config):
         super(SimpleModel, self).__init__()
@@ -17,12 +26,13 @@ class SimpleModel(nn.Module):
             raise ValueError("config.model.hidden_dim_sizes must not be empty")
 
         self.hidden_dim_sizes = hidden_dim_sizes
+        self.activation_name = getattr(config.model, "activation", "tanh")
 
         layers = []
         in_dim = self.input_dim
         for hidden_dim in hidden_dim_sizes:
             layers.append(nn.Linear(in_dim, hidden_dim))
-            layers.append(nn.Tanh())
+            layers.append(build_activation(self.activation_name))
             in_dim = hidden_dim
         layers.append(nn.Linear(in_dim, 1))
         self.model = nn.Sequential(*layers)

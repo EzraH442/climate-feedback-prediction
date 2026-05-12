@@ -46,6 +46,9 @@ dataset:
 optimizer:
   learning_rate: 0.001
 
+model:
+  activation: "tanh"
+
 train:
   max_epochs_without_improvement: 10
   early_stopping_threshold: 0.001
