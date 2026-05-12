@@ -12,7 +12,7 @@ preprocess:
 optimizer:
   scheduler:
     type: cosine_annealing
-    t_max: 900
+    t_max: 100
     eta_min: 1.0e-6
 
 model:

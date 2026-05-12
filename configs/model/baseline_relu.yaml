@@ -6,3 +6,4 @@ model:
 train:
   name: "baseline_relu"
   checkpoint_dir: "./checkpoints/baseline_relu"
+  sobolev: False

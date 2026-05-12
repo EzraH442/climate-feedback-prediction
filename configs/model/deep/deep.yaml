@@ -19,3 +19,4 @@ model:
 train:
   name: "deep"
   checkpoint_dir: "./checkpoints/deep"
+  sobolev: False
