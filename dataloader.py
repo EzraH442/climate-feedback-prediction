@@ -12,7 +12,7 @@ def make_era5_filename(year):
 
 
 def make_kernel_path(year):
-    return f"RRTM_kernel_monthly_{year}_cld_alb_TOA_SFC.nc"
+    return f"RRTM_kernel_monthly_{year}_alb_TOA_SFC.nc"
 
 
 def make_mmap_stem(model_name: str, data_type: str, suffix: str) -> str:
@@ -177,7 +177,7 @@ class KernelDataset(torch.utils.data.Dataset):
         self.n_vars = len(all_vars)
 
         expected_shape_era5 = (self.n_dates, self.n_lat, self.n_lon, self.n_vars)
-        expected_shape_kern = (self.n_dates, self.n_lat, self.n_lon, 1)
+        expected_shape_kern = (self.n_dates, self.n_lat, self.n_lon, 2)
 
         # --- save data to slurm tempdir ---
         slurm_tmpdir = os.getenv("SLURM_TMPDIR")
