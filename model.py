@@ -343,7 +343,7 @@ class SimpleModelSobolevTrainer:
                 g_pred_alb = g_pred[..., 0]  # (..., 1)
 
                 loss_0 = F.mse_loss(y_pred, y)
-                loss_1 = self.sobolev_alpha * F.mse_loss(g_pred_alb, alb_kern)
+                loss_1 = self.sobolev_alpha * F.mse_loss(g_pred_alb, alb_kern.squeeze(1))
                 loss = loss_0 + loss_1
                 loss.backward()
                 self.optimizer.step()
@@ -376,7 +376,7 @@ class SimpleModelSobolevTrainer:
                 g_val_alb = g_val[..., 0]
 
                 loss_0 = F.mse_loss(val_pred, y_val)
-                loss_1 = self.sobolev_alpha * F.mse_loss(g_val_alb, alb_kern)
+                loss_1 = self.sobolev_alpha * F.mse_loss(g_val_alb, alb_kern.squeeze(1))
                 loss = loss_0 + loss_1
 
                 val_loss_0 += loss_0.item()
