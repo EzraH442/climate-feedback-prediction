@@ -13,3 +13,4 @@ era5_cache.npy
 old_data
 *.err
 *.out
+ckpt
