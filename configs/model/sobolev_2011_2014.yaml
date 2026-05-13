@@ -17,6 +17,7 @@ dataset:
 
 preprocess:
   params_dir: "preprocess_states/baseline_2011_2014"
+  ecod: True
 
 model:
   input_dim: 12

@@ -1,4 +1,4 @@
-base: ../base/preprocess/common.yaml
+base: ../base/model/common.yaml
 
 dataset:
   era5:
@@ -12,7 +12,19 @@ dataset:
     - 2014
   val_years:
     - 2015
+  test_years:
+    - 2015
 
 preprocess:
   params_dir: "preprocess_states/baseline_2011_2014"
   ecod: True
+
+model:
+  input_dim: 12
+  hidden_dim_sizes:
+    - 11
+
+train:
+  name: "baseline_2011_2014_no_sob"
+  checkpoint_dir: "./checkpoints/base_2011_2014"
+  sobolev: False

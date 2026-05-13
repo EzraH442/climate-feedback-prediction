@@ -8,6 +8,7 @@ dataset:
 
 preprocess:
   params_dir: 'preprocess_states/baseline'
+  ecod: True
 
 model:
   input_dim: 12

@@ -8,3 +8,4 @@ dataset:
 
 preprocess:
   params_dir: "preprocess_states/baseline_no_ecod"
+  ecod: False
