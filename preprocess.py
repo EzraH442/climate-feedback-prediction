@@ -21,7 +21,7 @@ def make_era5_filename(year):
 
 
 def make_kernel_filename(year):
-    return f"RRTM_kernel_monthly_{year}_cld_alb_TOA_SFC.nc"
+    return f"RRTM_kernel_monthly_{year}_alb_TOA_SFC.nc"
 
 
 def interpolate_kernel_dataset(
@@ -134,7 +134,8 @@ def preprocess(config_path):
     
     fal_range = float(data_max["fal"] - data_min["fal"])
     tsr_range = float(data_max["tsr"] - data_min["tsr"])
-    processed_kernel["TOA"] = processed_kernel["TOA"] * (fal_range / tsr_range)
+    processed_kernel["TOA_clr"] = processed_kernel["TOA_clr"] * (fal_range / tsr_range)
+    processed_kernel["TOA_cld"] = processed_kernel["TOA_cld"] * (fal_range / tsr_range)
 
     for year in all_kern_years:
         output_kernel_path = Path(conf.dataset.kernels.path) / make_kernel_filename(
