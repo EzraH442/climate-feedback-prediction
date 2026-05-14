@@ -5,14 +5,7 @@ import torch
 import xarray as xr
 
 from config_utils import load_config
-
-
-def make_era5_filename(year):
-    return f"era5_single_levels_monthly_{year}.nc"
-
-
-def make_kernel_path(year):
-    return f"RRTM_kernel_monthly_{year}_alb_TOA_SFC.nc"
+from utils import make_kernel_filename, make_era5_filename
 
 
 def make_mmap_stem(model_name: str, data_type: str, suffix: str) -> str:

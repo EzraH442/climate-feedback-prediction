@@ -18,64 +18,18 @@ from preprocessing import (
     create_2024_preprocessor,
 )
 
+from utils import (
+    setup_global_map, setup_north_pole_map, plot_colormesh_on_map,
+    plot_global_field, plot_north_pole_field,
+    load_rrtm_kernel, interpolate_spatial_field,
+    dataset_from_array, ordered_vars, ordered_dataset, filter_by_years,
+    preprocessed_feature_target_arrays, empirical_copula_values,
+    unpreprocess_feature_values, inverse_transform_without_upsampling, make_kernel_filename
+)
+
 from model import SimpleModel
 
 from mpl_toolkits.basemap import Basemap
-
-
-def setup_global_map():
-    m = Basemap(
-        projection="cyl",
-        resolution="l",
-        llcrnrlat=-90,
-        urcrnrlat=90,
-        llcrnrlon=0,
-        urcrnrlon=360,
-    )
-    m.drawcoastlines()
-    m.drawcountries()
-    m.drawmapboundary()
-    # Draw parallels (latitude lines) and meridians (longitude lines) with labels
-
-    parallels = np.arange(-90.0, 91.0, 30.0)
-    meridians = np.arange(-180.0, 181.0, 60.0)
-
-    # Draw latitude lines with labels on left and right
-    m.drawparallels(parallels, labels=[True, False, False, True])
-    # Draw longitude lines with labels on top and bottom
-    m.drawmeridians(meridians, labels=[True, False, False, True])
-    return m
-
-
-def setup_north_pole_map():
-    m = Basemap(
-        projection="npstere",
-        boundinglat=60,
-        lon_0=0,
-        # round=True,
-        resolution="l",
-    )
-    m.drawcoastlines()
-    m.drawcountries()
-    m.drawmapboundary(fill_color="white")
-    m.drawparallels(np.arange(60.0, 91.0, 30.0))
-    m.drawmeridians(np.arange(0.0, 360.0, 60.0))
-    return m
-
-
-def plot_colormesh_on_map(m, lon, lat, data, cmap, vmin, vmax):
-    lon_grid, lat_grid = np.meshgrid(np.asarray(lon), np.asarray(lat))
-    x, y = m(lon_grid, lat_grid)
-    m.pcolormesh(
-        x,
-        y,
-        np.asarray(data),
-        shading="nearest",
-        cmap=cmap,
-        vmin=vmin,
-        vmax=vmax,
-    )
-
 
 def setup_correlation_plot():
     fig, ax = plt.subplots(figsize=(6, 6), dpi=300)
@@ -90,170 +44,31 @@ def plot_correlation(ax, predictions, actuals):
     ax.plot(line_x, line_y, color="red", label=f"R²={r_value**2:.2f}")
     ax.legend()
 
-
-# fal        (date, latitude, longitude) float64 100MB 0.7555 0.7555 ... 0.85
-# hcc        (date, latitude, longitude) float64 100MB 0.3654 0.3654 ... 0.085
-# mcc        (date, latitude, longitude) float64 100MB 0.474 0.474 ... 0.1886
-# lcc        (date, latitude, longitude) float64 100MB 0.8883 ... 0.1287
-# sp         (date, latitude, longitude) float64 100MB 1.011e+05 ... 7.03e+04
-# tciw       (date, latitude, longitude) float64 100MB 0.02062 ... 0.003697
-# tclw       (date, latitude, longitude) float64 100MB 0.005785 ... 2.902e-05
-# tco3       (date, latitude, longitude) float64 100MB 0.006788 ... 0.005639
-# tcwv       (date, latitude, longitude) float64 100MB 2.86 2.86 ... 1.031
-# totalx     (date, latitude, longitude) float64 100MB 33.78 33.78 ... 24.45
-# tsr        (date, latitude, longitude) float64 100MB 0.0 0.0 ... 1.344e+07
-def dataset_from_array(arr, date, lon, lat):
-    """
-    arr must have shape (date, lat, lon)
-    """
-    array = xr.Dataset(
-        data_vars={"tsr": (("date", "latitude", "longitude"), arr)},
-        coords={"date": date, "longitude": lon, "latitude": lat},
-    )
-    return array
-
-
-def ordered_dataset(dataset: xr.Dataset, target_var: str = "tsr") -> xr.Dataset:
-    all_vars = [v for v in dataset.data_vars if v != target_var] + [target_var]
-    return dataset[all_vars]
-
-
-def load_rrtm_kernel(reference_path: Path) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    dataset = xr.open_dataset(reference_path)
-    data_array = dataset["TOA"].sel(up_down_net=3, band=1)
-    data_array = data_array.transpose("latitude", "longitude")
-    return (
-        data_array.to_numpy(),
-        dataset["longitude"].values,
-        dataset["latitude"].values,
-    )
-
-
-def filter_by_years(ds, years, time_coord="date"):
-    return ds.sel({time_coord: ds[time_coord].dt.year.isin(years)})
-
-
-def interpolate_spatial_field(
-    data: np.ndarray,
-    src_lon: np.ndarray,
-    src_lat: np.ndarray,
-    dst_lon: np.ndarray,
-    dst_lat: np.ndarray,
-) -> np.ndarray:
-    dataset = xr.Dataset(
-        data_vars={"field": (("latitude", "longitude"), data)},
-        coords={"longitude": src_lon, "latitude": src_lat},
-    )
-    return dataset.interp(
-        longitude=dst_lon,
-        latitude=dst_lat,
-        method="linear",
-    )["field"].to_numpy()
-
-
-def load_raw_date_dataset(raw_root: str, date: str) -> xr.Dataset:
-    year = int(date.split("-")[0])
-    raw_path = Path(raw_root) / make_era5_filename(year)
-    raw_dataset = xr.open_dataset(raw_path)
-    return raw_dataset.sel(date=[date])
-
-
-def preprocessed_feature_target_arrays(
-    raw_dataset: xr.Dataset,
-    preprocessor: Preprocessor,
-    model: SimpleModel,
-) -> tuple[np.ndarray, np.ndarray, list[str], np.ndarray, xr.Dataset]:
-    preprocessed_dataset = preprocessor.transform(raw_dataset)
-    ordered_preprocessed = ordered_dataset(preprocessed_dataset)
-    feature_names = [v for v in ordered_preprocessed.data_vars if v != "tsr"]
-    data = (
-        ordered_preprocessed.to_dataarray()
-        .transpose("date", "latitude", "longitude", "variable")
-        .to_numpy()
-    )
-
-    inputs = data[..., : model.input_dim].reshape(-1, model.input_dim)
-    targets = data[..., model.input_dim].reshape(-1)
-    latitudes = np.broadcast_to(
-        ordered_preprocessed["latitude"].to_numpy()[None, :, None],
-        data.shape[:3],
-    ).reshape(-1)
-    return inputs, targets, feature_names, latitudes, ordered_preprocessed
-
-
-def empirical_copula_values(values: np.ndarray) -> np.ndarray:
-    ranks = rankdata(values, method="average")
-    return (ranks - 0.5) / len(values)
-
-
-def unpreprocess_feature_values(
-    feature_values: np.ndarray,
-    feature_name: str,
-    preprocessor: Preprocessor,
-) -> np.ndarray:
-    if isinstance(preprocessor, SequentialPreprocessor):
-        values = feature_values.copy()
-        for child in reversed(preprocessor.preprocessors):
-            if isinstance(child, XarrayMinMaxScaler):
-                data_min = child.data_min_[feature_name].to_numpy().item()
-                data_max = child.data_max_[feature_name].to_numpy().item()
-                denom = data_max - data_min
-                if denom == 0:
-                    return np.full_like(values, fill_value=data_min, dtype=np.float64)
-                values = (values - child.min_val) / (
-                    child.max_val - child.min_val
-                ) * denom + data_min
-            elif isinstance(child, XarrayStandardScaler):
-                mean = child.mean_[feature_name].to_numpy().item()
-                std = child.std_[feature_name].to_numpy().item()
-                values = values * std + mean
-        return values
-
-    return feature_values
-
-
-def inverse_transform_without_upsampling(
-    dataset: xr.Dataset,
-    preprocessor: Preprocessor,
-) -> xr.Dataset:
-    if isinstance(preprocessor, SequentialPreprocessor):
-        transformed = dataset
-        for child in reversed(preprocessor.preprocessors):
-            if child.__class__.__name__ == "Downscaler":
-                continue
-            transformed = child.inverse_transform(transformed)
-        return transformed
-
-    return preprocessor.inverse_transform(dataset)
-
-
-def test_1(
+def global_tsr_test(
     ds: xr.Dataset,
     preprocessor: Preprocessor,
     model: torch.nn.Module,
     figures_path: Path = Path("."),
 ):
+    assert isinstance(preprocessor, SequentialPreprocessor)
     # preprocessors=[
     #    ECOD_Calculator(),
     #    Downscaler(factor=[("latitude", 4), ("longitude", 4)]),
     #    XarrayMinMaxScaler(dim=("date", "latitude", "longitude")),
     # ]
-    assert isinstance(preprocessor, SequentialPreprocessor)
-
-    date = ds["date"].values
-    lat = ds["latitude"].values
-    lon = ds["longitude"].values
+    
+    date = ds.date.values
+    lat = ds.latitude.values
+    lon = ds.longitude.values
 
     ds_ordered_np = (
-        ordered_dataset(ds)
+        ordered_dataset(ds, 'tsr')
         .to_dataarray()
         .transpose("date", "latitude", "longitude", "variable")
         .to_numpy()
     )
 
     data_torch = torch.from_numpy(ds_ordered_np).float()
-
-    # (date, lat, lon)
     model_outputs = model(data_torch[:, :, :, : model.input_dim]).detach()
 
     pred = (
@@ -266,16 +81,14 @@ def test_1(
     )
     true = preprocessor.preprocessors[-1].inverse_transform(ds)["tsr"]
 
-    # (date, lat, lon)
     tsr_true = true.to_numpy() / (3600 * 24)
     tsr_pred = pred.to_numpy() / (3600 * 24)
+    diff_full = tsr_true - tsr_pred
 
-    diff_full = tsr_true - tsr_pred  # (date, lat, lon)
-
-    tsr_mean = np.mean(tsr_true, axis=0)  # (lat, lon)
-    tsr_pred_mean = np.mean(tsr_pred, axis=0)  # (lat, lon)
-    mbe_map = np.mean(diff_full, axis=0)  # (lat, lon)
-    rmse_map = np.sqrt(np.mean(diff_full**2, axis=0))  # (lat, lon)
+    tsr_mean = np.mean(tsr_true, axis=0)
+    tsr_pred_mean = np.mean(tsr_pred, axis=0)
+    mbe_map = np.mean(diff_full, axis=0)
+    rmse_map = np.sqrt(np.mean(diff_full**2, axis=0))
 
     max_tsr = max(np.max(tsr_mean), np.max(tsr_pred_mean))
     max_abs_mbe = np.max(np.abs(mbe_map))
@@ -291,46 +104,27 @@ def test_1(
     print(f"Global RMSE:  {global_rmse:.4f} W/m²")
     print(f"Max RMSE   :  {max_rmse:.4f} W/m²")
 
-    fig = plt.figure(figsize=(8, 6), dpi=300)
-    m = setup_global_map()
-    plot_colormesh_on_map(m, lon, lat, tsr_mean, cmap="Spectral", vmin=0, vmax=max_tsr)
-    plt.text(x=300, y=np.max(lat) + 5, s=f"{global_tsr_mean:.2f}", fontsize=20)
-    plt.colorbar(orientation="horizontal", fraction=0.075, label="$W/m^2$")
-    plt.title("TSR (ERA5)")
-    plt.savefig(figures_path / "tsr_era5.png")
-    plt.close(fig)
-
-    fig = plt.figure(figsize=(8, 6), dpi=300)
-    m = setup_global_map()
-    plot_colormesh_on_map(
-        m, lon, lat, tsr_pred_mean, cmap="Spectral", vmin=0, vmax=max_tsr
+    plot_global_field(
+        tsr_mean, lon, lat, "TSR (ERA5)", figures_path / "global_tsr_era5.png",
+        cmap="Spectral", vmin=0, vmax=360, label="$W/m^2$",
+        annotation=f"{global_tsr_mean:.2f}",
     )
-    plt.text(x=300, y=np.max(lat) + 5, s=f"{global_tsr_pred_mean:.2f}", fontsize=20)
-    plt.colorbar(orientation="horizontal", fraction=0.075, label="$W/m^2$")
-    plt.title("TSR (NN)")
-    plt.savefig(figures_path / "tsr_nn.png")
-    plt.close(fig)
-
-    fig = plt.figure(figsize=(8, 6), dpi=300)
-    m = setup_global_map()
-    plot_colormesh_on_map(
-        m, lon, lat, mbe_map, cmap="RdBu_r", vmin=-max_abs_mbe, vmax=max_abs_mbe
+    plot_global_field(
+        tsr_pred_mean, lon, lat, "TSR (NN)", figures_path / "global_tsr_nn.png",
+        cmap="Spectral", vmin=0, vmax=max_tsr, label="$W/m^2$",
+        annotation=f"{global_tsr_pred_mean:.2f}",
     )
-    plt.text(x=300, y=np.max(lat) + 5, s=f"{global_mbe:.2f}", fontsize=20)
-    plt.colorbar(orientation="horizontal", fraction=0.075, label="$W/m^2$")
-    plt.title("MBE")
-    plt.savefig(figures_path / "mbe.png")
-    plt.close(fig)
+    plot_global_field(
+        mbe_map, lon, lat, "MBE", figures_path / "global_tsr_mbe.png",
+        cmap="RdBu_r", vmin=-45, vmax=45, label="$W/m^2$",
+        annotation=f"{global_mbe:.2f}",
+    )
+    plot_global_field(
+        rmse_map, lon, lat, "RMSE", figures_path / "global_tsr_rmse.png",
+        cmap="Blues", vmin=0, vmax=50, label="$W/m^2$",
+        annotation=f"{global_rmse:.2f}",
+    )
 
-    fig = plt.figure(figsize=(8, 6), dpi=300)
-    m = setup_global_map()
-    plot_colormesh_on_map(m, lon, lat, rmse_map, cmap="Blues", vmin=0, vmax=max_rmse)
-
-    plt.text(x=300, y=np.max(lat) + 5, s=f"{global_rmse:.2f}", fontsize=20)
-    plt.colorbar(orientation="horizontal", fraction=0.075, label="$W/m^2$")
-    plt.title("RMSE")
-    plt.savefig(figures_path / "rmse.png")
-    plt.close(fig)
 
     # slope, intercept, r_value, p_value, std_err = linregress(
     #     predictions_inversed, dataset["tsr"].values
@@ -353,362 +147,229 @@ def test_1(
     # ax.text(0, 370, val_str, fontsize=12)
     # fig.savefig("correlation.png")
 
-
-def test_2(
-    raw_dataset: xr.Dataset,
-    preprocessor: Preprocessor,
-    date,
-    model: SimpleModel,
-    figures_path: Path = Path("."),
-    max_true_kernel=0,
-    true_kernel: np.ndarray | None = None,
-    true_lon: np.ndarray | None = None,
-    true_lat: np.ndarray | None = None,
-):
-    raw_date_specific_data = raw_dataset.sel(date=[date])
-    raw_date_specific_data_perturbed = raw_date_specific_data.copy(deep=True)
-    raw_date_specific_data_perturbed["fal"] = raw_date_specific_data["fal"] + 0.01
+def compute_nn_kernel(ds: xr.Dataset, preprocessor: Preprocessor, model: SimpleModel):
+    ds_perturbed = ds.copy(deep=True)
+    ds_perturbed["fal"] = ds["fal"] + 0.01
     # raw_date_specific_data_perturbed["fal"] = xr.where(
     #     raw_date_specific_data["fal"] + 0.01 > 1.0,
     #     1.0,
     #     raw_date_specific_data["fal"] + 0.01,
     # )
 
-    processed_date_specific_data = preprocessor.transform(raw_date_specific_data)
-    processed_date_specific_data_perturbed = preprocessor.transform(
-        raw_date_specific_data_perturbed
-    )
+    processed_ds = preprocessor.transform(ds)
+    processed_ds_perturbed = preprocessor.transform(ds_perturbed)
+    date = processed_ds.date
+    lon = processed_ds.longitude
+    lat = processed_ds.latitude
 
-    lon = processed_date_specific_data["longitude"].values
-    lat = processed_date_specific_data["latitude"].values
-    raw_lon = raw_dataset["longitude"].values
-    raw_lat = raw_dataset["latitude"].values
+    def _run_model(dataset):
+        data = torch.from_numpy(
+            ordered_dataset(dataset, "tsr")
+            .to_dataarray()
+            .transpose("date", "latitude", "longitude", "variable")
+            .to_numpy()
+        ).float()
+        return model(data[..., : model.input_dim]).detach()
 
-    ordered_base = ordered_dataset(processed_date_specific_data)
-    ordered_perturbed = ordered_dataset(processed_date_specific_data_perturbed)
-    data_torch_base = torch.from_numpy(
-        ordered_base.to_dataarray()
-        .transpose("date", "latitude", "longitude", "variable")
-        .to_numpy()
-    ).float()
-    data_torch_perturbed = torch.from_numpy(
-        ordered_perturbed.to_dataarray()
-        .transpose("date", "latitude", "longitude", "variable")
-        .to_numpy()
-    ).float()
-
-    model_output_base = model(data_torch_base[... ,: model.input_dim]).detach()
-    model_output_perturbed = model(data_torch_perturbed[... ,: model.input_dim]).detach()
-
-    predictions_base = preprocessor.inverse_transform(
-        dataset_from_array(
-            arr=model_output_base.numpy(),
-            date=[date],
-            lon=lon,
-            lat=lat,
-        )
-    ).squeeze(dim='date').to_dataarray().to_numpy()[0] / (3600 * 24)
-    predictions_perturbed = preprocessor.inverse_transform(
-        dataset_from_array(
-            arr=model_output_perturbed.numpy(),
-            date=[date],
-            lon=lon,
-            lat=lat,
-        )
-    ).squeeze(dim='date').to_dataarray().to_numpy()[0] / (3600 * 24)
-
-    diff = predictions_perturbed - predictions_base
-    max_diff = max(max_true_kernel, np.max(np.abs(diff)))
-
-    fig = plt.figure(figsize=(8, 6), dpi=300)
-    m = setup_global_map()
-    plot_colormesh_on_map(
-        m, raw_lon, raw_lat, diff, cmap="RdBu_r", vmin=-max_diff, vmax=max_diff
-    )
-
-    plt.text(x=300, y=np.max(lat) + 5, s=f"{np.mean(diff):.2f}", fontsize=20)
-    plt.colorbar(orientation="horizontal", fraction=0.075, label=r"$W/m^2 1\%$")
-    plt.title(f"NN Surface Albedo Kernel\n{date}")
-    plt.savefig(figures_path / f"nn_kernel_{date}.png")
-
-    plt.close(fig)
-
-    if true_kernel is not None and true_lon is not None and true_lat is not None:
-        model_kernel_for_diff = diff
-        plot_lon = raw_lon
-        plot_lat = raw_lat
-
-        if model_kernel_for_diff.shape != true_kernel.shape:
-            model_kernel_for_diff = interpolate_spatial_field(
-                model_kernel_for_diff, raw_lon, raw_lat, true_lon, true_lat
+    def _invert(output):
+        return (
+            preprocessor.preprocessors[-1].inverse_transform(
+                dataset_from_array(arr=output.numpy(), date=date, lon=lon, lat=lat)
             )
-            plot_lon = true_lon
-            plot_lat = true_lat
-
-        north_mask = plot_lat >= 60
-        kernel_diff_north_pole = (true_kernel - model_kernel_for_diff)[north_mask, :]
-        plot_lat_north = plot_lat[north_mask]
-        max_abs_diff = np.max(np.abs(kernel_diff_north_pole))
-
-        fig = plt.figure(figsize=(8, 8), dpi=300)
-        m = setup_north_pole_map()
-        plot_colormesh_on_map(
-            m,
-            plot_lon,
-            plot_lat_north,
-            kernel_diff_north_pole,
-            cmap="RdBu_r",
-            vmin=-max_abs_diff,
-            vmax=max_abs_diff,
+            .to_dataarray()
+            .squeeze(dim=["variable", "date"])
+            .to_numpy()
+            / (3600 * 24)
         )
-        plt.title(rf"$K_{{ERA5}}({date}) - K_{{NN}}({date})$")
-        plt.colorbar(
-            orientation="horizontal", fraction=0.05, pad=0.07, label=r"$W/m^2 1\%$"
-        )
-        plt.savefig(figures_path / f"k_era5_minus_k_nn_north_pole_{date}.png")
-        plt.close(fig)
 
-    return diff, raw_lon, raw_lat
+    return _invert(_run_model(processed_ds_perturbed)) - _invert(_run_model(processed_ds)), lon, lat
 
-
-def test_2013_09_against_rrtm(
-    raw_root: str,
+def kernel_date_test(
+    ds: xr.Dataset,
     preprocessor: Preprocessor,
     model: SimpleModel,
-    figures_path: Path = Path("."),
-    reference_path: Path = Path("old_data/RRTM_2013_cld_alb_TOA_SFC_09.nc"),
+    date,
+    true_kernel: xr.Dataset,
+    figures_path: Path = Path(".")
 ):
-    if not reference_path.exists():
-        print(f"Skipping 2013-09 RRTM comparison; missing file: {reference_path}")
-        return
+    ds_clr = ds.copy(deep=True)
+    ds_clr.hcc[:] = 0
+    ds_clr.mcc[:] = 0
+    ds_clr.lcc[:] = 0
+    ds_clr.tcc[:] = 0
+    ds_clr.tciw[:] = 0
+    ds_clr.tclw[:] = 0
 
-    rrtm_kernel, rrtm_lon, rrtm_lat = load_rrtm_kernel(reference_path)
-    rrtm_kernel = rrtm_kernel * 0.01
-
-    model_kernel, raw_lon, raw_lat = test_2(
-        raw_dataset=load_raw_date_dataset(raw_root, "2013-09"),
-        preprocessor=preprocessor,
-        date="2013-09",
-        model=model,
-        figures_path=figures_path,
-        max_true_kernel=np.max(np.abs(rrtm_kernel)),  # for same colorbar
-        true_kernel=rrtm_kernel,
-        true_lon=rrtm_lon,
-        true_lat=rrtm_lat,
+    nn_kern_cld, lon, lat = compute_nn_kernel(ds, preprocessor, model)
+    nn_kern_clr, _, _ = compute_nn_kernel(ds_clr, preprocessor, model)
+    
+    rrtm_kern_cld = true_kernel["TOA_cld"].as_numpy()[0] * 0.01
+    rrtm_kern_clr = true_kernel["TOA_clr"].as_numpy()[0] * 0.01
+    kern_lon, kern_lat = true_kernel.longitude, true_kernel.latitude
+    # --- clear and all sky plots of nn kernel, global and north pole
+    plot_global_field(
+        nn_kern_cld, lon, lat,
+        f"NN Surface Albedo Kernel (all)\n{date}",
+        figures_path / f"kern_all_nn_{date}.png",
+        cmap="RdBu_r", vmin=-4, vmax=4, label=r"$W/m^2 1\%$",
+        annotation=f"{np.mean(nn_kern_cld):.2f}",
     )
+    plot_global_field(
+        nn_kern_clr, lon, lat,
+        f"NN Surface Albedo Kernel (clear)\n{date}",
+        figures_path / f"kern_clr_nn_{date}.png",
+        cmap="RdBu_r", vmin=-4, vmax=4, label=r"$W/m^2 1\%$",
+        annotation=f"{np.mean(nn_kern_clr):.2f}",
+    )
+    north_mask = lat >= 60
+    plot_north_pole_field(
+        nn_kern_cld[north_mask], lon, lat[north_mask],
+        f"NN Surface Albedo Kernel (all)\n{date}",
+        figures_path / f"kern_all_nn_np_{date}.png",
+        cmap="RdBu_r", vmin=-4, vmax=4, label=r"$W/m^2 1\%$",
+        annotation=f"{np.mean(nn_kern_cld[north_mask]):.2f}",
+    )
+    plot_north_pole_field(
+        nn_kern_clr[north_mask], lon, lat[north_mask],
+        f"NN Surface Albedo Kernel (clear)\n{date}",
+        figures_path / f"kern_clr_nn_np_{date}.png",
+        cmap="RdBu_r", vmin=-4, vmax=4, label=r"$W/m^2 1\%$",
+        annotation=f"{np.mean(nn_kern_clr[north_mask]):.2f}",
+    )
+    # --- clear and all sky plots of rrtm kernel, global and north pole
+    plot_global_field(
+        rrtm_kern_cld, kern_lon, kern_lat,
+        f"RRTM Surface Albedo Kernel (all)\n{date}",
+        figures_path / f"kern_all_rrtm_{date}.png",
+        cmap="RdBu_r", vmin=-4, vmax=4, label=r"$W/m^2 1\%$",
+        annotation=f"{np.mean(rrtm_kern_cld):.2f}",
+    )
+    plot_global_field(
+        rrtm_kern_clr, kern_lon, kern_lat,
+        f"RRTM Surface Albedo Kernel (clear)\n{date}",
+        figures_path / f"kern_clr_rrtm_{date}.png",
+        cmap="RdBu_r", vmin=-4, vmax=4, label=r"$W/m^2 1\%$",
+        annotation=f"{np.mean(rrtm_kern_clr):.2f}",
+    )    
+    north_mask = kern_lat >= 60
+    plot_north_pole_field(
+        rrtm_kern_cld[north_mask], kern_lon, kern_lat[north_mask],
+        f"RRTM Surface Albedo Kernel (all)\n{date}",
+        figures_path / f"kern_all_rrtm_np_{date}.png",
+        cmap="RdBu_r", vmin=-4, vmax=4, label=r"$W/m^2 1\%$",
+        annotation=f"{np.mean(rrtm_kern_clr[north_mask]):.2f}",
+    )
+    plot_north_pole_field(
+        rrtm_kern_clr[north_mask], kern_lon, kern_lat[north_mask],
+        f"RRTM Surface Albedo Kernel (clear)\n{date}",
+        figures_path / f"kern_clr_rrtm_np_{date}.png",
+        cmap="RdBu_r", vmin=-4, vmax=4, label=r"$W/m^2 1\%$",
+        annotation=f"{np.mean(rrtm_kern_cld[north_mask]):.2f}",
+    )
+    # --- clear and all sky plots of nn-rrtm kernel difference, global and north pole
 
-    if model_kernel.shape != rrtm_kernel.shape:
-        model_kernel = interpolate_spatial_field(
-            model_kernel,
-            raw_lon,
-            raw_lat,
-            rrtm_lon,
-            rrtm_lat,
+    plot_lon, plot_lat = lon, lat
+    if nn_kern_clr.shape != true_kernel["TOA_clr"].shape:
+        nn_kern_cld = interpolate_spatial_field(
+            nn_kern_cld, lon, lat, kern_lon, kern_lat
         )
-        raw_lon = rrtm_lon
-        raw_lat = rrtm_lat
-
-    comparison_diff = model_kernel - rrtm_kernel
-    max_abs_kernel = max(np.max(np.abs(model_kernel)), np.max(np.abs(rrtm_kernel)))
-    max_abs_comparison = np.max(np.abs(comparison_diff))
-    max_rrtm_lat = np.max(rrtm_lat)
-
-    print(model_kernel)
-    print(rrtm_kernel)
-    print(np.max(np.abs(model_kernel)), np.max(np.abs(rrtm_kernel)))
-    print(max_abs_kernel)
-    print(max_abs_comparison)
-
-    fig = plt.figure(figsize=(8, 6), dpi=300)
-    m = setup_global_map()
-    plot_colormesh_on_map(
-        m,
-        rrtm_lon,
-        rrtm_lat,
-        rrtm_kernel,
-        cmap="RdBu_r",
-        vmin=-max_abs_kernel,
-        vmax=max_abs_kernel,
-    )
-    plt.text(x=300, y=max_rrtm_lat + 5, s=f"{np.mean(rrtm_kernel):.2f}", fontsize=20)
-    plt.colorbar(orientation="horizontal", fraction=0.075, label=r"$W/m^2 1\%$")
-    plt.title("RRTM Surface Albedo Kernel\n2013-09")
-    plt.savefig(figures_path / "rrtm_kernel_2013-09.png")
-    plt.close(fig)
-
-    fig = plt.figure(figsize=(8, 6), dpi=300)
-    m = setup_global_map()
-    plot_colormesh_on_map(
-        m,
-        raw_lon,
-        raw_lat,
-        comparison_diff,
-        cmap="RdBu_r",
-        vmin=-max_abs_comparison,
-        vmax=max_abs_comparison,
-    )
-    plt.text(
-        x=300, y=max_rrtm_lat + 5, s=f"{np.mean(comparison_diff):.2f}", fontsize=20
-    )
-    plt.colorbar(orientation="horizontal", fraction=0.075, label=r"$W/m^2 1\%$")
-    plt.title("NN - RRTM Surface Albedo Kernel\n2013-09")
-    plt.savefig(figures_path / "nn_vs_rrtm_kernel_2013-09.png")
-    plt.close(fig)
-
-
-def test_3(
-    raw_root: str,
-    kernels_root: Path,
-    preprocessor: Preprocessor,
-    model: SimpleModel,
-    figures_path: Path = Path("."),
-):
-    nn_kernel_2013, nn_lon_2013, nn_lat_2013 = test_2(
-        raw_dataset=load_raw_date_dataset(raw_root, "2013-09"),
-        preprocessor=preprocessor,
-        date="2013-09",
-        model=model,
-        figures_path=figures_path,
-    )
-    nn_kernel_2012, _, _ = test_2(
-        raw_dataset=load_raw_date_dataset(raw_root, "2012-09"),
-        preprocessor=preprocessor,
-        date="2012-09",
-        model=model,
-        figures_path=figures_path,
-    )
-
-    delta_k_nn = nn_kernel_2013 - nn_kernel_2012
-    kernel_2013_diff = None
-
-    kernels_root_path = Path(kernels_root)
-    era5_kernel_2013_path = kernels_root_path / "RRTM_kernel_2013_cld_alb_TOA_SFC_09.nc"
-    era5_kernel_2012_path = kernels_root_path / "RRTM_kernel_2012_cld_alb_TOA_SFC_09.nc"
-    if not era5_kernel_2013_path.exists() or not era5_kernel_2012_path.exists():
-        missing = []
-        if not era5_kernel_2013_path.exists():
-            missing.append(str(era5_kernel_2013_path))
-        if not era5_kernel_2012_path.exists():
-            missing.append(str(era5_kernel_2012_path))
-        raise FileNotFoundError("Missing ERA5 kernel file(s): " + ", ".join(missing))
-
-    era5_kernel_2013, era5_lon_2013, era5_lat_2013 = load_rrtm_kernel(
-        era5_kernel_2013_path
-    )
-    era5_kernel_2012, _, _ = load_rrtm_kernel(era5_kernel_2012_path)
-    era5_kernel_2013 = era5_kernel_2013 * 0.01
-    era5_kernel_2012 = era5_kernel_2012 * 0.01
-
-    delta_k_era5 = era5_kernel_2013 - era5_kernel_2012
-
-    if delta_k_nn.shape != delta_k_era5.shape:
-        nn_kernel_2013 = interpolate_spatial_field(
-            nn_kernel_2013,
-            nn_lon_2013,
-            nn_lat_2013,
-            era5_lon_2013,
-            era5_lat_2013,
+        nn_kern_clr = interpolate_spatial_field(
+            nn_kern_clr, lon, lat, kern_lon, kern_lat
         )
-        delta_k_nn = interpolate_spatial_field(
-            delta_k_nn,
-            nn_lon_2013,
-            nn_lat_2013,
-            era5_lon_2013,
-            era5_lat_2013,
-        )
-        plot_lon = era5_lon_2013
-        plot_lat = era5_lat_2013
-    else:
-        plot_lon = nn_lon_2013
-        plot_lat = nn_lat_2013
-
-    delta_k_diff = delta_k_nn - delta_k_era5
-    kernel_2013_diff = era5_kernel_2013 - nn_kernel_2013
-
+        plot_lon = kern_lon
+        plot_lat = kern_lat
     north_mask = plot_lat >= 60
-    kernel_2013_diff = kernel_2013_diff[north_mask, :]
-    delta_k_nn = delta_k_nn[north_mask, :]
-    delta_k_era5 = delta_k_era5[north_mask, :]
-    delta_k_diff = delta_k_diff[north_mask, :]
+    
+    diff_cld     = nn_kern_cld - rrtm_kern_cld
+    diff_clr     = nn_kern_clr - rrtm_kern_clr
+    diff_clr_np  = diff_cld[north_mask]
+    diff_cld_np  = diff_clr[north_mask]
+    
+    plot_global_field(
+        diff_cld, plot_lon, plot_lat,
+        f"NN-RRTM Surface Albedo Kernel (all)\n{date}",
+        figures_path / f"kern_all_nn-rrtm_{date}.png",
+        cmap="RdBu_r", vmin=-4, vmax=4, label=r"$W/m^2 1\%$",
+        annotation=f"{np.mean(diff_cld):.2f}",
+    )
+    plot_global_field(
+        diff_clr, plot_lon, plot_lat,
+        f"NN-RRTM Surface Albedo Kernel (clear)\n{date}",
+        figures_path / f"kern_clr_nn-rrtm_{date}.png",
+        cmap="RdBu_r", vmin=-4, vmax=4, label=r"$W/m^2 1\%$",
+        annotation=f"{np.mean(diff_clr):.2f}",
+    )    
+    north_mask = plot_lat >= 60
+    plot_north_pole_field(
+        diff_cld[north_mask], plot_lon, plot_lat[north_mask],
+        f"NN-RRTM Surface Albedo Kernel (all)\n{date}",
+        figures_path / f"kern_all_nn-rrtm_np_{date}.png",
+        cmap="RdBu_r", vmin=-4, vmax=4, label=r"$W/m^2 1\%$",
+        annotation=f"{np.mean(diff_cld[north_mask]):.2f}",
+    )
+    plot_north_pole_field(
+        diff_clr[north_mask], plot_lon, plot_lat[north_mask],
+        f"NN-RRTM Surface Albedo Kernel (clear)\n{date}",
+        figures_path / f"kern_clr_nn-rrtm_np_{date}.png",
+        cmap="RdBu_r", vmin=-4, vmax=4, label=r"$W/m^2 1\%$",
+        annotation=f"{np.mean(diff_clr[north_mask]):.2f}",
+    )
 
-    max_abs_kernel_2013_diff = np.max(np.abs(kernel_2013_diff))
-    max_kernel = max(np.max(np.abs(delta_k_nn)), np.max(np.abs(delta_k_era5)))
-    max_abs_diff = np.max(np.abs(delta_k_diff))
+def second_order_test(
+    ds: xr.Dataset,
+    preprocessor: Preprocessor,
+    model: SimpleModel,
+    true_kernel: xr.Dataset,
+    dates = ["2013-09", "2012-09"],
+    figures_path: Path = Path(".")
+):
+    nn_kern_cld_1, lon, lat = compute_nn_kernel(ds.sel(date=dates[1]), preprocessor, model)
+    nn_kern_cld_0, _, _ = compute_nn_kernel(ds.sel(date=dates[0]), preprocessor, model)
+    delta_kern_nn = nn_kern_cld_1 - nn_kern_cld_0
+
+    rrtm_lat, rrtm_lon = true_kernel.latitude, true_kernel.longitude
+    rrtm_kern_cld_1 = true_kernel["TOA_cld"].sel(date=dates[1]).as_numpy()[0] * 0.01
+    rrtm_kern_cld_0 = true_kernel["TOA_cld"].sel(date=dates[0]).as_numpy()[0] * 0.01
+    delta_kern_rrtm = rrtm_kern_cld_1 - rrtm_kern_cld_0
+
+
+    if delta_kern_nn.shape != delta_kern_rrtm.shape:
+        delta_kern_nn = interpolate_spatial_field(
+            delta_kern_nn, lon, lat, rrtm_lon, rrtm_lat,
+        )
+        plot_lon = rrtm_lon
+        plot_lat = rrtm_lat
+    else:
+        plot_lon = rrtm_lon
+        plot_lat = rrtm_lat
+    north_mask = plot_lat >= 60
+    
+    delta_k_diff = (delta_kern_nn - delta_kern_rrtm)[north_mask]
+    delta_k_nn = delta_kern_nn[north_mask]
+    delta_k_rrtm = delta_kern_rrtm[north_mask]
     plot_lat = plot_lat[north_mask]
 
-    fig = plt.figure(figsize=(8, 8), dpi=300)
-    m = setup_north_pole_map()
-    plot_colormesh_on_map(
-        m,
-        plot_lon,
-        plot_lat,
-        kernel_2013_diff,
-        cmap="RdBu_r",
-        vmin=-max_abs_kernel_2013_diff,
-        vmax=max_abs_kernel_2013_diff,
-    )
-    plt.title(r"$K_{ERA5}(2013\mathrm{-}09) - K_{NN}(2013\mathrm{-}09)$")
-    plt.colorbar(
-        orientation="horizontal", fraction=0.05, pad=0.07, label=r"$W/m^2 1\%$"
-    )
-    plt.savefig(figures_path / "k_era5_minus_k_nn_north_pole_2013-09.png")
-    plt.close(fig)
+    max_abs_diff = np.max(np.abs(delta_k_diff))
 
-    fig = plt.figure(figsize=(8, 8), dpi=300)
-    m = setup_north_pole_map()
-    plot_colormesh_on_map(
-        m,
-        plot_lon,
-        plot_lat,
-        delta_k_nn,
-        cmap="RdBu_r",
-        vmin=-max_kernel,
-        vmax=max_kernel,
+    plot_north_pole_field(
+        delta_k_nn, plot_lon, plot_lat,
+        "NN surface albedo kernel difference\n(2013-09 minus 2012-09)",
+        figures_path / "delta_k_nn_np.png",
+        vmin=-2, vmax=2,
     )
-    plt.title("NN surface albedo kernel difference" + "\n(2013-09 minus 2012-09)")
-    plt.colorbar(
-        orientation="horizontal", fraction=0.05, pad=0.07, label=r"$W/m^2 1\%$"
+    plot_north_pole_field(
+        delta_k_rrtm, plot_lon, plot_lat,
+        "ERA5 surface albedo kernel difference\n(2013-09 minus 2012-09)",
+        figures_path / "delta_k_rrtm_np.png",
+        vmin=-2, vmax=2,
     )
-    plt.savefig(figures_path / "delta_k_nn_np.png")
-    plt.close(fig)
+    plot_north_pole_field(
+        delta_k_diff, plot_lon, plot_lat,
+        r"$K_{NN} - K_{ERA5}$" + "\n2013-09 minus 2012-09",
+        figures_path / "delta_k_nn-rrtm_north_pole_2013-09_minus_2012-09.png",
+        vmin=-2, vmax=2,
+    )
 
-    fig = plt.figure(figsize=(8, 8), dpi=300)
-    m = setup_north_pole_map()
-    plot_colormesh_on_map(
-        m,
-        plot_lon,
-        plot_lat,
-        delta_k_era5,
-        cmap="RdBu_r",
-        vmin=-max_kernel,
-        vmax=max_kernel,
-    )
-    plt.title(r"ERA5 surface albedo kernel difference" + "\n(2013-09 minus 2012-09)")
-    plt.colorbar(
-        orientation="horizontal", fraction=0.05, pad=0.07, label=r"$W/m^2 1\%$"
-    )
-    plt.savefig(figures_path / "delta_k_era5_np.png")
-    plt.close(fig)
-
-    fig = plt.figure(figsize=(8, 8), dpi=300)
-    m = setup_north_pole_map()
-    plot_colormesh_on_map(
-        m,
-        plot_lon,
-        plot_lat,
-        -delta_k_diff,
-        cmap="RdBu_r",
-        vmin=-max_abs_diff,
-        vmax=max_abs_diff,
-    )
-    plt.title(r"$K_{ERA5} - K_{NN}$" + "\n2013-09 minus 2012-09")
-    plt.colorbar(
-        orientation="horizontal", fraction=0.05, pad=0.07, label=r"$W/m^2 1\%$"
-    )
-    plt.savefig(
-        figures_path / "delta_k_nn_minus_era5_north_pole_2013-09_minus_2012-09.png"
-    )
-    plt.close(fig)
 
 
 def test_4(
@@ -1143,56 +804,65 @@ def main():
         f"{config.dataset.era5.path}/{make_era5_filename(year)}"
         for year in config.dataset.test_years
     ]
+    kernel_paths = [
+        Path(config.dataset.kernels.raw_path) / make_kernel_filename(year)
+        for year in range(2011, 2016)
+    ]
+    
     raw_dataset = xr.open_mfdataset(raw_era5_paths, combine="nested", concat_dim="date")
     processed_dataset = xr.open_mfdataset(
         test_era5_paths, combine="nested", concat_dim="date"
     )
+    kernels_dataset = xr.open_mfdataset(kernel_paths, combine="nested", concat_dim="date")
 
     # --- load preprocessor ---
     preprocessor = create_2024_preprocessor()
     preprocessor.load(config.preprocess.params_dir)
 
     # --- run tests ---
-    test_1(
-        ds=processed_dataset,
+    #global_tsr_test(
+    #    ds=processed_dataset,
+    #    preprocessor=preprocessor,
+    #    model=model,
+    #    figures_path=output_dir,
+    #)
+    #kernel_date_test(
+    #    ds=raw_dataset.sel(date="2013-09"),
+    #    preprocessor=preprocessor,
+    #    model=model,
+    #    figures_path=output_dir,
+    #    true_kernel=kernels_dataset.sel(date="2013-09"),
+    #    date="2013-09"
+    #)    
+    #kernel_date_test(
+    #    ds=raw_dataset.sel(date="2015-09"),
+    #    preprocessor=preprocessor,
+    #    model=model,
+    #    figures_path=output_dir,
+    #    true_kernel=kernels_dataset.sel(date="2015-09"),
+    #    date="2015-09"
+    #)
+    second_order_test(
+        ds=raw_dataset,
         preprocessor=preprocessor,
         model=model,
+        true_kernel=kernels_dataset,
+        dates=["2013-09", "2012-09"],
         figures_path=output_dir,
     )
-    test_2(
-        raw_dataset=load_raw_date_dataset(config.dataset.era5.raw_path, "2005-09"),
-        date="2005-09",
-        preprocessor=preprocessor,
-        model=model,
-        figures_path=output_dir,
-    )
-    test_2013_09_against_rrtm(
-        raw_root=config.dataset.era5.raw_path,
-        preprocessor=preprocessor,
-        model=model,
-        figures_path=output_dir,
-        reference_path=Path("data/other/RRTM_kernel_2013_cld_alb_TOA_SFC_09.nc"),
-    )
-    test_3(
-        raw_root=config.dataset.era5.raw_path,
-        kernels_root=Path("data/other"),
-        preprocessor=preprocessor,
-        model=model,
-        figures_path=output_dir,
-    )
-    test_4(
-        raw_dataset=filter_by_years(raw_dataset, [2015]),
-        preprocessor=preprocessor,
-        model=model,
-        figures_path=output_dir,
-        batch_size=256,
-    )
-    test_5(
-        raw_dataset=filter_by_years(raw_dataset, [2015]),
-        preprocessor=preprocessor,
-        model=model,
-        figures_path=output_dir,
-    )
+    #test_4(
+    #    raw_dataset=filter_by_years(raw_dataset, [2015]),
+    #    preprocessor=preprocessor,
+    #    model=model,
+    #    figures_path=output_dir,
+    #    batch_size=256,
+    #)
+    #test_5(
+    #    raw_dataset=filter_by_years(raw_dataset, [2015]),
+    #    preprocessor=preprocessor,
+    #    model=model,
+    #    figures_path=output_dir,
+    #)
 
 
 if __name__ == "__main__":
