@@ -27,7 +27,6 @@ model:
     - 8
 
 train:
-  name: "sob_all_deep_2011_2014"
-  checkpoint_dir: "./checkpoints/sob_all_deep_2011_2014"
-  sobolev: "all"
-  sobolev_alpha: 0.5
+  name: "baseline_deep_2011_2014"
+  checkpoint_dir: "./checkpoints/sob_deep_2011_2014"
+  sobolev: False
