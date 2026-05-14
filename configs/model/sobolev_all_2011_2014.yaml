@@ -26,6 +26,6 @@ model:
 
 train:
   name: "baseline_2011_2014"
-  checkpoint_dir: "./checkpoints/baseline_2011_2014"
-  sobolev: "cld"
+  checkpoint_dir: "./checkpoints/sob_all_2011_2014"
+  sobolev: "all"
   sobolev_alpha: 0.5

@@ -29,5 +29,5 @@ model:
 train:
   name: "deep_2011_2014"
   checkpoint_dir: "./checkpoints/sob_deep_2011_2014"
-  sobolev: True
+  sobolev: "cld"
   sobolev_alpha: 0.5

@@ -11,7 +11,7 @@ from omegaconf import OmegaConf
 
 from config_utils import load_config
 from dataloader import ClimateTorchDataset, KernelDataset, make_era5_filename
-from model import SimpleModelTrainer, SimpleModelSobolevTrainer
+from model import SimpleModelTrainer, SimpleModelSobolevTrainer, SimpleModelAllSobolevTrainer
 
 
 def comet_experiment_key_path(checkpoint_dir: str) -> Path:
@@ -91,7 +91,7 @@ def train(config_path: str, resume: bool = True):
     config = load_config(staged_config_path)
     assert isinstance(config, omegaconf.DictConfig), ""
 
-    if config.train.sobolev:
+    if config.train.sobolev in ("cld", "all"):
         train_dataset = KernelDataset(
             config_path=staged_config_path,
             data_type="train",
@@ -164,8 +164,15 @@ def train(config_path: str, resume: bool = True):
 
     experiment = create_comet_experiment(config, checkpoint_path=checkpoint_path)
 
-    if config.train.sobolev:
+    if config.train.sobolev == "cld":
         trainer = SimpleModelSobolevTrainer(
+            config=config,
+            experiment=experiment,
+            device=device,
+            checkpoint_path=checkpoint_path,
+        )
+    elif config.train.sobolev == "all":
+        trainer = SimpleModelAllSobolevTrainer(
             config=config,
             experiment=experiment,
             device=device,

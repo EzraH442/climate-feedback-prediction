@@ -22,12 +22,14 @@ def make_mmap_stem(model_name: str, data_type: str, suffix: str) -> str:
 def ordered_vars(dataset: xr.Dataset, target_var: str, ecod=True) -> list[str]:
     clear_sky_vars = ["hcc", "mcc", "lcc", "tciw", "tclw"]
     if ecod:
-        clear_sky_vars += ["ecod", "ecod_ab"]
-        
-    all_sky_vars = [v for v in dataset.data_vars if ((v != target_var) and (v != 'fal'))]
-    other_vars = [v for v in dataset.data_vars if ((v != target_var) and (v not in all_sky_vars) and (v != 'fal'))]
+        clear_sky_vars += ["ecod", "ecod_fal"]
 
-    return ["fal"] + clear_sky_vars + other_vars + [target_var]
+    clear_sky_vars_set = set(clear_sky_vars)
+
+    other_vars = [v for v in dataset.data_vars if ((v != target_var) and (v != 'fal') and (v not in clear_sky_vars_set))]
+    result = ["fal"] + clear_sky_vars + other_vars + [target_var]
+    assert set(result) == set(dataset.data_vars), f"ordered_vars is missing or adding vars: {set(result).symmetric_difference(set(dataset.data_vars))}"
+    return result
 
 
 class ClimateTorchDataset(torch.utils.data.Dataset):
@@ -173,7 +175,7 @@ class KernelDataset(torch.utils.data.Dataset):
         )
 
         # --- dimension setup ---
-        all_vars = ordered_vars(dataset_era5, target_var, ecod=config.preprocess.ecod)
+        all_vars = ordered_vars(dataset_era5, target_var, ecod=conf.preprocess.ecod)
 
         self.n_dates = len(dataset_era5.date)
         self.n_lat = len(dataset_era5.latitude)

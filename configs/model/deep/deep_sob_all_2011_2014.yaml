@@ -1,10 +1,10 @@
-base: ../base/model/common.yaml
+base: ../../base/model/common.yaml
 
 dataset:
   era5:
-    path: "./data/era5_processed"
+    path: './data/era5_processed'
   kernels:
-    path: "./data/kernels_processed"
+    path: './data/kernels_processed'
   train_years:
     - 2011
     - 2012
@@ -14,7 +14,7 @@ dataset:
     - 2015
   test_years:
     - 2015
-
+    
 preprocess:
   params_dir: "preprocess_states/baseline_2011_2014"
   ecod: True
@@ -23,9 +23,11 @@ model:
   input_dim: 12
   hidden_dim_sizes:
     - 11
+    - 11
+    - 8
 
 train:
-  name: "baseline_2011_2014"
-  checkpoint_dir: "./checkpoints/baseline_2011_2014"
-  sobolev: "cld"
+  name: "deep_all_2011_2014"
+  checkpoint_dir: "./checkpoints/sob_all_deep_2011_2014"
+  sobolev: "all"
   sobolev_alpha: 0.5
