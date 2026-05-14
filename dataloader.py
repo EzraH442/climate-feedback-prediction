@@ -160,7 +160,7 @@ class KernelDataset(torch.utils.data.Dataset):
 
         # --- load kernel data ---
         kernel_paths = [
-            Path(conf.dataset.kernels.path) / make_kernel_path(year) for year in years
+            Path(conf.dataset.kernels.path) / make_kernel_filename(year) for year in years
         ]
         print(f"Loading kernel data from: {kernel_paths}")
         dataset_kernels = xr.open_mfdataset(
