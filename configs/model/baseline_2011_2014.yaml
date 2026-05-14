@@ -25,6 +25,6 @@ model:
     - 11
 
 train:
-  name: "baseline_2011_2014_no_sob"
-  checkpoint_dir: "./checkpoints/base_2011_2014"
+  name: "baseline_2011_2014"
+  checkpoint_dir: "./checkpoints/baseline_2011_2014"
   sobolev: False

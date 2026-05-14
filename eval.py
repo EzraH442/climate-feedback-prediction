@@ -820,28 +820,28 @@ def main():
     preprocessor.load(config.preprocess.params_dir)
 
     # --- run tests ---
-    #global_tsr_test(
-    #    ds=processed_dataset,
-    #    preprocessor=preprocessor,
-    #    model=model,
-    #    figures_path=output_dir,
-    #)
-    #kernel_date_test(
-    #    ds=raw_dataset.sel(date="2013-09"),
-    #    preprocessor=preprocessor,
-    #    model=model,
-    #    figures_path=output_dir,
-    #    true_kernel=kernels_dataset.sel(date="2013-09"),
-    #    date="2013-09"
-    #)    
-    #kernel_date_test(
-    #    ds=raw_dataset.sel(date="2015-09"),
-    #    preprocessor=preprocessor,
-    #    model=model,
-    #    figures_path=output_dir,
-    #    true_kernel=kernels_dataset.sel(date="2015-09"),
-    #    date="2015-09"
-    #)
+    global_tsr_test(
+        ds=processed_dataset,
+        preprocessor=preprocessor,
+        model=model,
+        figures_path=output_dir,
+    )
+    kernel_date_test(
+        ds=raw_dataset.sel(date="2013-09"),
+        preprocessor=preprocessor,
+        model=model,
+        figures_path=output_dir,
+        true_kernel=kernels_dataset.sel(date="2013-09"),
+        date="2013-09"
+    )    
+    kernel_date_test(
+        ds=raw_dataset.sel(date="2015-09"),
+        preprocessor=preprocessor,
+        model=model,
+        figures_path=output_dir,
+        true_kernel=kernels_dataset.sel(date="2015-09"),
+        date="2015-09"
+    )
     second_order_test(
         ds=raw_dataset,
         preprocessor=preprocessor,
