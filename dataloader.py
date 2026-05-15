@@ -5,7 +5,7 @@ import torch
 import xarray as xr
 
 from config_utils import load_config
-from utils import make_kernel_filename, make_era5_filename
+from utils import filter_by_months, make_kernel_filename, make_era5_filename
 
 
 def make_mmap_stem(model_name: str, data_type: str, suffix: str) -> str:
@@ -42,6 +42,7 @@ class ClimateTorchDataset(torch.utils.data.Dataset):
         years = (
             conf.dataset.train_years if data_type == "train" else conf.dataset.val_years
         )
+        months = list(getattr(conf.dataset, "months", []) or [])
 
         era5_paths = [
             Path(conf.dataset.era5.path) / make_era5_filename(year) for year in years
@@ -52,6 +53,7 @@ class ClimateTorchDataset(torch.utils.data.Dataset):
         self.dataset_era5 = xr.open_mfdataset(
             era5_paths, combine="nested", concat_dim="date"
         )
+        self.dataset_era5 = filter_by_months(self.dataset_era5, months)
         all_vars = ordered_vars(self.dataset_era5, target_var, ecod=conf.preprocess.ecod)
         self.n_dates = len(self.dataset_era5.date)
         self.n_lat = len(self.dataset_era5.latitude)
@@ -148,6 +150,7 @@ class KernelDataset(torch.utils.data.Dataset):
         years = (
             conf.dataset.train_years if data_type == "train" else conf.dataset.val_years
         )
+        months = list(getattr(conf.dataset, "months", []) or [])
 
         # --- load era5 data ---
         era5_paths = [
@@ -157,6 +160,7 @@ class KernelDataset(torch.utils.data.Dataset):
         dataset_era5 = xr.open_mfdataset(
             era5_paths, combine="nested", concat_dim="date"
         )
+        dataset_era5 = filter_by_months(dataset_era5, months)
 
         # --- load kernel data ---
         kernel_paths = [
@@ -166,6 +170,7 @@ class KernelDataset(torch.utils.data.Dataset):
         dataset_kernels = xr.open_mfdataset(
             kernel_paths, combine="nested", concat_dim="date"
         )
+        dataset_kernels = filter_by_months(dataset_kernels, months)
 
         # --- dimension setup ---
         all_vars = ordered_vars(dataset_era5, target_var, ecod=conf.preprocess.ecod)

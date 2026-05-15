@@ -6,6 +6,7 @@ import xarray as xr
 import argparse
 
 from config_utils import load_config
+from utils import filter_by_months
 
 def create_2024_preprocessor_no_ecod():
     return SequentialPreprocessor(
@@ -44,6 +45,7 @@ def interpolate_kernel_dataset(
 
 def preprocess(config_path):
     conf = load_config(config_path)
+    months = list(getattr(conf.dataset, "months", []) or [])
 
     # --- make paths ---
     train_paths = [
@@ -70,9 +72,11 @@ def preprocess(config_path):
     # --- load data ---
     print(f"Loading ERA5 train data from: {train_paths}")
     train_data = xr.open_mfdataset(train_paths, combine="nested", concat_dim="date")
+    train_data = filter_by_months(train_data, months)
 
     print(f"Loading ERA5 val data from: {val_paths}")
     val_data = xr.open_mfdataset(val_paths, combine="nested", concat_dim="date")
+    val_data = filter_by_months(val_data, months)
     """
        tcc        (date, latitude, longitude) float64 100MB 
        fal        (date, latitude, longitude) float64 100MB 0.7555 0.7555 ... 0.85
@@ -90,6 +94,7 @@ def preprocess(config_path):
 
     print(f"Loading raw kernel data from: {kernel_paths}")
     kern_data = xr.open_mfdataset(kernel_paths, combine="nested", concat_dim="date")
+    kern_data = filter_by_months(kern_data, months)
 
     # --- preprocess era5 data ---
     preprocessor = create_2024_preprocessor()
