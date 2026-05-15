@@ -160,6 +160,18 @@ def filter_by_years(ds: xr.Dataset, years, time_coord: str = "date") -> xr.Datas
     return ds.sel({time_coord: ds[time_coord].dt.year.isin(years)})
 
 
+def filter_by_months(
+    ds: xr.Dataset,
+    months: list[int] | tuple[int, ...] | None,
+    time_coord: str = "date",
+) -> xr.Dataset:
+    if months is None:
+        return ds
+    if len(months) == 0:
+        raise ValueError("months must be non-empty when provided.")
+    return ds.sel({time_coord: ds[time_coord].dt.month.isin(months)})
+
+
 
 # ── Feature/target extraction & preprocessing helpers ────────────────────────
 
