@@ -19,7 +19,7 @@ findlibs==0.0.2+computecanada
 fsspec==2026.3.0+computecanada
 gitdb==4.0.12+computecanada
 gitpython==3.1.49+computecanada
-idna==3.12+computecanada
+idna==3.15
 importlib_metadata==9.0.0+computecanada
 jinja2==3.1.6+computecanada
 jsonschema==4.26.0+computecanada
