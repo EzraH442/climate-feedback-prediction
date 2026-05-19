@@ -12,6 +12,20 @@ def make_mmap_stem(model_name: str, data_type: str, suffix: str) -> str:
     return f"{model_name}_{data_type}_{suffix}.npy"
 
 
+def area_weights_from_latitudes(
+    latitudes_deg: np.ndarray,
+    n_dates: int,
+    n_lon: int,
+) -> torch.Tensor:
+    lat_weights = np.cos(np.deg2rad(latitudes_deg)).astype(np.float32)
+    lat_weights = np.clip(lat_weights, 1e-6, None)
+    sample_weights = np.broadcast_to(
+        lat_weights[None, :, None],
+        (n_dates, len(latitudes_deg), n_lon),
+    ).reshape(-1)
+    return torch.as_tensor(sample_weights, dtype=torch.double)
+
+
 def ordered_vars(dataset: xr.Dataset, target_var: str, ecod=True) -> list[str]:
     clear_sky_vars = ["hcc", "mcc", "lcc", "tciw", "tclw"]
     if ecod:
@@ -59,6 +73,11 @@ class ClimateTorchDataset(torch.utils.data.Dataset):
         self.n_lat = len(self.dataset_era5.latitude)
         self.n_lon = len(self.dataset_era5.longitude)
         self.n_vars = len(all_vars)
+        self.sample_weights = area_weights_from_latitudes(
+            self.dataset_era5.latitude.to_numpy(),
+            n_dates=self.n_dates,
+            n_lon=self.n_lon,
+        )
 
         expected_shape = (self.n_dates, self.n_lat, self.n_lon, self.n_vars)
         slurm_tmpdir = os.getenv("SLURM_TMPDIR")
@@ -179,6 +198,11 @@ class KernelDataset(torch.utils.data.Dataset):
         self.n_lat = len(dataset_era5.latitude)
         self.n_lon = len(dataset_era5.longitude)
         self.n_vars = len(all_vars)
+        self.sample_weights = area_weights_from_latitudes(
+            dataset_era5.latitude.to_numpy(),
+            n_dates=self.n_dates,
+            n_lon=self.n_lon,
+        )
 
         expected_shape_era5 = (self.n_dates, self.n_lat, self.n_lon, self.n_vars)
         expected_shape_kern = (self.n_dates, self.n_lat, self.n_lon, 2)

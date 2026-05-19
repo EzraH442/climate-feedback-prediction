@@ -5,7 +5,7 @@ import shutil
 from pathlib import Path
 
 import torch
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, WeightedRandomSampler
 import omegaconf
 from omegaconf import OmegaConf
 
@@ -122,10 +122,22 @@ def train(config_path: str, resume: bool = True):
     print(f"Number of workers for DataLoader: {num_workers}")
     print(f"Using device: {device}")
 
+    train_sampler = None
+    train_shuffle = True
+    if config.train.area_weighted_sampling:
+        train_sampler = WeightedRandomSampler(
+            weights=train_dataset.sample_weights,
+            num_samples=len(train_dataset),
+            replacement=True,
+            generator=torch.Generator().manual_seed(config.seed),
+        )
+        train_shuffle = False
+
     train_dataloader = DataLoader(
         train_dataset,
         batch_size=config.train.batch_size,
-        shuffle=True,
+        shuffle=train_shuffle,
+        sampler=train_sampler,
         num_workers=num_workers,
         pin_memory=pin_memory,
         persistent_workers=num_workers > 0,
