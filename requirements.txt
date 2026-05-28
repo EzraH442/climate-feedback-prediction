@@ -12,7 +12,7 @@ cloudpickle==3.1.2+computecanada
 comet_ml==3.47.1+computecanada
 configobj==5.0.9+computecanada
 dask==2026.3.0+computecanada
-dulwich==1.0.0+computecanada
+dulwich==1.2.5
 everett==3.1.0+computecanada
 filelock==3.29.0+computecanada
 findlibs==0.0.2+computecanada
