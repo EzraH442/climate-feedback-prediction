@@ -425,8 +425,6 @@ def kernel_date_test(
         annotation=f"{np.mean(diff_grad_clr[grad_north_mask]):.2f}; {np.mean(np.abs(diff_grad_clr[grad_north_mask])):.2f}",
     )
 
-
-
 def second_order_test(
     ds: xr.Dataset,
     preprocessor: Preprocessor,
@@ -991,6 +989,14 @@ def main():
         true_kernel=kernels_dataset,
         dates=["2012-09", "2013-09"],
         figures_path=output_dir,
+    )
+    kernel_date_test(
+        ds=raw_dataset.sel(date="2015-12"),
+        preprocessor=preprocessor,
+        model=model,
+        figures_path=output_dir,
+        true_kernel=kernels_dataset.sel(date="2015-12"),
+        date="2015-12"
     )
     #test_4(
     #    raw_dataset=filter_by_years(raw_dataset, [2015]),
