@@ -12,7 +12,7 @@ from preprocessing import (
     XarrayStandardScaler,
 )
 from model import SimpleModel
-
+import glob
 
 
 def make_era5_filename(year):
@@ -128,6 +128,32 @@ def plot_north_pole_field(
 
 def load_rrtm_kernel(year, path: Path = Path('data/kernels')) -> xr.Dataset:
     ds = xr.open_dataset(path / make_kernel_filename(year))
+    return ds
+
+def load_rrtm_kernel_instant(year, month, day, path: Path = Path('/lustre09/project/6003571/hanhuang/kernel_data_latest_from_scratch/spectral_kernel_era5_2015_multiple_profile/instant_TOA_SFC_broadband/sw')) -> xr.Dataset:
+    dir_no_perturb = path / "no_perturbation"
+    dir_perturb = path / "alb"
+    
+    path_no_perturb = dir_no_perturb / f"TOA_SFC_all_clr_{month:02d}.nc"
+    path_perturb = dir_perturb / f"TOA_SFC_all_clr_{month:02d}.nc"
+    
+    d1 = xr.open_dataset(path_no_perturb)
+    d2 = xr.open_dataset(path_perturb)
+
+    tstart = 1 + 8 * (day - 1)
+    tend   = 1 + 8 * (day)
+    
+    diff = (d2 - d1).sel(up_down_net=3, drop=True).sel(time=range(tstart, tend)).mean(dim='time')
+    diff['TOA_cld'] = diff.TOA
+    diff = diff.expand_dims(axis=0, dim="date") * 100
+    return diff
+
+def load_era5_profile_instant(year, month, day):
+    raw_era5_paths = glob.glob(f"data/era5_1hr_point/{year}/{month:02d}/{day:02d}/*.nc")
+    raw_dataset = xr.open_mfdataset(raw_era5_paths, combine="nested")
+    ds = raw_dataset.rename({'valid_time': 'date'})
+    ds['tisr'] = ds.tisr * 24
+    ds['tsr'] = ds.tsr * 24
     return ds
 
 def interpolate_spatial_field(
