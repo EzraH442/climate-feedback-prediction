@@ -83,7 +83,7 @@ def global_tsr_test(
 
     tsr_true = true.to_numpy() / (3600 * 24)
     tsr_pred = pred.to_numpy() / (3600 * 24)
-    diff_full = tsr_true - tsr_pred
+    diff_full = tsr_pred - tsr_true
 
     tsr_mean = np.mean(tsr_true, axis=0)
     tsr_pred_mean = np.mean(tsr_pred, axis=0)
@@ -116,12 +116,12 @@ def global_tsr_test(
     )
     plot_global_field(
         mbe_map, lon, lat, "MBE", figures_path / "global_tsr_mbe.png",
-        cmap="RdBu_r", vmin=-45, vmax=45, label="$W/m^2$",
+        cmap="RdBu_r", vmin=-20, vmax=20, label="$W/m^2$",
         annotation=f"{global_mbe:.2f}",
     )
     plot_global_field(
         rmse_map, lon, lat, "RMSE", figures_path / "global_tsr_rmse.png",
-        cmap="Blues", vmin=0, vmax=50, label="$W/m^2$",
+        cmap="Blues", vmin=0, vmax=20, label="$W/m^2$",
         annotation=f"{global_rmse:.2f}",
     )
 
@@ -216,9 +216,11 @@ def compute_nn_kernel_autograd(
 
     tsr_range = float(scaler.data_max_["tsr"] - scaler.data_min_["tsr"])
     fal_range = float(scaler.data_max_["fal"] - scaler.data_min_["fal"])
+    print("TSR range", tsr_range)
+    print('fal range', fal_range)
     grad_physical_per_unit = grads.detach().cpu().numpy().squeeze(axis=0) * (
         tsr_range / fal_range
-    )
+    ) / (3600 * 24)
     grad_physical_per_percent = grad_physical_per_unit * 0.01
     return grad_physical_per_percent, lon, lat
 
@@ -247,20 +249,20 @@ def kernel_date_test(
     rrtm_kern_clr = true_kernel["TOA_clr"].as_numpy()[0] * 0.01
     kern_lon, kern_lat = true_kernel.longitude, true_kernel.latitude
     # --- clear and all sky plots of nn kernel, global and north pole
-    plot_global_field(
-        nn_kern_cld, lon, lat,
-        f"NN Surface Albedo Kernel (all)\n{date}",
-        figures_path / f"kern_all_nn_{date}.png",
-        cmap="RdBu_r", vmin=-4, vmax=4, label=r"$W/m^2 1\%$",
-        annotation=f"{np.mean(nn_kern_cld):.2f}",
-    )
-    plot_global_field(
-        nn_kern_clr, lon, lat,
-        f"NN Surface Albedo Kernel (clear)\n{date}",
-        figures_path / f"kern_clr_nn_{date}.png",
-        cmap="RdBu_r", vmin=-4, vmax=4, label=r"$W/m^2 1\%$",
-        annotation=f"{np.mean(nn_kern_clr):.2f}",
-    )
+    #plot_global_field(
+    #    nn_kern_cld, lon, lat,
+    #    f"NN Surface Albedo Kernel (all)\n{date}",
+    #    figures_path / f"kern_all_nn_{date}.png",
+    #    cmap="RdBu_r", vmin=-4, vmax=4, label=r"$W/m^2 1\%$",
+    #    annotation=f"{np.mean(nn_kern_cld):.2f}",
+    #)
+    #plot_global_field(
+    #    nn_kern_clr, lon, lat,
+    #    f"NN Surface Albedo Kernel (clear)\n{date}",
+    #    figures_path / f"kern_clr_nn_{date}.png",
+    #    cmap="RdBu_r", vmin=-4, vmax=4, label=r"$W/m^2 1\%$",
+    #    annotation=f"{np.mean(nn_kern_clr):.2f}",
+    #)
     plot_global_field(
         nn_grad_cld, grad_lon, grad_lat,
         f"NN Surface Albedo Kernel via autograd (all)\n{date}",
@@ -276,30 +278,30 @@ def kernel_date_test(
         annotation=f"{np.mean(nn_grad_clr):.2f}",
     )
     north_mask = lat >= 60
-    plot_north_pole_field(
-        nn_kern_cld[north_mask], lon, lat[north_mask],
-        f"NN Surface Albedo Kernel (all)\n{date}",
-        figures_path / f"kern_all_nn_np_{date}.png",
-        cmap="RdBu_r", vmin=-4, vmax=4, label=r"$W/m^2 1\%$",
-        annotation=f"{np.mean(nn_kern_cld[north_mask]):.2f}",
-    )
-    plot_north_pole_field(
-        nn_kern_clr[north_mask], lon, lat[north_mask],
-        f"NN Surface Albedo Kernel (clear)\n{date}",
-        figures_path / f"kern_clr_nn_np_{date}.png",
-        cmap="RdBu_r", vmin=-4, vmax=4, label=r"$W/m^2 1\%$",
-        annotation=f"{np.mean(nn_kern_clr[north_mask]):.2f}",
-    )
+    #plot_north_pole_field(
+    #    nn_kern_cld[north_mask], lon, lat[north_mask],
+    #    f"NN Surface Albedo Kernel (all)\n{date}",
+    #    figures_path / f"kern_all_nn_np_{date}.png",
+    #    cmap="RdBu_r", vmin=-4, vmax=4, label=r"$W/m^2 1\%$",
+    #    annotation=f"{np.mean(nn_kern_cld[north_mask]):.2f}",
+    #)
+    #plot_north_pole_field(
+    #    nn_kern_clr[north_mask], lon, lat[north_mask],
+    #    f"NN Surface Albedo Kernel (clear)\n{date}",
+    #    figures_path / f"kern_clr_nn_np_{date}.png",
+    #    cmap="RdBu_r", vmin=-4, vmax=4, label=r"$W/m^2 1\%$",
+    #    annotation=f"{np.mean(nn_kern_clr[north_mask]):.2f}",
+    #)
     grad_north_mask = grad_lat >= 60
     plot_north_pole_field(
-        nn_grad_cld[grad_north_mask], grad_lon, grad_lat[grad_north_mask],
+        nn_grad_cld, grad_lon, grad_lat,
         f"NN Surface Albedo Kernel via autograd (all)\n{date}",
         figures_path / f"kern_all_nn_grad_np_{date}.png",
         cmap="RdBu_r", vmin=-4, vmax=4, label=r"$W/m^2 1\%$",
         annotation=f"{np.mean(nn_grad_cld[grad_north_mask]):.2f}",
     )
     plot_north_pole_field(
-        nn_grad_clr[grad_north_mask], grad_lon, grad_lat[grad_north_mask],
+        nn_grad_clr, grad_lon, grad_lat,
         f"NN Surface Albedo Kernel via autograd (clear)\n{date}",
         figures_path / f"kern_clr_nn_grad_np_{date}.png",
         cmap="RdBu_r", vmin=-4, vmax=4, label=r"$W/m^2 1\%$",
@@ -322,14 +324,14 @@ def kernel_date_test(
     )    
     north_mask = kern_lat >= 60
     plot_north_pole_field(
-        rrtm_kern_cld[north_mask], kern_lon, kern_lat[north_mask],
+        rrtm_kern_cld, kern_lon, kern_lat,
         f"RRTM Surface Albedo Kernel (all)\n{date}",
         figures_path / f"kern_all_rrtm_np_{date}.png",
         cmap="RdBu_r", vmin=-4, vmax=4, label=r"$W/m^2 1\%$",
         annotation=f"{np.mean(rrtm_kern_clr[north_mask]):.2f}",
     )
     plot_north_pole_field(
-        rrtm_kern_clr[north_mask], kern_lon, kern_lat[north_mask],
+        rrtm_kern_clr, kern_lon, kern_lat,
         f"RRTM Surface Albedo Kernel (clear)\n{date}",
         figures_path / f"kern_clr_rrtm_np_{date}.png",
         cmap="RdBu_r", vmin=-4, vmax=4, label=r"$W/m^2 1\%$",
@@ -360,68 +362,70 @@ def kernel_date_test(
     north_mask = plot_lat >= 60
     grad_north_mask = plot_grad_lat >= 60
     
-    diff_cld     = nn_kern_cld - rrtm_kern_cld
-    diff_clr     = nn_kern_clr - rrtm_kern_clr
+    diff_cld      = nn_kern_cld - rrtm_kern_cld
+    diff_clr      = nn_kern_clr - rrtm_kern_clr
     diff_grad_cld = nn_grad_cld - rrtm_kern_cld
     diff_grad_clr = nn_grad_clr - rrtm_kern_clr
     
-    plot_global_field(
-        diff_cld, plot_lon, plot_lat,
-        f"NN-RRTM Surface Albedo Kernel (all)\n{date}",
-        figures_path / f"kern_all_nn-rrtm_{date}.png",
-        cmap="RdBu_r", vmin=-4, vmax=4, label=r"$W/m^2 1\%$",
-        annotation=f"{np.mean(diff_cld):.2f}",
-    )
-    plot_global_field(
-        diff_clr, plot_lon, plot_lat,
-        f"NN-RRTM Surface Albedo Kernel (clear)\n{date}",
-        figures_path / f"kern_clr_nn-rrtm_{date}.png",
-        cmap="RdBu_r", vmin=-4, vmax=4, label=r"$W/m^2 1\%$",
-        annotation=f"{np.mean(diff_clr):.2f}",
-    )    
+    #plot_global_field(
+    #    diff_cld, plot_lon, plot_lat,
+    #    f"NN-RRTM Surface Albedo Kernel (all)\n{date}",
+    #    figures_path / f"kern_all_nn-rrtm_{date}.png",
+    #    cmap="RdBu_r", vmin=-2, vmax=2, label=r"$W/m^2 1\%$",
+    #    annotation=f"{np.mean(diff_cld):.2f}",
+    #)
+    #plot_global_field(
+    #    diff_clr, plot_lon, plot_lat,
+    #    f"NN-RRTM Surface Albedo Kernel (clear)\n{date}",
+    #    figures_path / f"kern_clr_nn-rrtm_{date}.png",
+    #    cmap="RdBu_r", vmin=-2, vmax=2, label=r"$W/m^2 1\%$",
+    #    annotation=f"{np.mean(diff_clr):.2f}",
+    #)    
     plot_global_field(
         diff_grad_cld, plot_grad_lon, plot_grad_lat,
         f"NN autograd-RRTM Surface Albedo Kernel (all)\n{date}",
         figures_path / f"kern_all_nn_grad-rrtm_{date}.png",
-        cmap="RdBu_r", vmin=-4, vmax=4, label=r"$W/m^2 1\%$",
-        annotation=f"{np.mean(diff_grad_cld):.2f}",
+        cmap="RdBu_r", vmin=-2, vmax=2, label=r"$W/m^2 1\%$",
+        annotation=f"{np.mean(diff_grad_cld):.2f}; {np.mean(np.abs(diff_grad_cld)):.2f}",
     )
     plot_global_field(
         diff_grad_clr, plot_grad_lon, plot_grad_lat,
         f"NN autograd-RRTM Surface Albedo Kernel (clear)\n{date}",
         figures_path / f"kern_clr_nn_grad-rrtm_{date}.png",
-        cmap="RdBu_r", vmin=-4, vmax=4, label=r"$W/m^2 1\%$",
-        annotation=f"{np.mean(diff_grad_clr):.2f}",
+        cmap="RdBu_r", vmin=-2, vmax=2, label=r"$W/m^2 1\%$",
+        annotation=f"{np.mean(diff_grad_clr):.2f}; {np.mean(np.abs(diff_grad_clr)):.2f}",
     )
     north_mask = plot_lat >= 60
+    #plot_north_pole_field(
+    #    diff_cld[north_mask], plot_lon, plot_lat[north_mask],
+    #    f"NN-RRTM Surface Albedo Kernel (all)\n{date}",
+    #    figures_path / f"kern_all_nn-rrtm_np_{date}.png",
+    #    cmap="RdBu_r", vmin=-1, vmax=1, label=r"$W/m^2 1\%$",
+    #    annotation=f"{np.mean(diff_cld[north_mask]):.2f}",
+    #)
+    #plot_north_pole_field(
+    #    diff_clr[north_mask], plot_lon, plot_lat[north_mask],
+    #    f"NN-RRTM Surface Albedo Kernel (clear)\n{date}",
+    #    figures_path / f"kern_clr_nn-rrtm_np_{date}.png",
+    #    cmap="RdBu_r", vmin=-1, vmax=1, label=r"$W/m^2 1\%$",
+    #    annotation=f"{np.mean(diff_clr[north_mask]):.2f}",
+    #)
     plot_north_pole_field(
-        diff_cld[north_mask], plot_lon, plot_lat[north_mask],
-        f"NN-RRTM Surface Albedo Kernel (all)\n{date}",
-        figures_path / f"kern_all_nn-rrtm_np_{date}.png",
-        cmap="RdBu_r", vmin=-4, vmax=4, label=r"$W/m^2 1\%$",
-        annotation=f"{np.mean(diff_cld[north_mask]):.2f}",
-    )
-    plot_north_pole_field(
-        diff_clr[north_mask], plot_lon, plot_lat[north_mask],
-        f"NN-RRTM Surface Albedo Kernel (clear)\n{date}",
-        figures_path / f"kern_clr_nn-rrtm_np_{date}.png",
-        cmap="RdBu_r", vmin=-4, vmax=4, label=r"$W/m^2 1\%$",
-        annotation=f"{np.mean(diff_clr[north_mask]):.2f}",
-    )
-    plot_north_pole_field(
-        diff_grad_cld[grad_north_mask], plot_grad_lon, plot_grad_lat[grad_north_mask],
+        diff_grad_cld, plot_grad_lon, plot_grad_lat,
         f"NN autograd-RRTM Surface Albedo Kernel (all)\n{date}",
         figures_path / f"kern_all_nn_grad-rrtm_np_{date}.png",
-        cmap="RdBu_r", vmin=-4, vmax=4, label=r"$W/m^2 1\%$",
-        annotation=f"{np.mean(diff_grad_cld[grad_north_mask]):.2f}",
+        cmap="RdBu_r", vmin=-1, vmax=1, label=r"$W/m^2 1\%$",
+        annotation=f"{np.mean(diff_grad_cld[grad_north_mask]):.2f}; {np.mean(np.abs(diff_grad_cld[grad_north_mask])):.2f}",
     )
     plot_north_pole_field(
-        diff_grad_clr[grad_north_mask], plot_grad_lon, plot_grad_lat[grad_north_mask],
+        diff_grad_clr, plot_grad_lon, plot_grad_lat,
         f"NN autograd-RRTM Surface Albedo Kernel (clear)\n{date}",
         figures_path / f"kern_clr_nn_grad-rrtm_np_{date}.png",
-        cmap="RdBu_r", vmin=-4, vmax=4, label=r"$W/m^2 1\%$",
-        annotation=f"{np.mean(diff_grad_clr[grad_north_mask]):.2f}",
+        cmap="RdBu_r", vmin=-1, vmax=1, label=r"$W/m^2 1\%$",
+        annotation=f"{np.mean(diff_grad_clr[grad_north_mask]):.2f}; {np.mean(np.abs(diff_grad_clr[grad_north_mask])):.2f}",
     )
+
+
 
 def second_order_test(
     ds: xr.Dataset,
@@ -469,13 +473,11 @@ def second_order_test(
     north_mask = plot_lat >= 60
     grad_north_mask = plot_grad_lat >= 60
     
-    delta_k_diff = (delta_kern_nn - delta_kern_rrtm)[north_mask]
-    delta_k_diff_grad = (delta_kern_nn_grad - delta_kern_rrtm)[grad_north_mask]
-    delta_k_nn = delta_kern_nn[north_mask]
-    delta_k_nn_grad = delta_kern_nn_grad[grad_north_mask]
-    delta_k_rrtm = delta_kern_rrtm[north_mask]
-    plot_lat = plot_lat[north_mask]
-    plot_grad_lat = plot_grad_lat[grad_north_mask]
+    delta_k_diff = (delta_kern_nn - delta_kern_rrtm)
+    delta_k_diff_grad = (delta_kern_nn_grad - delta_kern_rrtm)
+    delta_k_nn = delta_kern_nn
+    delta_k_nn_grad = delta_kern_nn_grad
+    delta_k_rrtm = delta_kern_rrtm
 
     max_abs_diff = np.max(np.abs(delta_k_diff))
 
@@ -483,31 +485,31 @@ def second_order_test(
         delta_k_nn, plot_lon, plot_lat,
         "NN surface albedo kernel difference\n(2013-09 minus 2012-09)",
         figures_path / "delta_k_nn_np.png",
-        vmin=-2, vmax=2,
+        vmin=-1, vmax=1,
     )
     plot_north_pole_field(
         delta_k_nn_grad, plot_grad_lon, plot_grad_lat,
         "NN autograd kernel difference\n(2013-09 minus 2012-09)",
         figures_path / "delta_k_nn_grad_np.png",
-        vmin=-2, vmax=2,
+        vmin=-1, vmax=1,
     )
     plot_north_pole_field(
         delta_k_rrtm, plot_lon, plot_lat,
         "ERA5 surface albedo kernel difference\n(2013-09 minus 2012-09)",
         figures_path / "delta_k_rrtm_np.png",
-        vmin=-2, vmax=2,
+        vmin=-1, vmax=1,
     )
     plot_north_pole_field(
         delta_k_diff, plot_lon, plot_lat,
         r"$K_{NN} - K_{ERA5}$" + "\n2013-09 minus 2012-09",
         figures_path / "delta_k_nn-rrtm_north_pole_2013-09_minus_2012-09.png",
-        vmin=-2, vmax=2,
+        vmin=-1, vmax=1,
     )
     plot_north_pole_field(
         delta_k_diff_grad, plot_grad_lon, plot_grad_lat,
         r"$K_{NN,\mathrm{grad}} - K_{ERA5}$" + "\n2013-09 minus 2012-09",
         figures_path / "delta_k_nn_grad-rrtm_north_pole_2013-09_minus_2012-09.png",
-        vmin=-2, vmax=2,
+        vmin=-1, vmax=1,
     )
 
 
@@ -987,7 +989,7 @@ def main():
         preprocessor=preprocessor,
         model=model,
         true_kernel=kernels_dataset,
-        dates=["2013-09", "2012-09"],
+        dates=["2012-09", "2013-09"],
         figures_path=output_dir,
     )
     #test_4(
