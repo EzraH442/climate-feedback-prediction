@@ -1,0 +1,27 @@
+base: ../../base/model/common.yaml
+
+dataset:
+  months:
+    - 3
+    - 9
+  era5:
+    path: "./data/fal/era5_processed_mar_sep"
+  kernels:
+    input_var: "fal"
+    type: "fal"
+    path: "./data/fal/kernels_processed_mar_sep"
+
+preprocess:
+  name: "2024_preprocessor"
+  params_dir: "preprocess_states/fal/baseline_mar_sep"
+  ecod: True
+
+model:
+  input_dim: 12
+  hidden_dim_sizes:
+    - 11
+
+train:
+  name: "baseline_mar_sep"
+  checkpoint_dir: "./checkpoints/fal/baseline_mar_sep"
+  sobolev: False

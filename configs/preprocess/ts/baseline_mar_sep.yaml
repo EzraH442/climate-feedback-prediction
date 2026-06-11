@@ -1,0 +1,17 @@
+base: ../../base/preprocess/common.yaml
+
+dataset:
+  months:
+    - 3
+    - 9
+  era5:
+    path: "./data/ts/era5_processed_mar_sep"
+  kernels:
+    input_var: "skt"
+    type: "ts"
+    path: "./data/ts/kernels_processed_mar_sep"
+
+preprocess:
+  name: "ts_preprocessor"
+  params_dir: "preprocess_states/ts/baseline_mar_sep"
+  ecod: True

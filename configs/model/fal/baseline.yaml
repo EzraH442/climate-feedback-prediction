@@ -1,0 +1,24 @@
+base: ../../base/model/common.yaml
+
+dataset:
+  era5:
+    path: './data/fal/era5_processed'
+  kernels:
+    input_var: "fal"
+    type: "fal"
+    path: './data/fal/kernels_processed'
+
+preprocess:
+  name: "2024_preprocessor"
+  params_dir: 'preprocess_states/fal/baseline'
+  ecod: True
+
+model:
+  input_dim: 12
+  hidden_dim_sizes:
+    - 11
+
+train:
+  name: "baseline"
+  checkpoint_dir: "./checkpoints/fal/baseline"
+  sobolev: False

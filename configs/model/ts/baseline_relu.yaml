@@ -1,0 +1,14 @@
+base: baseline.yaml
+
+model:
+  activation: "relu"
+
+train:
+  name: "ts_baseline_relu"
+  checkpoint_dir: "./checkpoints/ts/baseline_relu"
+  sobolev: False
+
+preprocess:
+  name: "ts_preprocessor"
+  params_dir: 'preprocess_states/ts/baseline'
+  ecod: True

@@ -1,0 +1,34 @@
+base: ../../base/model/common.yaml
+
+dataset:
+  era5:
+    path: "./data/fal/era5_processed"
+  kernels:
+    input_var: "fal"
+    type: "fal"
+    path: "./data/fal/kernels_processed"
+  train_years:
+    - 2011
+    - 2012
+    - 2013
+    - 2014
+  val_years:
+    - 2015
+  test_years:
+    - 2015
+
+preprocess:
+  name: "2024_preprocessor"
+  params_dir: "preprocess_states/fal/baseline_2011_2014"
+  ecod: True
+
+model:
+  input_dim: 12
+  hidden_dim_sizes:
+    - 11
+
+train:
+  name: "sob_all_2011_2014"
+  checkpoint_dir: "./checkpoints/fal/sob_all_2011_2014"
+  sobolev: "all"
+  sobolev_alpha: 0.5
