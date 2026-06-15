@@ -16,6 +16,18 @@ def build_activation(name: str) -> nn.Module:
     raise ValueError(f"Unsupported activation: {name}")
 
 
+def clear_sky_zero_indices(config) -> list[int]:
+    zero_vars = list(getattr(config.dataset, "clear_sky_zero_vars", []) or [])
+    if not zero_vars:
+        return list(range(1, 8 if config.preprocess.ecod else 6))
+
+    input_vars = list(config.dataset.input_vars)
+    missing = [var for var in zero_vars if var not in input_vars]
+    if missing:
+        raise ValueError(f"clear_sky_zero_vars not in dataset.input_vars: {missing}")
+    return [input_vars.index(var) for var in zero_vars]
+
+
 class SimpleModel(nn.Module):
     def __init__(self, config):
         super(SimpleModel, self).__init__()
@@ -266,7 +278,8 @@ class SimpleModelSobolevTrainer:
             )
             self.scheduler = self._build_scheduler()
 
-        self.sobolev_alpha = config.train.sobolev_alpha
+        self.sobolev_alpha = self.config.train.sobolev_alpha
+        self.clear_sky_zero_indices = clear_sky_zero_indices(self.config)
 
     def _build_scheduler(self):
         scheduler_config = getattr(self.config.optimizer, "scheduler", None)
@@ -491,7 +504,8 @@ class SimpleModelAllSobolevTrainer:
             )
             self.scheduler = self._build_scheduler()
 
-        self.sobolev_alpha = config.train.sobolev_alpha
+        self.sobolev_alpha = self.config.train.sobolev_alpha
+        self.clear_sky_zero_indices = clear_sky_zero_indices(self.config)
 
     def _build_scheduler(self):
         scheduler_config = getattr(self.config.optimizer, "scheduler", None)
@@ -541,8 +555,6 @@ class SimpleModelAllSobolevTrainer:
         train_loader: torch.utils.data.DataLoader,
         val_loader: torch.utils.data.DataLoader,
     ):
-        clr_sky_len = 7 if self.config.preprocess.ecod else 5
-        
         for epoch in range(self.epoch, self.config.train.epochs):
             epoch_start_time = time.perf_counter()
             print(f"Epoch {epoch} started at {time.strftime('%Y-%m-%d %H:%M:%S')}")
@@ -557,7 +569,7 @@ class SimpleModelAllSobolevTrainer:
                 x, y = x.to(self.device), y.to(self.device)
 
                 x_clr = x.clone()
-                x_clr[..., 1:1+clr_sky_len] = 0
+                x_clr[..., self.clear_sky_zero_indices] = 0
                 
                 x.requires_grad_(True)
                 x_clr.requires_grad_(True)
@@ -616,7 +628,7 @@ class SimpleModelAllSobolevTrainer:
                 x_val, y_val = x_val.to(self.device), y_val.to(self.device)
 
                 x_val_clr = x_val.clone()
-                x_val_clr[..., 1:1+clr_sky_len] = 0
+                x_val_clr[..., self.clear_sky_zero_indices] = 0
 
                 x_val.requires_grad_(True)
                 x_val_clr.requires_grad_(True)

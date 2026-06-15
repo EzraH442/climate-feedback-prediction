@@ -11,6 +11,12 @@ dataset:
     - tclw
     - tcwv
     - tisr
+  clear_sky_zero_vars:
+    - hcc
+    - mcc
+    - lcc
+    - tciw
+    - tclw
   era5:
     path: "./data/fal/era5_processed_no_ecod"
   kernels:
