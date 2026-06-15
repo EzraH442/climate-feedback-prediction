@@ -1,9 +1,20 @@
 base: ../../base/model/common.yaml
 
 dataset:
+  input_vars:
+    - fal
+    - hcc
+    - mcc
+    - lcc
+    - sp
+    - tciw
+    - tclw
+    - tcwv
+    - tisr
   era5:
     path: "./data/fal/era5_processed_no_ecod"
   kernels:
+    raw_path: "./data/fal/kernels"
     path: "./data/fal/kernels_processed_no_ecod"
 
 preprocess:
@@ -11,7 +22,7 @@ preprocess:
   ecod: False
 
 model:
-  input_dim: 10
+  input_dim: 9
   hidden_dim_sizes:
     - 11
 

@@ -1,9 +1,22 @@
 base: ../../../base/model/common.yaml
 
 dataset:
+  input_vars:
+    - fal
+    - hcc
+    - mcc
+    - lcc
+    - sp
+    - tciw
+    - tclw
+    - tcwv
+    - tisr
+    - ecod
+    - ecod_fal
   era5:
     path: './data/fal/era5_processed'
   kernels:
+    raw_path: "./data/fal/kernels"
     path: './data/fal/kernels_processed'
   train_years:
     - 2011
@@ -20,7 +33,7 @@ preprocess:
   ecod: True
 
 model:
-  input_dim: 12
+  input_dim: 11
   hidden_dim_sizes:
     - 11
     - 11

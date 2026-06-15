@@ -1,12 +1,26 @@
 base: ../../base/preprocess/common.yaml
 
 dataset:
+  input_vars:
+    - skt
+    - hcc
+    - mcc
+    - lcc
+    - sp
+    - tciw
+    - tclw
+    - tcwv
+    - tisr
+    - ecod
+  input_var: "skt"
+  target_var: "ttr"
   months:
     - 3
     - 9
   era5:
     path: "./data/ts/era5_processed_mar_sep_2011_2014"
   kernels:
+    raw_path: "./data/ts/kernels"
     path: "./data/ts/kernels_processed_mar_sep_2011_2014"
   train_years:
     - 2011

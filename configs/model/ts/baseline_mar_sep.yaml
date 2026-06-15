@@ -1,12 +1,26 @@
 base: ../../base/model/common.yaml
 
 dataset:
+  input_vars:
+    - skt
+    - hcc
+    - mcc
+    - lcc
+    - sp
+    - tciw
+    - tclw
+    - tcwv
+    - tisr
+    - ecod
+  input_var: "skt"
+  target_var: "ttr"
   months:
     - 3
     - 9
   era5:
     path: "./data/ts/era5_processed_mar_sep"
   kernels:
+    raw_path: "./data/ts/kernels"
     path: "./data/ts/kernels_processed_mar_sep"
 
 preprocess:
@@ -14,7 +28,7 @@ preprocess:
   ecod: True
 
 model:
-  input_dim: 11
+  input_dim: 10
   hidden_dim_sizes:
     - 11
 

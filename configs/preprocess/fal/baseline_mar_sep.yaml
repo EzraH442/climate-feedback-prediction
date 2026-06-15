@@ -1,12 +1,25 @@
 base: ../../base/preprocess/common.yaml
 
 dataset:
+  input_vars:
+    - fal
+    - hcc
+    - mcc
+    - lcc
+    - sp
+    - tciw
+    - tclw
+    - tcwv
+    - tisr
+    - ecod
+    - ecod_fal
   months:
     - 3
     - 9
   era5:
     path: "./data/fal/era5_processed_mar_sep"
   kernels:
+    raw_path: "./data/fal/kernels"
     path: "./data/fal/kernels_processed_mar_sep"
 
 preprocess:
