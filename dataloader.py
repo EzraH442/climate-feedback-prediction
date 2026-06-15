@@ -26,15 +26,20 @@ def area_weights_from_latitudes(
     return torch.as_tensor(sample_weights, dtype=torch.double)
 
 
-def ordered_vars(dataset: xr.Dataset, target_var: str, ecod=True) -> list[str]:
+def ordered_vars(dataset: xr.Dataset, target_var: str, ecod=True, input_var="fal", input_vars=None) -> list[str]:
+    if input_vars:
+        result = list(dict.fromkeys([*input_vars, target_var]))
+        assert set(result) == set(dataset.data_vars), f"ordered_vars is missing or adding vars: {set(result).symmetric_difference(set(dataset.data_vars))}"
+        return result
+
     clear_sky_vars = ["hcc", "mcc", "lcc", "tciw", "tclw"]
     if ecod:
         clear_sky_vars += ["ecod", "ecod_fal"]
 
     clear_sky_vars_set = set(clear_sky_vars)
 
-    other_vars = [v for v in dataset.data_vars if ((v != target_var) and (v != 'fal') and (v not in clear_sky_vars_set))]
-    result = ["fal"] + clear_sky_vars + other_vars + [target_var]
+    other_vars = [v for v in dataset.data_vars if ((v != target_var) and (v != input_var) and (v not in clear_sky_vars_set))]
+    result = [input_var] + clear_sky_vars + other_vars + [target_var]
     assert set(result) == set(dataset.data_vars), f"ordered_vars is missing or adding vars: {set(result).symmetric_difference(set(dataset.data_vars))}"
     return result
 
@@ -44,7 +49,7 @@ class ClimateTorchDataset(torch.utils.data.Dataset):
         self,
         config_path="configs/model/baseline.yaml",
         data_type="train",
-        target_var="tsr",
+        target_var=None,
     ):
         """
         Args:
@@ -52,6 +57,9 @@ class ClimateTorchDataset(torch.utils.data.Dataset):
             data_type (str): Type of data to load ("train" or "val")
         """
         conf = load_config(config_path)
+        target_var = target_var or getattr(conf.dataset, "target_var", "tsr")
+        input_var = getattr(conf.dataset, "input_var", "fal")
+        input_vars = list(getattr(conf.dataset, "input_vars", []) or [])
         model_name = conf.train.name
         years = (
             conf.dataset.train_years if data_type == "train" else conf.dataset.val_years
@@ -68,7 +76,7 @@ class ClimateTorchDataset(torch.utils.data.Dataset):
             era5_paths, combine="nested", concat_dim="date"
         )
         self.dataset_era5 = filter_by_months(self.dataset_era5, months)
-        all_vars = ordered_vars(self.dataset_era5, target_var, ecod=conf.preprocess.ecod)
+        all_vars = ordered_vars(self.dataset_era5, target_var, ecod=conf.preprocess.ecod, input_var=input_var, input_vars=input_vars)
         self.n_dates = len(self.dataset_era5.date)
         self.n_lat = len(self.dataset_era5.latitude)
         self.n_lon = len(self.dataset_era5.longitude)
@@ -157,7 +165,7 @@ class KernelDataset(torch.utils.data.Dataset):
         self,
         config_path="configs/model/baseline.yaml",
         data_type="train",
-        target_var="tsr",
+        target_var=None,
     ):
         """
         Args:
@@ -165,6 +173,9 @@ class KernelDataset(torch.utils.data.Dataset):
             data_type (str): Type of data to load ("train" or "val")
         """
         conf = load_config(config_path)
+        target_var = target_var or getattr(conf.dataset, "target_var", "tsr")
+        input_var = getattr(conf.dataset, "input_var", "fal")
+        input_vars = list(getattr(conf.dataset, "input_vars", []) or [])
         model_name = conf.train.name
         years = (
             conf.dataset.train_years if data_type == "train" else conf.dataset.val_years
@@ -192,7 +203,7 @@ class KernelDataset(torch.utils.data.Dataset):
         dataset_kernels = filter_by_months(dataset_kernels, months)
 
         # --- dimension setup ---
-        all_vars = ordered_vars(dataset_era5, target_var, ecod=conf.preprocess.ecod)
+        all_vars = ordered_vars(dataset_era5, target_var, ecod=conf.preprocess.ecod, input_var=input_var, input_vars=input_vars)
 
         self.n_dates = len(dataset_era5.date)
         self.n_lat = len(dataset_era5.latitude)

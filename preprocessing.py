@@ -65,6 +65,18 @@ class ECOD_Calculator(Preprocessor):
         return ds
 
 
+class VariableSelector(Preprocessor):
+    def __init__(self, input_vars, target_var):
+        super().__init__()
+        self.vars = list(dict.fromkeys([*input_vars, target_var]))
+
+    def transform(self, ds):
+        missing = [var for var in self.vars if var not in ds.data_vars]
+        if missing:
+            raise ValueError(f"Dataset missing variables for model input: {missing}")
+        return ds[self.vars]
+
+
 class Downscaler(Preprocessor):
     def __init__(
         self, factor: list[tuple[str, int]] = [("latitude", 4), ("longitude", 4)]
@@ -221,11 +233,18 @@ class SequentialPreprocessor(Preprocessor):
             preprocessor.load(Path(path) / f"preprocessor_{i}")
 
 
-def create_2024_preprocessor():
-    return SequentialPreprocessor(
-        preprocessors=[
-            ECOD_Calculator(),
+def create_2024_preprocessor(input_vars=None, target_var="tsr", ecod=True):
+    preprocessors = []
+    if ecod:
+        preprocessors.append(ECOD_Calculator())
+    if input_vars is not None:
+        preprocessors.append(VariableSelector(input_vars, target_var))
+    preprocessors.extend(
+        [
             Downscaler(factor=[("latitude", 4), ("longitude", 4)]),
             XarrayMinMaxScaler(dim=("date", "latitude", "longitude")),
         ]
+    )
+    return SequentialPreprocessor(
+        preprocessors=preprocessors
     )

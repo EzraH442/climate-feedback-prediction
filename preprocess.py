@@ -1,20 +1,11 @@
-import os
 from pathlib import Path
 
-from preprocessing import create_2024_preprocessor, Downscaler, XarrayMinMaxScaler,SequentialPreprocessor
+from preprocessing import create_2024_preprocessor
 import xarray as xr
 import argparse
 
 from config_utils import load_config
 from utils import filter_by_months
-
-def create_2024_preprocessor_no_ecod():
-    return SequentialPreprocessor(
-        preprocessors=[
-            Downscaler(factor=[("latitude", 4), ("longitude", 4)]),
-            XarrayMinMaxScaler(dim=("date", "latitude", "longitude")),
-        ]
-    )
 
 
 def make_era5_filename(year):
@@ -46,6 +37,9 @@ def interpolate_kernel_dataset(
 def preprocess(config_path):
     conf = load_config(config_path)
     months = list(getattr(conf.dataset, "months", []) or [])
+    input_var = getattr(conf.dataset, "input_var", "fal")
+    target_var = getattr(conf.dataset, "target_var", "tsr")
+    input_vars = list(getattr(conf.dataset, "input_vars", []) or [])
 
     # --- make paths ---
     train_paths = [
@@ -97,28 +91,23 @@ def preprocess(config_path):
     kern_data = filter_by_months(kern_data, months)
 
     # --- preprocess era5 data ---
-    preprocessor = create_2024_preprocessor()
-    #preprocessor = create_2024_preprocessor_no_ecod()
+    preprocessor = create_2024_preprocessor(
+        input_vars=input_vars,
+        target_var=target_var,
+        ecod=conf.preprocess.ecod,
+    )
     print("Fitting preprocessor on training data...")
     preprocessor.fit(train_data)
 
     print("Saving preprocessor state...")
     preprocessor.save(conf.preprocess.params_dir)
-     #--- transform --- (ONLY FOR RESCUING OLD PREPROCESS STATE)
-    #preprocessor = create_2024_preprocessor()
-    #preprocessor.load(conf.preprocess.params_dir)
-    #print(preprocessor.preprocessors[2].data_min_)
-    #print(preprocessor.preprocessors[2].data_max_)
-
     
     print("Transforming training and validation data...")
     train_preprocessed = preprocessor.transform(train_data)
     val_preprocessed = preprocessor.transform(val_data)
 
-    if not os.path.exists(conf.dataset.era5.path):
-        os.makedirs(conf.dataset.era5.path)
-    if not os.path.exists(conf.dataset.kernels.path):
-        os.makedirs(conf.dataset.kernels.path)
+    Path(conf.dataset.era5.path).mkdir(parents=True, exist_ok=True)
+    Path(conf.dataset.kernels.path).mkdir(parents=True, exist_ok=True)
 
     for year in conf.dataset.train_years:
         path = f"{conf.dataset.era5.path}/era5_single_levels_monthly_{year}.nc"
@@ -142,10 +131,10 @@ def preprocess(config_path):
         target_latitude=target_latitude,
         target_longitude=target_longitude,
     )
-    fal_range = float(data_max["fal"] - data_min["fal"])
-    tsr_range = float(data_max["tsr"] - data_min["tsr"])
-    processed_kernel["TOA_clr"] = processed_kernel["TOA_clr"] * (fal_range / tsr_range) * (3600 * 24)
-    processed_kernel["TOA_cld"] = processed_kernel["TOA_cld"] * (fal_range / tsr_range) * (3600 * 24)
+    input_range = float(data_max[input_var] - data_min[input_var])
+    target_range = float(data_max[target_var] - data_min[target_var])
+    processed_kernel["TOA_clr"] = processed_kernel["TOA_clr"] * (input_range / target_range) * (3600 * 24)
+    processed_kernel["TOA_cld"] = processed_kernel["TOA_cld"] * (input_range / target_range) * (3600 * 24)
 
     for year in all_kern_years:
         output_kernel_path = Path(conf.dataset.kernels.path) / make_kernel_filename(
