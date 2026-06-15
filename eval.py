@@ -479,35 +479,35 @@ def second_order_test(
 
     max_abs_diff = np.max(np.abs(delta_k_diff))
 
-    plot_north_pole_field(
-        delta_k_nn, plot_lon, plot_lat,
-        "NN surface albedo kernel difference\n(2013-09 minus 2012-09)",
-        figures_path / "delta_k_nn_np.png",
-        vmin=-1, vmax=1,
-    )
+    #plot_north_pole_field(
+    #    delta_k_nn, plot_lon, plot_lat,
+    #    "NN surface albedo kernel difference\n"+f"({dates[1]} minus f{dates[0]})",
+    #    figures_path / "delta_k_nn_np.png",
+    #    vmin=-1, vmax=1,
+    #)
     plot_north_pole_field(
         delta_k_nn_grad, plot_grad_lon, plot_grad_lat,
-        "NN autograd kernel difference\n(2013-09 minus 2012-09)",
+        "NN autograd kernel difference\n"+f"({dates[1]} minus {dates[0]})",
         figures_path / "delta_k_nn_grad_np.png",
         vmin=-1, vmax=1,
     )
     plot_north_pole_field(
         delta_k_rrtm, plot_lon, plot_lat,
-        "ERA5 surface albedo kernel difference\n(2013-09 minus 2012-09)",
+        "ERA5 surface albedo kernel difference\n"+f"({dates[1]} minus {dates[0]})",
         figures_path / "delta_k_rrtm_np.png",
         vmin=-1, vmax=1,
     )
-    plot_north_pole_field(
-        delta_k_diff, plot_lon, plot_lat,
-        r"$K_{NN} - K_{ERA5}$" + "\n2013-09 minus 2012-09",
-        figures_path / "delta_k_nn-rrtm_north_pole_2013-09_minus_2012-09.png",
-        vmin=-1, vmax=1,
-    )
+    #plot_north_pole_field(
+    #    delta_k_diff, plot_lon, plot_lat,
+    #    r"$K_{NN} - K_{ERA5}$" + "\n"+f"({dates[1]} minus f{dates[0]})",
+    #    figures_path / "delta_k_nn-rrtm_north_pole_2013-09_minus_2012-09.png",
+    #    vmin=-1, vmax=1,
+    #)
     plot_north_pole_field(
         delta_k_diff_grad, plot_grad_lon, plot_grad_lat,
-        r"$K_{NN,\mathrm{grad}} - K_{ERA5}$" + "\n2013-09 minus 2012-09",
-        figures_path / "delta_k_nn_grad-rrtm_north_pole_2013-09_minus_2012-09.png",
-        vmin=-1, vmax=1,
+        r"$K_{NN,\mathrm{grad}} - K_{ERA5}$" + "\n" + f"({dates[1]} minus {dates[0]})",
+        figures_path / "delta_k_nn_grad-rrtm_north_pole.png",
+        vmin=-1, vmax=1, annotation=f"{np.mean(delta_k_diff_grad[grad_north_mask]):.2f}; {np.mean(np.abs(delta_k_diff_grad[grad_north_mask])):.2f}"
     )
 
 
