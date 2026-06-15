@@ -9,6 +9,5 @@ train:
   sobolev: False
 
 preprocess:
-  name: "ts_preprocessor"
   params_dir: 'preprocess_states/ts/baseline'
   ecod: True

@@ -7,12 +7,9 @@ dataset:
   era5:
     path: "./data/fal/era5_processed_mar_sep"
   kernels:
-    input_var: "fal"
-    type: "fal"
     path: "./data/fal/kernels_processed_mar_sep"
 
 preprocess:
-  name: "2024_preprocessor"
   params_dir: "preprocess_states/fal/baseline_mar_sep"
   ecod: True
 

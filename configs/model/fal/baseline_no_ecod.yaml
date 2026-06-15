@@ -4,12 +4,9 @@ dataset:
   era5:
     path: "./data/fal/era5_processed_no_ecod"
   kernels:
-    input_var: "fal"
-    type: "fal"
     path: "./data/fal/kernels_processed_no_ecod"
 
 preprocess:
-  name: "2024_preprocessor_no_ecod"
   params_dir: 'preprocess_states/fal/baseline_no_ecod'
   ecod: False
 

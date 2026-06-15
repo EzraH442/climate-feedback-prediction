@@ -4,12 +4,9 @@ dataset:
   era5:
     path: './data/ts/era5_processed'
   kernels:
-    input_var: "skt"
-    type: "ts"
     path: './data/ts/kernels_processed'
 
 preprocess:
-  name: "ts_preprocessor"
   params_dir: 'preprocess_states/ts/baseline'
   ecod: True
 

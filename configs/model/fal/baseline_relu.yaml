@@ -9,6 +9,5 @@ train:
   sobolev: False
 
 preprocess:
-  name: "2024_preprocessor"
   params_dir: 'preprocess_states/fal/baseline'
   ecod: True

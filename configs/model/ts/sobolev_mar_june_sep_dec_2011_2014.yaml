@@ -1,0 +1,36 @@
+base: ../../base/model/common.yaml
+
+dataset:
+  months:
+    - 3
+    - 6
+    - 9
+    - 12
+  era5:
+    path: "./data/ts/era5_processed_mar_june_sep_dec_2011_2014"
+  kernels:
+    path: "./data/ts/kernels_processed_mar_june_sep_dec_2011_2014"
+  train_years:
+    - 2011
+    - 2012
+    - 2013
+    - 2014
+  val_years:
+    - 2015
+  test_years:
+    - 2015
+
+preprocess:
+  params_dir: "preprocess_states/ts/baseline_mar_june_sep_dec_2011_2014"
+  ecod: True
+
+model:
+  input_dim: 11
+  hidden_dim_sizes:
+    - 11
+
+train:
+  name: "ts_sob_cld_mar_june_sep_dec_2011_2014"
+  checkpoint_dir: "./checkpoints/ts/sob_cld_mar_june_sep_dec_2011_2014"
+  sobolev: "cld"
+  sobolev_alpha: 0.5

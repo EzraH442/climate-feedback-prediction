@@ -4,8 +4,6 @@ dataset:
   era5:
     path: './data/fal/era5_processed'
   kernels:
-    input_var: "fal"
-    type: "fal"
     path: './data/fal/kernels_processed'
   train_years:
     - 2011
@@ -18,7 +16,6 @@ dataset:
     - 2015
     
 preprocess:
-  name: "2024_preprocessor"
   params_dir: "preprocess_states/fal/baseline_2011_2014"
   ecod: True
 
