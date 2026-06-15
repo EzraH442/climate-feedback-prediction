@@ -104,7 +104,13 @@ def preprocess(config_path):
 
     print("Saving preprocessor state...")
     preprocessor.save(conf.preprocess.params_dir)
+     #--- transform --- (ONLY FOR RESCUING OLD PREPROCESS STATE)
+    #preprocessor = create_2024_preprocessor()
+    #preprocessor.load(conf.preprocess.params_dir)
+    #print(preprocessor.preprocessors[2].data_min_)
+    #print(preprocessor.preprocessors[2].data_max_)
 
+    
     print("Transforming training and validation data...")
     train_preprocessed = preprocessor.transform(train_data)
     val_preprocessed = preprocessor.transform(val_data)
@@ -136,11 +142,10 @@ def preprocess(config_path):
         target_latitude=target_latitude,
         target_longitude=target_longitude,
     )
-    
     fal_range = float(data_max["fal"] - data_min["fal"])
     tsr_range = float(data_max["tsr"] - data_min["tsr"])
-    processed_kernel["TOA_clr"] = processed_kernel["TOA_clr"] * (fal_range / tsr_range)
-    processed_kernel["TOA_cld"] = processed_kernel["TOA_cld"] * (fal_range / tsr_range)
+    processed_kernel["TOA_clr"] = processed_kernel["TOA_clr"] * (fal_range / tsr_range) * (3600 * 24)
+    processed_kernel["TOA_cld"] = processed_kernel["TOA_cld"] * (fal_range / tsr_range) * (3600 * 24)
 
     for year in all_kern_years:
         output_kernel_path = Path(conf.dataset.kernels.path) / make_kernel_filename(
