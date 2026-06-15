@@ -1,0 +1,14 @@
+base: ../base/preprocess/common.yaml
+
+dataset:
+  months:
+    - 3
+    - 9
+  era5:
+    path: "./data/era5_old_processed_mar_sep"
+  kernels:
+    path: "./data/kernels_old_processed_mar_sep"
+
+preprocess:
+  params_dir: "preprocess_states/old_mar_sep"
+  ecod: True
