@@ -122,7 +122,22 @@ class Downscaler(Preprocessor):
         self.original_dims_sizes = data["original_dims_sizes"]
         self.factor = data["factor"]
 
+class Identity(Preprocessor):
+    def __init__(self):
+        super().__init__()
 
+    def transform(self, ds: xr.Dataset):
+        return ds
+
+    def inverse_transform(self, ds):
+        return ds
+
+    def save(self, path):
+        pass
+
+    def load(self, path):
+        pass
+        
 class XarrayMinMaxScaler(Preprocessor):
     def __init__(self, dim, min_val=-1, max_val=1):
         self.dim = dim
@@ -247,4 +262,13 @@ def create_2024_preprocessor(input_vars=None, target_var="tsr", ecod=True):
     )
     return SequentialPreprocessor(
         preprocessors=preprocessors
+    )
+
+def create_2024_preprocessor_no_downscaling():
+    return SequentialPreprocessor(
+        preprocessors=[
+            ECOD_Calculator(),
+            Identity(),
+            XarrayMinMaxScaler(dim=("date", "latitude", "longitude")),
+        ]
     )
