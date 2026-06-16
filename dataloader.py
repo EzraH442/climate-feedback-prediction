@@ -5,7 +5,12 @@ import torch
 import xarray as xr
 
 from config_utils import load_config
-from utils import filter_by_months, make_kernel_filename, make_era5_filename
+from utils import (
+    filter_by_months,
+    make_kernel_filename,
+    make_era5_filename,
+    ordered_vars,
+)
 
 
 def make_mmap_stem(model_name: str, data_type: str, suffix: str) -> str:
@@ -24,24 +29,6 @@ def area_weights_from_latitudes(
         (n_dates, len(latitudes_deg), n_lon),
     ).reshape(-1)
     return torch.as_tensor(sample_weights, dtype=torch.double)
-
-
-def ordered_vars(dataset: xr.Dataset, target_var: str, ecod=True, input_var="fal", input_vars=None) -> list[str]:
-    if input_vars:
-        result = list(dict.fromkeys([*input_vars, target_var]))
-        assert set(result) == set(dataset.data_vars), f"ordered_vars is missing or adding vars: {set(result).symmetric_difference(set(dataset.data_vars))}"
-        return result
-
-    clear_sky_vars = ["hcc", "mcc", "lcc", "tciw", "tclw"]
-    if ecod:
-        clear_sky_vars += ["ecod", "ecod_fal"]
-
-    clear_sky_vars_set = set(clear_sky_vars)
-
-    other_vars = [v for v in dataset.data_vars if ((v != target_var) and (v != input_var) and (v not in clear_sky_vars_set))]
-    result = [input_var] + clear_sky_vars + other_vars + [target_var]
-    assert set(result) == set(dataset.data_vars), f"ordered_vars is missing or adding vars: {set(result).symmetric_difference(set(dataset.data_vars))}"
-    return result
 
 
 class ClimateTorchDataset(torch.utils.data.Dataset):

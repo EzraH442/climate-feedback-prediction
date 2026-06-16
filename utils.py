@@ -14,6 +14,11 @@ from preprocessing import (
 from model import SimpleModel
 import glob
 
+import torch
+
+
+SECONDS_PER_DAY = 3600 * 24
+
 
 def make_era5_filename(year):
     return f"era5_single_levels_monthly_{year}.nc"
@@ -172,23 +177,49 @@ def interpolate_spatial_field(
 
 # ── Dataset construction & ordering ──────────────────────────────────────────
 
-def dataset_from_array(arr, date, lon, lat) -> xr.Dataset:
+def target_var_from_config(config) -> str:
+    return getattr(config.dataset, "target_var", None) or "tsr"
+
+
+def input_var_from_config(config) -> str:
+    return getattr(config.dataset, "input_var", None) or "fal"
+
+
+def input_vars_from_config(config) -> list[str]:
+    return list(getattr(config.dataset, "input_vars", []) or [])
+
+
+def dataset_from_array(arr, date, lon, lat, target_var: str = "tsr") -> xr.Dataset:
     return xr.Dataset(
-        data_vars={"tsr": (("date", "latitude", "longitude"), arr)},
+        data_vars={target_var: (("date", "latitude", "longitude"), arr)},
         coords={"date": date, "longitude": lon, "latitude": lat},
     )
 
 
-def ordered_vars(dataset: xr.Dataset, target_var: str, ecod: bool = True) -> list[str]:
+def ordered_vars(
+    dataset: xr.Dataset,
+    target_var: str,
+    ecod: bool = True,
+    input_var: str = "fal",
+    input_vars: list[str] | None = None,
+) -> list[str]:
+    if input_vars:
+        result = list(dict.fromkeys([*input_vars, target_var]))
+        assert set(result) == set(dataset.data_vars), (
+            f"ordered_vars is missing or adding vars: "
+            f"{set(result).symmetric_difference(set(dataset.data_vars))}"
+        )
+        return result
+
     clear_sky_vars = ["hcc", "mcc", "lcc", "tciw", "tclw"]
     if ecod:
         clear_sky_vars += ["ecod", "ecod_fal"]
     clear_sky_vars_set = set(clear_sky_vars)
     other_vars = [
         v for v in dataset.data_vars
-        if v != target_var and v != "fal" and v not in clear_sky_vars_set
+        if v != target_var and v != input_var and v not in clear_sky_vars_set
     ]
-    result = ["fal"] + clear_sky_vars + other_vars + [target_var]
+    result = [input_var] + clear_sky_vars + other_vars + [target_var]
     assert set(result) == set(dataset.data_vars), (
         f"ordered_vars is missing or adding vars: "
         f"{set(result).symmetric_difference(set(dataset.data_vars))}"
@@ -196,8 +227,157 @@ def ordered_vars(dataset: xr.Dataset, target_var: str, ecod: bool = True) -> lis
     return result
 
 
-def ordered_dataset(ds: xr.Dataset, target_var: str = "tsr", ecod: bool = True) -> xr.Dataset:
-    return ds[ordered_vars(ds, target_var, ecod)]
+def ordered_dataset(
+    ds: xr.Dataset,
+    target_var: str = "tsr",
+    ecod: bool = True,
+    input_var: str = "fal",
+    input_vars: list[str] | None = None,
+) -> xr.Dataset:
+    return ds[ordered_vars(ds, target_var, ecod, input_var, input_vars)]
+
+
+def ordered_dataset_for_config(ds: xr.Dataset, config) -> xr.Dataset:
+    return ordered_dataset(
+        ds,
+        target_var=target_var_from_config(config),
+        ecod=getattr(config.preprocess, "ecod", True),
+        input_var=input_var_from_config(config),
+        input_vars=input_vars_from_config(config),
+    )
+
+
+def kernel_delta(config) -> float:
+    return 0.01 if input_var_from_config(config) == "fal" else 1.0
+
+
+def kernel_title(config) -> str:
+    return (
+        "Surface Albedo"
+        if input_var_from_config(config) == "fal"
+        else "Surface Temperature"
+    )
+
+
+def kernel_label(config) -> str:
+    return (
+        r"$W/m^2 1\%$"
+        if input_var_from_config(config) == "fal"
+        else r"$W/m^2 K^{-1}$"
+    )
+
+
+def clear_sky_raw(ds: xr.Dataset, config) -> xr.Dataset:
+    ds_clr = ds.copy(deep=True)
+    zero_vars = set(getattr(config.dataset, "clear_sky_zero_vars", []) or [])
+    zero_vars.update(["hcc", "mcc", "lcc", "tcc", "tciw", "tclw"])
+    for name in zero_vars.intersection(ds_clr.data_vars):
+        ds_clr[name][:] = 0
+    return ds_clr
+
+
+def scale_minmax_value(scaler: XarrayMinMaxScaler, name: str, values):
+    denom = scaler.data_max_[name] - scaler.data_min_[name]
+    denom = denom.where(denom != 0, 1.0)
+    return (
+        (values - float(scaler.data_min_[name])) / float(denom)
+    ) * (scaler.max_val - scaler.min_val) + scaler.min_val
+
+
+def compute_nn_kernel(
+    ds: xr.Dataset,
+    preprocessor: Preprocessor,
+    model: SimpleModel,
+    config,
+):
+    input_var = input_var_from_config(config)
+    target = target_var_from_config(config)
+    ds_perturbed = ds.copy(deep=True)
+    ds_perturbed[input_var] = ds[input_var] + kernel_delta(config)
+
+    processed_ds = preprocessor.transform(ds)
+    processed_ds_perturbed = preprocessor.transform(ds_perturbed)
+    date = processed_ds.date
+    lon = processed_ds.longitude
+    lat = processed_ds.latitude
+
+    def _run_model(dataset):
+        data = torch.from_numpy(
+            ordered_dataset_for_config(dataset, config)
+            .to_dataarray()
+            .transpose("date", "latitude", "longitude", "variable")
+            .to_numpy()
+        ).float()
+        return model(data[..., : model.input_dim]).detach()
+
+    def _invert(output):
+        return (
+            preprocessor.preprocessors[-1]
+            .inverse_transform(
+                dataset_from_array(
+                    arr=output.numpy(),
+                    date=date,
+                    lon=lon,
+                    lat=lat,
+                    target_var=target,
+                )
+            )
+            .to_dataarray()
+            .squeeze(dim=["variable", "date"])
+            .to_numpy()
+            / SECONDS_PER_DAY
+        )
+
+    return (
+        _invert(_run_model(processed_ds_perturbed)) - _invert(_run_model(processed_ds)),
+        lon,
+        lat,
+    )
+
+
+def compute_nn_kernel_autograd(
+    ds: xr.Dataset,
+    preprocessor: Preprocessor,
+    model: SimpleModel,
+    config,
+):
+    assert isinstance(preprocessor, SequentialPreprocessor)
+    scaler = preprocessor.preprocessors[-1]
+    assert isinstance(scaler, XarrayMinMaxScaler)
+
+    processed_ds = preprocessor.transform(ds)
+    lon = processed_ds.longitude
+    lat = processed_ds.latitude
+
+    target = target_var_from_config(config)
+    input_var = input_var_from_config(config)
+
+    ordered = ordered_dataset_for_config(processed_ds, config)
+    feature_names = [v for v in ordered.data_vars if v != target]
+    input_idx = feature_names.index(input_var)
+
+    data = torch.from_numpy(
+        ordered.to_dataarray()
+        .transpose("date", "latitude", "longitude", "variable")
+        .to_numpy()
+    ).float()
+    inputs = data[..., : model.input_dim].requires_grad_(True)
+
+    outputs = model(inputs)
+    grads = torch.autograd.grad(
+        outputs=outputs.sum(),
+        inputs=inputs,
+        create_graph=False,
+    )[0][..., input_idx]
+
+    target_range = float(scaler.data_max_[target] - scaler.data_min_[target])
+    input_range = float(scaler.data_max_[input_var] - scaler.data_min_[input_var])
+    print(f"{target.upper()} range", target_range)
+    print(f"{input_var} range", input_range)
+    grad_physical_per_unit = grads.detach().cpu().numpy().squeeze(axis=0) * (
+        target_range / input_range
+    ) / SECONDS_PER_DAY
+    return grad_physical_per_unit * kernel_delta(config), lon, lat
 
 
 def filter_by_years(ds: xr.Dataset, years, time_coord: str = "date") -> xr.Dataset:

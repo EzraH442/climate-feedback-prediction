@@ -5,31 +5,31 @@ import matplotlib.pyplot as plt
 import numpy as np
 import torch
 import xarray as xr
-from omegaconf import OmegaConf
-from scipy.stats import linregress, rankdata
+from scipy.stats import linregress
 
 from config_utils import load_config
-from dataloader import make_era5_filename
 from preprocessing import (
     Preprocessor,
     SequentialPreprocessor,
     XarrayMinMaxScaler,
-    XarrayStandardScaler,
     create_2024_preprocessor,
 )
 
 from utils import (
-    setup_global_map, setup_north_pole_map, plot_colormesh_on_map,
     plot_global_field, plot_north_pole_field,
-    load_rrtm_kernel, interpolate_spatial_field,
-    dataset_from_array, ordered_vars, ordered_dataset, filter_by_years,
+    interpolate_spatial_field,
+    dataset_from_array, ordered_dataset,
     preprocessed_feature_target_arrays, empirical_copula_values,
-    unpreprocess_feature_values, inverse_transform_without_upsampling, make_kernel_filename
+    unpreprocess_feature_values, inverse_transform_without_upsampling, make_kernel_filename,
+    make_era5_filename,
+    SECONDS_PER_DAY, target_var_from_config, input_var_from_config,
+    input_vars_from_config, ordered_dataset_for_config, kernel_delta,
+    kernel_title, kernel_label, clear_sky_raw, scale_minmax_value,
+    compute_nn_kernel, compute_nn_kernel_autograd,
 )
 
 from model import SimpleModel
 
-from mpl_toolkits.basemap import Basemap
 
 def setup_correlation_plot():
     fig, ax = plt.subplots(figsize=(6, 6), dpi=300)
@@ -48,6 +48,7 @@ def global_tsr_test(
     ds: xr.Dataset,
     preprocessor: Preprocessor,
     model: torch.nn.Module,
+    config,
     figures_path: Path = Path("."),
 ):
     assert isinstance(preprocessor, SequentialPreprocessor)
@@ -61,8 +62,11 @@ def global_tsr_test(
     lat = ds.latitude.values
     lon = ds.longitude.values
 
+    target = target_var_from_config(config)
+    target_label = target.upper()
+
     ds_ordered_np = (
-        ordered_dataset(ds, 'tsr')
+        ordered_dataset_for_config(ds, config)
         .to_dataarray()
         .transpose("date", "latitude", "longitude", "variable")
         .to_numpy()
@@ -74,15 +78,17 @@ def global_tsr_test(
     pred = (
         preprocessor.preprocessors[-1]
         .inverse_transform(
-            dataset_from_array(arr=model_outputs.numpy(), date=date, lon=lon, lat=lat),
+            dataset_from_array(
+                arr=model_outputs.numpy(), date=date, lon=lon, lat=lat, target_var=target
+            ),
         )
         .to_dataarray()
         .squeeze(dim="variable", drop=True)
     )
-    true = preprocessor.preprocessors[-1].inverse_transform(ds)["tsr"]
+    true = preprocessor.preprocessors[-1].inverse_transform(ds)[target]
 
-    tsr_true = true.to_numpy() / (3600 * 24)
-    tsr_pred = pred.to_numpy() / (3600 * 24)
+    tsr_true = true.to_numpy() / SECONDS_PER_DAY
+    tsr_pred = pred.to_numpy() / SECONDS_PER_DAY
     diff_full = tsr_pred - tsr_true
 
     tsr_mean = np.mean(tsr_true, axis=0)
@@ -90,6 +96,7 @@ def global_tsr_test(
     mbe_map = np.mean(diff_full, axis=0)
     rmse_map = np.sqrt(np.mean(diff_full**2, axis=0))
 
+    min_tsr = min(np.min(tsr_mean), np.min(tsr_pred_mean))
     max_tsr = max(np.max(tsr_mean), np.max(tsr_pred_mean))
     max_abs_mbe = np.max(np.abs(mbe_map))
     max_rmse = np.max(rmse_map)
@@ -105,22 +112,22 @@ def global_tsr_test(
     print(f"Max RMSE   :  {max_rmse:.4f} W/m²")
 
     plot_global_field(
-        tsr_mean, lon, lat, "TSR (ERA5)", figures_path / "global_tsr_era5.png",
-        cmap="Spectral", vmin=0, vmax=360, label="$W/m^2$",
+        tsr_mean, lon, lat, f"{target_label} (ERA5)", figures_path / f"global_{target}_era5.png",
+        cmap="Spectral", vmin=min_tsr, vmax=max_tsr, label="$W/m^2$",
         annotation=f"{global_tsr_mean:.2f}",
     )
     plot_global_field(
-        tsr_pred_mean, lon, lat, "TSR (NN)", figures_path / "global_tsr_nn.png",
-        cmap="Spectral", vmin=0, vmax=max_tsr, label="$W/m^2$",
+        tsr_pred_mean, lon, lat, f"{target_label} (NN)", figures_path / f"global_{target}_nn.png",
+        cmap="Spectral", vmin=min_tsr, vmax=max_tsr, label="$W/m^2$",
         annotation=f"{global_tsr_pred_mean:.2f}",
     )
     plot_global_field(
-        mbe_map, lon, lat, "MBE", figures_path / "global_tsr_mbe.png",
+        mbe_map, lon, lat, "MBE", figures_path / f"global_{target}_mbe.png",
         cmap="RdBu_r", vmin=-20, vmax=20, label="$W/m^2$",
         annotation=f"{global_mbe:.2f}",
     )
     plot_global_field(
-        rmse_map, lon, lat, "RMSE", figures_path / "global_tsr_rmse.png",
+        rmse_map, lon, lat, "RMSE", figures_path / f"global_{target}_rmse.png",
         cmap="Blues", vmin=0, vmax=20, label="$W/m^2$",
         annotation=f"{global_rmse:.2f}",
     )
@@ -147,106 +154,120 @@ def global_tsr_test(
     # ax.text(0, 370, val_str, fontsize=12)
     # fig.savefig("correlation.png")
 
-def compute_nn_kernel(ds: xr.Dataset, preprocessor: Preprocessor, model: SimpleModel):
-    ds_perturbed = ds.copy(deep=True)
-    ds_perturbed["fal"] = ds["fal"] + 0.01
-    # raw_date_specific_data_perturbed["fal"] = xr.where(
-    #     raw_date_specific_data["fal"] + 0.01 > 1.0,
-    #     1.0,
-    #     raw_date_specific_data["fal"] + 0.01,
-    # )
-
-    processed_ds = preprocessor.transform(ds)
-    processed_ds_perturbed = preprocessor.transform(ds_perturbed)
-    date = processed_ds.date
-    lon = processed_ds.longitude
-    lat = processed_ds.latitude
-
-    def _run_model(dataset):
-        data = torch.from_numpy(
-            ordered_dataset(dataset, "tsr")
-            .to_dataarray()
-            .transpose("date", "latitude", "longitude", "variable")
-            .to_numpy()
-        ).float()
-        return model(data[..., : model.input_dim]).detach()
-
-    def _invert(output):
-        return (
-            preprocessor.preprocessors[-1].inverse_transform(
-                dataset_from_array(arr=output.numpy(), date=date, lon=lon, lat=lat)
-            )
-            .to_dataarray()
-            .squeeze(dim=["variable", "date"])
-            .to_numpy()
-            / (3600 * 24)
-        )
-
-    return _invert(_run_model(processed_ds_perturbed)) - _invert(_run_model(processed_ds)), lon, lat
-
-
-def compute_nn_kernel_autograd(
-    ds: xr.Dataset, preprocessor: Preprocessor, model: SimpleModel
+def kernel_ecod_fal_contour_test(
+    processed_ds: xr.Dataset,
+    preprocessor: Preprocessor,
+    model: SimpleModel,
+    config,
+    figures_path: Path = Path("."),
+    n_fal: int = 100,
+    n_ecod: int = 100,
 ):
     assert isinstance(preprocessor, SequentialPreprocessor)
     scaler = preprocessor.preprocessors[-1]
     assert isinstance(scaler, XarrayMinMaxScaler)
+    if input_var_from_config(config) != "fal":
+        print("Skipping fal/ecod kernel contour; model input variable is not fal.")
+        return
 
-    processed_ds = preprocessor.transform(ds)
-    lon = processed_ds.longitude
-    lat = processed_ds.latitude
+    ordered = ordered_dataset_for_config(processed_ds, config)
+    feature_names = [v for v in ordered.data_vars if v != target_var_from_config(config)]
+    required = {"fal", "ecod"}
+    missing = required.difference(feature_names)
+    if missing:
+        print(f"Skipping fal/ecod kernel contour; missing features: {sorted(missing)}")
+        return
 
-    ordered = ordered_dataset(processed_ds, "tsr")
-    feature_names = [v for v in ordered.data_vars if v != "tsr"]
-    fal_idx = feature_names.index("fal")
+    base_point = ordered.isel(
+        date=0,
+        latitude=len(ordered.latitude) // 2,
+        longitude=len(ordered.longitude) // 2,
+    )
+    base_features = np.array(
+        [float(base_point[name]) for name in feature_names],
+        dtype=np.float32,
+    )
 
-    data = torch.from_numpy(
-        ordered.to_dataarray()
-        .transpose("date", "latitude", "longitude", "variable")
-        .to_numpy()
-    ).float()
-    inputs = data[..., : model.input_dim].requires_grad_(True)
+    fal_values = np.linspace(
+        float(scaler.data_min_["fal"]),
+        float(scaler.data_max_["fal"]),
+        n_fal,
+    )
+    ecod_values = np.linspace(
+        float(scaler.data_min_["ecod"]),
+        float(scaler.data_max_["ecod"]),
+        n_ecod,
+    )
+    fal_grid, ecod_grid = np.meshgrid(fal_values, ecod_values)
 
+    inputs_np = np.broadcast_to(
+        base_features, (n_ecod * n_fal, len(feature_names))
+    ).copy()
+    inputs_np[:, feature_names.index("fal")] = scale_minmax_value(
+        scaler, "fal", fal_grid.ravel()
+    )
+    inputs_np[:, feature_names.index("ecod")] = scale_minmax_value(
+        scaler, "ecod", ecod_grid.ravel()
+    )
+    if "ecod_fal" in feature_names:
+        inputs_np[:, feature_names.index("ecod_fal")] = scale_minmax_value(
+            scaler, "ecod_fal", (ecod_grid * fal_grid).ravel()
+        )
+
+    inputs = torch.from_numpy(inputs_np).float().requires_grad_(True)
     outputs = model(inputs)
-    grads = torch.autograd.grad(
-        outputs=outputs.sum(),
-        inputs=inputs,
-        create_graph=False,
-    )[0][..., fal_idx]
+    grads = torch.autograd.grad(outputs=outputs.sum(), inputs=inputs)[0][
+        :, feature_names.index("fal")
+    ]
 
-    tsr_range = float(scaler.data_max_["tsr"] - scaler.data_min_["tsr"])
+    target = target_var_from_config(config)
+    target_range = float(scaler.data_max_[target] - scaler.data_min_[target])
     fal_range = float(scaler.data_max_["fal"] - scaler.data_min_["fal"])
-    print("TSR range", tsr_range)
-    print('fal range', fal_range)
-    grad_physical_per_unit = grads.detach().cpu().numpy().squeeze(axis=0) * (
-        tsr_range / fal_range
-    ) / (3600 * 24)
-    grad_physical_per_percent = grad_physical_per_unit * 0.01
-    return grad_physical_per_percent, lon, lat
+    kernel = (
+        grads.detach().cpu().numpy() * (target_range / fal_range) / SECONDS_PER_DAY
+    ).reshape(n_ecod, n_fal) * kernel_delta(config)
+
+    fig, ax = plt.subplots(figsize=(7, 5), dpi=300)
+    max_abs = float(np.nanmax(np.abs(kernel)))
+    levels = np.linspace(-max_abs, max_abs, 31) if max_abs > 0 else 31
+    contour = ax.contourf(
+        fal_grid,
+        ecod_grid,
+        kernel,
+        levels=levels,
+        cmap="RdBu_r",
+        extend="both",
+    )
+    ax.set_xlabel("fal")
+    ax.set_ylabel("ecod")
+    ax.set_title("NN surface albedo kernel over fal/ecod")
+    cb = fig.colorbar(contour, ax=ax)
+    cb.set_label(kernel_label(config))
+    fig.tight_layout()
+    fig.savefig(figures_path / "kernel_contour_fal_ecod.png")
+    plt.close(fig)
+
 
 def kernel_date_test(
     ds: xr.Dataset,
     preprocessor: Preprocessor,
     model: SimpleModel,
+    config,
     date,
     true_kernel: xr.Dataset,
     figures_path: Path = Path(".")
 ):
-    ds_clr = ds.copy(deep=True)
-    ds_clr.hcc[:] = 0
-    ds_clr.mcc[:] = 0
-    ds_clr.lcc[:] = 0
-    ds_clr.tcc[:] = 0
-    ds_clr.tciw[:] = 0
-    ds_clr.tclw[:] = 0
+    ds_clr = clear_sky_raw(ds, config)
+    title = kernel_title(config)
+    label = kernel_label(config)
 
-    nn_kern_cld, lon, lat = compute_nn_kernel(ds, preprocessor, model)
-    nn_kern_clr, _, _ = compute_nn_kernel(ds_clr, preprocessor, model)
-    nn_grad_cld, grad_lon, grad_lat = compute_nn_kernel_autograd(ds, preprocessor, model)
-    nn_grad_clr, _, _ = compute_nn_kernel_autograd(ds_clr, preprocessor, model)
+    nn_kern_cld, lon, lat = compute_nn_kernel(ds, preprocessor, model, config)
+    nn_kern_clr, _, _ = compute_nn_kernel(ds_clr, preprocessor, model, config)
+    nn_grad_cld, grad_lon, grad_lat = compute_nn_kernel_autograd(ds, preprocessor, model, config)
+    nn_grad_clr, _, _ = compute_nn_kernel_autograd(ds_clr, preprocessor, model, config)
     
-    rrtm_kern_cld = true_kernel["TOA_cld"].as_numpy()[0] * 0.01
-    rrtm_kern_clr = true_kernel["TOA_clr"].as_numpy()[0] * 0.01
+    rrtm_kern_cld = true_kernel["TOA_cld"].as_numpy()[0] * kernel_delta(config)
+    rrtm_kern_clr = true_kernel["TOA_clr"].as_numpy()[0] * kernel_delta(config)
     kern_lon, kern_lat = true_kernel.longitude, true_kernel.latitude
     # --- clear and all sky plots of nn kernel, global and north pole
     #plot_global_field(
@@ -265,16 +286,16 @@ def kernel_date_test(
     #)
     plot_global_field(
         nn_grad_cld, grad_lon, grad_lat,
-        f"NN Surface Albedo Kernel via autograd (all)\n{date}",
+        f"NN {title} Kernel via autograd (all)\n{date}",
         figures_path / f"kern_all_nn_grad_{date}.png",
-        cmap="RdBu_r", vmin=-4, vmax=4, label=r"$W/m^2 1\%$",
+        cmap="RdBu_r", vmin=-4, vmax=4, label=label,
         annotation=f"{np.mean(nn_grad_cld):.2f}",
     )
     plot_global_field(
         nn_grad_clr, grad_lon, grad_lat,
-        f"NN Surface Albedo Kernel via autograd (clear)\n{date}",
+        f"NN {title} Kernel via autograd (clear)\n{date}",
         figures_path / f"kern_clr_nn_grad_{date}.png",
-        cmap="RdBu_r", vmin=-4, vmax=4, label=r"$W/m^2 1\%$",
+        cmap="RdBu_r", vmin=-4, vmax=4, label=label,
         annotation=f"{np.mean(nn_grad_clr):.2f}",
     )
     north_mask = lat >= 60
@@ -295,46 +316,46 @@ def kernel_date_test(
     grad_north_mask = grad_lat >= 60
     plot_north_pole_field(
         nn_grad_cld, grad_lon, grad_lat,
-        f"NN Surface Albedo Kernel via autograd (all)\n{date}",
+        f"NN {title} Kernel via autograd (all)\n{date}",
         figures_path / f"kern_all_nn_grad_np_{date}.png",
-        cmap="RdBu_r", vmin=-4, vmax=4, label=r"$W/m^2 1\%$",
+        cmap="RdBu_r", vmin=-4, vmax=4, label=label,
         annotation=f"{np.mean(nn_grad_cld[grad_north_mask]):.2f}",
     )
     plot_north_pole_field(
         nn_grad_clr, grad_lon, grad_lat,
-        f"NN Surface Albedo Kernel via autograd (clear)\n{date}",
+        f"NN {title} Kernel via autograd (clear)\n{date}",
         figures_path / f"kern_clr_nn_grad_np_{date}.png",
-        cmap="RdBu_r", vmin=-4, vmax=4, label=r"$W/m^2 1\%$",
+        cmap="RdBu_r", vmin=-4, vmax=4, label=label,
         annotation=f"{np.mean(nn_grad_clr[grad_north_mask]):.2f}",
     )
     # --- clear and all sky plots of rrtm kernel, global and north pole
     plot_global_field(
         rrtm_kern_cld, kern_lon, kern_lat,
-        f"RRTM Surface Albedo Kernel (all)\n{date}",
+        f"RRTM {title} Kernel (all)\n{date}",
         figures_path / f"kern_all_rrtm_{date}.png",
-        cmap="RdBu_r", vmin=-4, vmax=4, label=r"$W/m^2 1\%$",
+        cmap="RdBu_r", vmin=-4, vmax=4, label=label,
         annotation=f"{np.mean(rrtm_kern_cld):.2f}",
     )
     plot_global_field(
         rrtm_kern_clr, kern_lon, kern_lat,
-        f"RRTM Surface Albedo Kernel (clear)\n{date}",
+        f"RRTM {title} Kernel (clear)\n{date}",
         figures_path / f"kern_clr_rrtm_{date}.png",
-        cmap="RdBu_r", vmin=-4, vmax=4, label=r"$W/m^2 1\%$",
+        cmap="RdBu_r", vmin=-4, vmax=4, label=label,
         annotation=f"{np.mean(rrtm_kern_clr):.2f}",
     )    
     north_mask = kern_lat >= 60
     plot_north_pole_field(
         rrtm_kern_cld, kern_lon, kern_lat,
-        f"RRTM Surface Albedo Kernel (all)\n{date}",
+        f"RRTM {title} Kernel (all)\n{date}",
         figures_path / f"kern_all_rrtm_np_{date}.png",
-        cmap="RdBu_r", vmin=-4, vmax=4, label=r"$W/m^2 1\%$",
+        cmap="RdBu_r", vmin=-4, vmax=4, label=label,
         annotation=f"{np.mean(rrtm_kern_clr[north_mask]):.2f}",
     )
     plot_north_pole_field(
         rrtm_kern_clr, kern_lon, kern_lat,
-        f"RRTM Surface Albedo Kernel (clear)\n{date}",
+        f"RRTM {title} Kernel (clear)\n{date}",
         figures_path / f"kern_clr_rrtm_np_{date}.png",
-        cmap="RdBu_r", vmin=-4, vmax=4, label=r"$W/m^2 1\%$",
+        cmap="RdBu_r", vmin=-4, vmax=4, label=label,
         annotation=f"{np.mean(rrtm_kern_cld[north_mask]):.2f}",
     )
     # --- clear and all sky plots of nn-rrtm kernel difference, global and north pole
@@ -383,16 +404,16 @@ def kernel_date_test(
     #)    
     plot_global_field(
         diff_grad_cld, plot_grad_lon, plot_grad_lat,
-        f"NN autograd-RRTM Surface Albedo Kernel (all)\n{date}",
+        f"NN autograd-RRTM {title} Kernel (all)\n{date}",
         figures_path / f"kern_all_nn_grad-rrtm_{date}.png",
-        cmap="RdBu_r", vmin=-2, vmax=2, label=r"$W/m^2 1\%$",
+        cmap="RdBu_r", vmin=-2, vmax=2, label=label,
         annotation=f"{np.mean(diff_grad_cld):.2f}; {np.mean(np.abs(diff_grad_cld)):.2f}",
     )
     plot_global_field(
         diff_grad_clr, plot_grad_lon, plot_grad_lat,
-        f"NN autograd-RRTM Surface Albedo Kernel (clear)\n{date}",
+        f"NN autograd-RRTM {title} Kernel (clear)\n{date}",
         figures_path / f"kern_clr_nn_grad-rrtm_{date}.png",
-        cmap="RdBu_r", vmin=-2, vmax=2, label=r"$W/m^2 1\%$",
+        cmap="RdBu_r", vmin=-2, vmax=2, label=label,
         annotation=f"{np.mean(diff_grad_clr):.2f}; {np.mean(np.abs(diff_grad_clr)):.2f}",
     )
     north_mask = plot_lat >= 60
@@ -412,16 +433,16 @@ def kernel_date_test(
     #)
     plot_north_pole_field(
         diff_grad_cld, plot_grad_lon, plot_grad_lat,
-        f"NN autograd-RRTM Surface Albedo Kernel (all)\n{date}",
+        f"NN autograd-RRTM {title} Kernel (all)\n{date}",
         figures_path / f"kern_all_nn_grad-rrtm_np_{date}.png",
-        cmap="RdBu_r", vmin=-1, vmax=1, label=r"$W/m^2 1\%$",
+        cmap="RdBu_r", vmin=-1, vmax=1, label=label,
         annotation=f"{np.mean(diff_grad_cld[grad_north_mask]):.2f}; {np.mean(np.abs(diff_grad_cld[grad_north_mask])):.2f}",
     )
     plot_north_pole_field(
         diff_grad_clr, plot_grad_lon, plot_grad_lat,
-        f"NN autograd-RRTM Surface Albedo Kernel (clear)\n{date}",
+        f"NN autograd-RRTM {title} Kernel (clear)\n{date}",
         figures_path / f"kern_clr_nn_grad-rrtm_np_{date}.png",
-        cmap="RdBu_r", vmin=-1, vmax=1, label=r"$W/m^2 1\%$",
+        cmap="RdBu_r", vmin=-1, vmax=1, label=label,
         annotation=f"{np.mean(diff_grad_clr[grad_north_mask]):.2f}; {np.mean(np.abs(diff_grad_clr[grad_north_mask])):.2f}",
     )
 
@@ -429,24 +450,25 @@ def second_order_test(
     ds: xr.Dataset,
     preprocessor: Preprocessor,
     model: SimpleModel,
+    config,
     true_kernel: xr.Dataset,
     dates = ["2013-09", "2012-09"],
     figures_path: Path = Path(".")
 ):
-    nn_kern_cld_1, lon, lat = compute_nn_kernel(ds.sel(date=dates[1]), preprocessor, model)
-    nn_kern_cld_0, _, _ = compute_nn_kernel(ds.sel(date=dates[0]), preprocessor, model)
+    nn_kern_cld_1, lon, lat = compute_nn_kernel(ds.sel(date=dates[1]), preprocessor, model, config)
+    nn_kern_cld_0, _, _ = compute_nn_kernel(ds.sel(date=dates[0]), preprocessor, model, config)
     delta_kern_nn = nn_kern_cld_1 - nn_kern_cld_0
     nn_grad_cld_1, grad_lon, grad_lat = compute_nn_kernel_autograd(
-        ds.sel(date=dates[1]), preprocessor, model
+        ds.sel(date=dates[1]), preprocessor, model, config
     )
     nn_grad_cld_0, _, _ = compute_nn_kernel_autograd(
-        ds.sel(date=dates[0]), preprocessor, model
+        ds.sel(date=dates[0]), preprocessor, model, config
     )
     delta_kern_nn_grad = nn_grad_cld_1 - nn_grad_cld_0
 
     rrtm_lat, rrtm_lon = true_kernel.latitude, true_kernel.longitude
-    rrtm_kern_cld_1 = true_kernel["TOA_cld"].sel(date=dates[1]).as_numpy()[0] * 0.01
-    rrtm_kern_cld_0 = true_kernel["TOA_cld"].sel(date=dates[0]).as_numpy()[0] * 0.01
+    rrtm_kern_cld_1 = true_kernel["TOA_cld"].sel(date=dates[1]).as_numpy()[0] * kernel_delta(config)
+    rrtm_kern_cld_0 = true_kernel["TOA_cld"].sel(date=dates[0]).as_numpy()[0] * kernel_delta(config)
     delta_kern_rrtm = rrtm_kern_cld_1 - rrtm_kern_cld_0
 
 
@@ -956,7 +978,11 @@ def main():
     kernels_dataset = xr.open_mfdataset(kernel_paths, combine="nested", concat_dim="date")
 
     # --- load preprocessor ---
-    preprocessor = create_2024_preprocessor()
+    preprocessor = create_2024_preprocessor(
+        input_vars=input_vars_from_config(config),
+        target_var=target_var_from_config(config),
+        ecod=config.preprocess.ecod,
+    )
     preprocessor.load(config.preprocess.params_dir)
 
     # --- run tests ---
@@ -964,12 +990,14 @@ def main():
         ds=processed_dataset,
         preprocessor=preprocessor,
         model=model,
+        config=config,
         figures_path=output_dir,
     )
     kernel_date_test(
         ds=raw_dataset.sel(date="2013-09"),
         preprocessor=preprocessor,
         model=model,
+        config=config,
         figures_path=output_dir,
         true_kernel=kernels_dataset.sel(date="2013-09"),
         date="2013-09"
@@ -978,14 +1006,23 @@ def main():
         ds=raw_dataset.sel(date="2015-09"),
         preprocessor=preprocessor,
         model=model,
+        config=config,
         figures_path=output_dir,
         true_kernel=kernels_dataset.sel(date="2015-09"),
         date="2015-09"
+    )
+    kernel_ecod_fal_contour_test(
+        processed_ds=processed_dataset,
+        preprocessor=preprocessor,
+        model=model,
+        config=config,
+        figures_path=output_dir,
     )
     second_order_test(
         ds=raw_dataset,
         preprocessor=preprocessor,
         model=model,
+        config=config,
         true_kernel=kernels_dataset,
         dates=["2012-09", "2013-09"],
         figures_path=output_dir,
@@ -994,6 +1031,7 @@ def main():
         ds=raw_dataset.sel(date="2015-12"),
         preprocessor=preprocessor,
         model=model,
+        config=config,
         figures_path=output_dir,
         true_kernel=kernels_dataset.sel(date="2015-12"),
         date="2015-12"
