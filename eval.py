@@ -238,9 +238,23 @@ def kernel_ecod_fal_contour_test(
         cmap="RdBu_r",
         extend="both",
     )
+    observed = scaler.inverse_transform(ordered[["fal", "ecod"]])
+    observed_fal = observed["fal"].to_numpy().ravel()
+    observed_ecod = observed["ecod"].to_numpy().ravel()
+    step = max(1, observed_fal.size // 5000)
+    ax.scatter(
+        observed_fal[::step],
+        observed_ecod[::step],
+        s=1,
+        c="black",
+        alpha=0.15,
+        linewidths=0,
+        label="dataset",
+    )
     ax.set_xlabel("fal")
     ax.set_ylabel("ecod")
     ax.set_title("NN surface albedo kernel over fal/ecod")
+    ax.legend(loc="upper right", markerscale=4)
     cb = fig.colorbar(contour, ax=ax)
     cb.set_label(kernel_label(config))
     fig.tight_layout()
