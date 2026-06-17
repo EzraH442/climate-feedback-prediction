@@ -279,6 +279,133 @@ def kernel_ecod_fal_contour_test(
     plt.close(fig)
 
 
+def tsr_ecod_fal_contour_test(
+    processed_ds: xr.Dataset,
+    preprocessor: Preprocessor,
+    model: SimpleModel,
+    config,
+    figures_path: Path = Path("."),
+    date="2015-06",
+    latitude=83.625,
+    longitude=17.375,
+    scatter=True,
+    extrapolate=False,
+    n_fal: int = 100,
+    n_ecod: int = 100,
+):
+    assert isinstance(preprocessor, SequentialPreprocessor)
+    scaler = preprocessor.preprocessors[-1]
+    assert isinstance(scaler, XarrayMinMaxScaler)
+    if input_var_from_config(config) != "fal":
+        print("Skipping fal/ecod TSR contour; model input variable is not fal.")
+        return
+
+    ordered = ordered_dataset_for_config(processed_ds, config)
+    target = target_var_from_config(config)
+    feature_names = [v for v in ordered.data_vars if v != target]
+    required = {"fal", "ecod"}
+    missing = required.difference(feature_names)
+    if missing:
+        print(f"Skipping fal/ecod TSR contour; missing features: {sorted(missing)}")
+        return
+
+    observed = scaler.inverse_transform(ordered[["fal", "ecod"]])
+    base_point = ordered.sel(
+        date=date,
+        latitude=latitude,
+        longitude=longitude,
+    )
+    observed_base_point = observed.sel(
+        date=date,
+        latitude=latitude,
+        longitude=longitude,
+    )
+    base_features = np.array(
+        [float(base_point[name]) for name in feature_names],
+        dtype=np.float32,
+    )
+
+    fal_values = np.linspace(
+        float(scaler.data_min_["fal"]),
+        float(scaler.data_max_["fal"]),
+        n_fal,
+    )
+    ecod_values = np.linspace(
+        float(scaler.data_min_["ecod"]),
+        float(scaler.data_max_["ecod"]),
+        n_ecod,
+    )
+    if extrapolate:
+        fal_values = np.linspace(0, float(scaler.data_max_["fal"]) * 2, n_fal)
+        ecod_values = np.linspace(0, float(scaler.data_max_["ecod"]) * 2, n_ecod)
+    fal_grid, ecod_grid = np.meshgrid(fal_values, ecod_values)
+
+    inputs_np = np.broadcast_to(
+        base_features, (n_ecod * n_fal, len(feature_names))
+    ).copy()
+    inputs_np[:, feature_names.index("fal")] = scale_minmax_value(
+        scaler, "fal", fal_grid.ravel()
+    )
+    inputs_np[:, feature_names.index("ecod")] = scale_minmax_value(
+        scaler, "ecod", ecod_grid.ravel()
+    )
+    if "ecod_fal" in feature_names:
+        inputs_np[:, feature_names.index("ecod_fal")] = scale_minmax_value(
+            scaler, "ecod_fal", (ecod_grid * fal_grid).ravel()
+        )
+
+    with torch.no_grad():
+        outputs = (
+            model(torch.from_numpy(inputs_np).float())
+            .cpu()
+            .numpy()
+            .reshape(n_ecod, n_fal)
+        )
+
+    target_min = float(scaler.data_min_[target])
+    target_range = float(scaler.data_max_[target] - scaler.data_min_[target])
+    target_scaled = (outputs - scaler.min_val) / (scaler.max_val - scaler.min_val)
+    target_values = (target_scaled * target_range + target_min) / SECONDS_PER_DAY
+
+    fig, ax = plt.subplots(figsize=(7, 5), dpi=300)
+    contour = ax.contourf(
+        fal_grid,
+        ecod_grid,
+        target_values,
+        levels=31,
+        cmap="Spectral",
+    )
+    if scatter:
+        ax.scatter(
+            observed["fal"].to_numpy().ravel(),
+            observed["ecod"].to_numpy().ravel(),
+            s=1,
+            c="black",
+            alpha=0.05,
+            linewidths=0,
+            label="dataset",
+        )
+        ax.legend(loc="upper right", markerscale=4)
+    ax.scatter(
+        [float(observed_base_point["fal"])],
+        [float(observed_base_point["ecod"])],
+        s=20,
+        c="white",
+        edgecolors="black",
+    )
+    ax.set_xlabel("fal")
+    ax.set_ylabel("ecod")
+    ax.set_title(
+        f"NN {target.upper()} over fal/ecod; "
+        f"lat={latitude:.2f}, lon={longitude:.2f}, date={date}"
+    )
+    cb = fig.colorbar(contour, ax=ax)
+    cb.set_label("$W/m^2$")
+    fig.tight_layout()
+    fig.savefig(figures_path / f"{target}_contour_fal_ecod.png")
+    plt.close(fig)
+
+
 def kernel_date_test(
     ds: xr.Dataset,
     preprocessor: Preprocessor,
@@ -1043,6 +1170,15 @@ def main():
         date="2015-09"
     )
     kernel_ecod_fal_contour_test(
+        processed_ds=processed_dataset,
+        preprocessor=preprocessor,
+        model=model,
+        config=config,
+        figures_path=output_dir,
+        scatter=False,
+        extrapolate=True,
+    )
+    tsr_ecod_fal_contour_test(
         processed_ds=processed_dataset,
         preprocessor=preprocessor,
         model=model,
