@@ -188,6 +188,11 @@ def kernel_ecod_fal_contour_test(
         latitude=latitude,
         longitude=longitude,
     )
+    observed_base_point = scaler.inverse_transform(ordered[["fal", "ecod"]]).sel(
+        date=date,
+        latitude=latitude,
+        longitude=longitude,
+    )
     base_features = np.array(
         [float(base_point[name]) for name in feature_names],
         dtype=np.float32,
@@ -269,6 +274,13 @@ def kernel_ecod_fal_contour_test(
             label="dataset",
         )
         ax.legend(loc="upper right", markerscale=4)
+    ax.scatter(
+        [float(observed_base_point["fal"])],
+        [float(observed_base_point["ecod"])],
+        s=20,
+        c="white",
+        edgecolors="black",
+    )
     ax.set_xlabel("fal")
     ax.set_ylabel("ecod")
     ax.set_title(f"NN surface albedo kernel over fal/ecod; lat={latitude:.2f}, lon={longitude:.2f}, date={date}")

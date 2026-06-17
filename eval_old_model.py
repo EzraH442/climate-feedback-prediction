@@ -16,16 +16,16 @@ from utils import (
 
 
 OLD_INPUT_ORDER = [
-    "fal",
-    "hcc",
-    "lcc",
-    "mcc",
-    "sp",
     "tisr",
     "tciw",
     "tclw",
-    "tco3",
     "tcwv",
+    "lcc",
+    "mcc",
+    "hcc",
+    "sp",
+    "tco3",
+    "fal",
     "ecod",
     "ecod_fal",
 ]
@@ -357,6 +357,7 @@ def kernel_ecod_fal_contour_test(
     contour = ax.contourf(fal_grid, ecod_grid, kernel, levels=levels, cmap="RdBu_r", extend="both")
     if scatter:
         ax.scatter(ds["fal"].to_numpy().ravel(), ds["ecod"].to_numpy().ravel(), s=1, c="black", alpha=0.05, linewidths=0)
+    ax.scatter([float(base["fal"])], [float(base["ecod"])], s=20, c="white", edgecolors="black")
     ax.set_xlabel("fal")
     ax.set_ylabel("ecod")
     ax.set_title(f"Old NN surface albedo kernel over fal/ecod; lat={float(base.latitude):.2f}, lon={float(base.longitude):.2f}, date={date}")
