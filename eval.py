@@ -160,6 +160,11 @@ def kernel_ecod_fal_contour_test(
     model: SimpleModel,
     config,
     figures_path: Path = Path("."),
+    date='2015-06',
+    latitude=83.625,
+    longitude=17.375,
+    scatter=True,
+    extrapolate=False,
     n_fal: int = 100,
     n_ecod: int = 100,
 ):
@@ -178,10 +183,10 @@ def kernel_ecod_fal_contour_test(
         print(f"Skipping fal/ecod kernel contour; missing features: {sorted(missing)}")
         return
 
-    base_point = ordered.isel(
-        date=0,
-        latitude=len(ordered.latitude) // 2,
-        longitude=len(ordered.longitude) // 2,
+    base_point = ordered.sel(
+        date=date,
+        latitude=latitude,
+        longitude=longitude,
     )
     base_features = np.array(
         [float(base_point[name]) for name in feature_names],
@@ -198,6 +203,17 @@ def kernel_ecod_fal_contour_test(
         float(scaler.data_max_["ecod"]),
         n_ecod,
     )
+    if extrapolate:
+        fal_values = np.linspace(
+            0,
+            float(scaler.data_max_["fal"])*2,
+            n_fal,
+        )
+        ecod_values = np.linspace(
+            0,
+            float(scaler.data_max_["ecod"])*2,
+            n_ecod,
+        )
     fal_grid, ecod_grid = np.meshgrid(fal_values, ecod_values)
 
     inputs_np = np.broadcast_to(
@@ -241,20 +257,21 @@ def kernel_ecod_fal_contour_test(
     observed = scaler.inverse_transform(ordered[["fal", "ecod"]])
     observed_fal = observed["fal"].to_numpy().ravel()
     observed_ecod = observed["ecod"].to_numpy().ravel()
-    step = max(1, observed_fal.size // 5000)
-    ax.scatter(
-        observed_fal[::step],
-        observed_ecod[::step],
-        s=1,
-        c="black",
-        alpha=0.15,
-        linewidths=0,
-        label="dataset",
-    )
+    #step = max(1, observed_fal.size // 50000)
+    if scatter:
+        ax.scatter(
+            observed_fal,#[::step],
+            observed_ecod,#[::step],
+            s=1,
+            c="black",
+            alpha=0.05,
+            linewidths=0,
+            label="dataset",
+        )
+        ax.legend(loc="upper right", markerscale=4)
     ax.set_xlabel("fal")
     ax.set_ylabel("ecod")
-    ax.set_title("NN surface albedo kernel over fal/ecod")
-    ax.legend(loc="upper right", markerscale=4)
+    ax.set_title(f"NN surface albedo kernel over fal/ecod; lat={latitude:.2f}, lon={longitude:.2f}, date={date}")
     cb = fig.colorbar(contour, ax=ax)
     cb.set_label(kernel_label(config))
     fig.tight_layout()
@@ -302,14 +319,14 @@ def kernel_date_test(
         nn_grad_cld, grad_lon, grad_lat,
         f"NN {title} Kernel via autograd (all)\n{date}",
         figures_path / f"kern_all_nn_grad_{date}.png",
-        cmap="RdBu_r", vmin=-4, vmax=4, label=label,
+        cmap="RdBu_r", vmin=-3, vmax=3, label=label,
         annotation=f"{np.mean(nn_grad_cld):.2f}",
     )
     plot_global_field(
         nn_grad_clr, grad_lon, grad_lat,
         f"NN {title} Kernel via autograd (clear)\n{date}",
         figures_path / f"kern_clr_nn_grad_{date}.png",
-        cmap="RdBu_r", vmin=-4, vmax=4, label=label,
+        cmap="RdBu_r", vmin=-3, vmax=3, label=label,
         annotation=f"{np.mean(nn_grad_clr):.2f}",
     )
     north_mask = lat >= 60
@@ -332,14 +349,14 @@ def kernel_date_test(
         nn_grad_cld, grad_lon, grad_lat,
         f"NN {title} Kernel via autograd (all)\n{date}",
         figures_path / f"kern_all_nn_grad_np_{date}.png",
-        cmap="RdBu_r", vmin=-4, vmax=4, label=label,
+        cmap="RdBu_r", vmin=-3, vmax=3, label=label,
         annotation=f"{np.mean(nn_grad_cld[grad_north_mask]):.2f}",
     )
     plot_north_pole_field(
         nn_grad_clr, grad_lon, grad_lat,
         f"NN {title} Kernel via autograd (clear)\n{date}",
         figures_path / f"kern_clr_nn_grad_np_{date}.png",
-        cmap="RdBu_r", vmin=-4, vmax=4, label=label,
+        cmap="RdBu_r", vmin=-3, vmax=3, label=label,
         annotation=f"{np.mean(nn_grad_clr[grad_north_mask]):.2f}",
     )
     # --- clear and all sky plots of rrtm kernel, global and north pole
@@ -347,14 +364,14 @@ def kernel_date_test(
         rrtm_kern_cld, kern_lon, kern_lat,
         f"RRTM {title} Kernel (all)\n{date}",
         figures_path / f"kern_all_rrtm_{date}.png",
-        cmap="RdBu_r", vmin=-4, vmax=4, label=label,
+        cmap="RdBu_r", vmin=-3, vmax=3, label=label,
         annotation=f"{np.mean(rrtm_kern_cld):.2f}",
     )
     plot_global_field(
         rrtm_kern_clr, kern_lon, kern_lat,
         f"RRTM {title} Kernel (clear)\n{date}",
         figures_path / f"kern_clr_rrtm_{date}.png",
-        cmap="RdBu_r", vmin=-4, vmax=4, label=label,
+        cmap="RdBu_r", vmin=-3, vmax=3, label=label,
         annotation=f"{np.mean(rrtm_kern_clr):.2f}",
     )    
     north_mask = kern_lat >= 60
@@ -362,14 +379,14 @@ def kernel_date_test(
         rrtm_kern_cld, kern_lon, kern_lat,
         f"RRTM {title} Kernel (all)\n{date}",
         figures_path / f"kern_all_rrtm_np_{date}.png",
-        cmap="RdBu_r", vmin=-4, vmax=4, label=label,
+        cmap="RdBu_r", vmin=-3, vmax=3, label=label,
         annotation=f"{np.mean(rrtm_kern_clr[north_mask]):.2f}",
     )
     plot_north_pole_field(
         rrtm_kern_clr, kern_lon, kern_lat,
         f"RRTM {title} Kernel (clear)\n{date}",
         figures_path / f"kern_clr_rrtm_np_{date}.png",
-        cmap="RdBu_r", vmin=-4, vmax=4, label=label,
+        cmap="RdBu_r", vmin=-3, vmax=3, label=label,
         annotation=f"{np.mean(rrtm_kern_cld[north_mask]):.2f}",
     )
     # --- clear and all sky plots of nn-rrtm kernel difference, global and north pole
@@ -420,14 +437,14 @@ def kernel_date_test(
         diff_grad_cld, plot_grad_lon, plot_grad_lat,
         f"NN autograd-RRTM {title} Kernel (all)\n{date}",
         figures_path / f"kern_all_nn_grad-rrtm_{date}.png",
-        cmap="RdBu_r", vmin=-2, vmax=2, label=label,
+        cmap="RdBu_r", vmin=-0.3, vmax=0.3, label=label,
         annotation=f"{np.mean(diff_grad_cld):.2f}; {np.mean(np.abs(diff_grad_cld)):.2f}",
     )
     plot_global_field(
         diff_grad_clr, plot_grad_lon, plot_grad_lat,
         f"NN autograd-RRTM {title} Kernel (clear)\n{date}",
         figures_path / f"kern_clr_nn_grad-rrtm_{date}.png",
-        cmap="RdBu_r", vmin=-2, vmax=2, label=label,
+        cmap="RdBu_r", vmin=-0.3, vmax=0.3, label=label,
         annotation=f"{np.mean(diff_grad_clr):.2f}; {np.mean(np.abs(diff_grad_clr)):.2f}",
     )
     north_mask = plot_lat >= 60
@@ -1031,6 +1048,8 @@ def main():
         model=model,
         config=config,
         figures_path=output_dir,
+        scatter=False,
+        extrapolate=True,
     )
     second_order_test(
         ds=raw_dataset,

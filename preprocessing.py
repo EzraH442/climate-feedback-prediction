@@ -264,11 +264,18 @@ def create_2024_preprocessor(input_vars=None, target_var="tsr", ecod=True):
         preprocessors=preprocessors
     )
 
-def create_2024_preprocessor_no_downscaling():
-    return SequentialPreprocessor(
-        preprocessors=[
-            ECOD_Calculator(),
+def create_2024_preprocessor_no_downscaling(input_vars=None, target_var="tsr", ecod=True):
+    preprocessors = []
+    if ecod:
+        preprocessors.append(ECOD_Calculator())
+    if input_vars is not None:
+        preprocessors.append(VariableSelector(input_vars, target_var))
+    preprocessors.extend(
+        [
             Identity(),
             XarrayMinMaxScaler(dim=("date", "latitude", "longitude")),
         ]
+    )
+    return SequentialPreprocessor(
+        preprocessors=preprocessors
     )

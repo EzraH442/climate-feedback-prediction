@@ -143,9 +143,9 @@ def retrieve_era5_daily_stats(year, month, day):
 
 
 if __name__ == "__main__":
-    # retrieve_era5_years_data(range(1990, 2021))
+    retrieve_era5_years_data(range(1990, 2021))
     # retrieve_era5_single_levels_3hr([2015])
     retrieve_era5_daily_stats(2015, 3, 1)
     retrieve_era5_daily_stats(2015, 6, 1)
-    # retrieve_era5_daily_stats(2015, 9, 1)
+    retrieve_era5_daily_stats(2015, 9, 1)
     retrieve_era5_daily_stats(2015, 12, 1)

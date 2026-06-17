@@ -10,7 +10,6 @@ dataset:
     - tciw
     - tclw
     - tcwv
-    - tisr
     - ecod
   input_var: "skt"
   target_var: "ttr"
