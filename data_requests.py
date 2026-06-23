@@ -85,6 +85,28 @@ def retrieve_era5_years_t2m(years=(2006, 2008), data_path="data/era5"):
             str(path),
         )
 
+def retrieve_era5_years_tsrc(years=(2006, 2008), data_path="data/era5"):
+    data_path = Path(data_path)
+    data_path.mkdir(parents=True, exist_ok=True)
+
+    for year in years:
+        path = data_path / f"era5_tsrc_monthly_{year}.grib"
+        if path.exists():
+            print(f"found existing data for year {year}, skipping")
+            continue
+
+        c.retrieve(
+            "reanalysis-era5-single-levels-monthly-means",
+            {
+                "product_type": "monthly_averaged_reanalysis",
+                "variable": ["top_net_solar_radiation_clear_sky"],
+                "year": year,
+                "month": MONTHS,
+                "time": "00:00",
+            },
+            str(path),
+        )
+
 def retrieve_era5_plevl_qt(years=(2006, 2008), data_path="data/era5"):
     data_path = Path(data_path)
     data_path.mkdir(parents=True, exist_ok=True)
@@ -205,6 +227,7 @@ def retrieve_era5_daily_stats(year, month, day):
 if __name__ == "__main__":
     retrieve_era5_years_data(range(1990, 2021))
     retrieve_era5_years_t2m(range(2006,2017))
+    retrieve_era5_years_tsrc(range(2006,2017))
     retrieve_era5_plevl_qt(range(2006,2017))
     # retrieve_era5_single_levels_3hr([2015])
     retrieve_era5_daily_stats(2015, 3, 1)
