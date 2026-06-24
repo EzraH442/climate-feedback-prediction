@@ -131,11 +131,12 @@ def build_old_response_dataset(
     )
 
     dR_a_k, dR_a_k_clr = closure.albedo_kernel_components(
-        anomaly, xr.open_dataset(closure.ALBEDO_KERNEL_PATH)
+        anomaly, xr.open_dataset(closure.ALBEDO_KERNEL_PATH).sel(month=[3,9])
     )
     ds_qt = xr.load_dataset(closure.QT_PATH)
+    ds_qt = ds_qt.sel(date=ds_qt.date.dt.month.isin([3,9]))
     dR_q_k, dR_q_k_clr = closure.water_vapor_kernel_components(
-        ds_monthly, ds_qt, xr.open_dataset(closure.WATER_VAPOR_KERNEL_PATH)
+        ds_monthly, ds_qt, xr.open_dataset(closure.WATER_VAPOR_KERNEL_PATH).sel(month=[3,9])
     )
     dR_c_k = (dR - dR_clr) - (dR_a_k - dR_a_k_clr) - (dR_q_k - dR_q_k_clr)
 
@@ -228,7 +229,7 @@ def main():
     parser.add_argument("--skip_cross", action="store_true")
     args = parser.parse_args()
 
-    old_ds_all = load_dataset(args.data_path, None)
+    old_ds_all = load_dataset(args.data_path, None).sel(date=slice('2007-01', '2016-12'))
     scaler = fit_old_scaler(old_ds_all)
     model = load_old_model(args.weights_path)
 
@@ -247,6 +248,7 @@ def main():
     dR_clr = load_clear_sky_response(args.era5_data_path, ds)
     ds_monthly_clr = old_clear_sky(ds_monthly)
 
+    print(ds_monthly)
     responses = build_old_response_dataset(
         ds_monthly=ds_monthly,
         ds_monthly_clr=ds_monthly_clr,

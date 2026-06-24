@@ -236,7 +236,7 @@ def plot_residual_rmse_timeseries(series, output_dir: Path, clear_sky: bool) -> 
     for source in ["nn", "k"]:
         name = f"dR_res_{source}" + ("_clr" if clear_sky else "")
         ax.scatter(x=series[name]["date"], y=series[name], s=1, label=source)
-    ax.set_yticks(np.arange(0, 21, 4))
+    ax.set_yticks(np.arange(0, 11, 2))
     ax.set_ylabel(ylabel)
     ax.legend()
     ax.grid(alpha=0.5)
@@ -257,7 +257,6 @@ def plot_net_timeseries(net_series, save_path: Path) -> None:
     fig.savefig(save_path, dpi=200)
     plt.close(fig)
 
-
 def setup_box_plot(figsize=(14, 4)):
     fig, ax = plt.subplots(figsize=figsize)
     ax.axhline(0, color="black", alpha=0.2, linewidth=0.8)
@@ -267,6 +266,14 @@ def setup_box_plot(figsize=(14, 4)):
     ax.grid(axis="y", alpha=0.3)
     return fig, ax
 
+def setup_box_plot(figsize=(14, 4)):
+    fig, ax = plt.subplots(figsize=figsize)
+    ax.axhline(0, color="black", alpha=0.2, linewidth=0.8)
+    ax.set_ylim(-20, 20)
+    ax.set_yticks(np.arange(-20, 21, 5))
+    ax.set_ylabel(r"$\Delta R_{\rm res}$ (W m$^{-2}$)")
+    ax.grid(axis="y", alpha=0.3)
+    return fig, ax
 
 def plot_boxes_on_ax(ax, data, positions, width, color, label) -> None:
     box = ax.boxplot(
@@ -362,6 +369,7 @@ def plot_residual_year_month_boxplots(
     fig.tight_layout()
     fig.savefig(save_path, dpi=200)
     plt.close(fig)
+
 
 
 def timeseries_test(
@@ -840,6 +848,7 @@ def date_closure_test(
     )
 
 
+response_save_path = 'closure_test_2/saved_responses_closure_test_2.nc'
 def main():
     global NORTH_BOUNDARY, NORTH_MASK
 
@@ -899,107 +908,113 @@ def main():
     dR_clr = ds_tsrc_monthly - ds_tsrc_monthly.mean("year")
     dR = anomaly.tsr.interp(**kernel_grid).compute()
 
-    dR_a_nn, dR_c_nn, dR_q_nn, dR_co3_nn = nn_radiative_response(
-        ds_monthly,
-        anomaly,
-        model,
-        preprocessor,
-        config,
-        ["fal", cloud_vars, "tcwv", "tco3"],
-    )
-    dR_a_nn_clr, dR_q_nn_clr, dR_co3_nn_clr = nn_radiative_response(
-        ds_monthly_clr,
-        anomaly,
-        model,
-        preprocessor,
-        config,
-        ["fal", "tcwv", "tco3"],
-    )
-
-    ds_qt = xr.load_dataset(QT_PATH)
-    dR_a_k, dR_a_k_clr = albedo_kernel_components(anomaly, K_a)
-    dR_q_k, dR_q_k_clr = water_vapor_kernel_components(ds_monthly, ds_qt, K_q)
-    dR_c_k = (dR - dR_clr) - (dR_a_k - dR_a_k_clr) - (dR_q_k - dR_q_k_clr)
-
-    cross_data_vars = xr.Dataset()
-    if not args.skip_cross:
-        variable_pairs = [
-            ("fal", "tcwv"),
-            ("fal", ["hcc", "mcc", "lcc", "tcc", "tciw", "tclw"]),
-            ("tcwv", ["hcc", "mcc", "lcc", "tcc", "tciw", "tclw"]),
-        ]
-        dR_aq_nn, dR_ac_nn, dR_qc_nn = nn_radiative_response_cross(
+    if Path(response_save_path).exists():
+        responses = xr.load_dataset(response_save_path)
+    else:
+        dR_a_nn, dR_c_nn, dR_q_nn, dR_co3_nn = nn_radiative_response(
             ds_monthly,
             anomaly,
             model,
             preprocessor,
             config,
-            variable_pairs,
+            ["fal", cloud_vars, "tcwv", "tco3"],
         )
-        cross_data_vars = xr.Dataset(
+        dR_a_nn_clr, dR_q_nn_clr, dR_co3_nn_clr = nn_radiative_response(
+            ds_monthly_clr,
+            anomaly,
+            model,
+            preprocessor,
+            config,
+            ["fal", "tcwv", "tco3"],
+        )
+    
+        ds_qt = xr.load_dataset(QT_PATH)
+        dR_a_k, dR_a_k_clr = albedo_kernel_components(anomaly, K_a)
+        dR_q_k, dR_q_k_clr = water_vapor_kernel_components(ds_monthly, ds_qt, K_q)
+        dR_c_k = (dR - dR_clr) - (dR_a_k - dR_a_k_clr) - (dR_q_k - dR_q_k_clr)
+    
+        cross_data_vars = xr.Dataset()
+        if not args.skip_cross:
+            variable_pairs = [
+                ("fal", "tcwv"),
+                ("fal", ["hcc", "mcc", "lcc", "tcc", "tciw", "tclw"]),
+                ("tcwv", ["hcc", "mcc", "lcc", "tcc", "tciw", "tclw"]),
+            ]
+            dR_aq_nn, dR_ac_nn, dR_qc_nn = nn_radiative_response_cross(
+                ds_monthly,
+                anomaly,
+                model,
+                preprocessor,
+                config,
+                variable_pairs,
+            )
+            cross_data_vars = xr.Dataset(
+                {
+                    "dR_aq_nn_all": dR_aq_nn.assign_attrs(
+                        plot_label="a,q", filename="cross_dR_a,q.png"
+                    ),
+                    "dR_ac_nn_all": dR_ac_nn.assign_attrs(
+                        plot_label="a,c", filename="cross_dR_a,c.png"
+                    ),
+                    "dR_qc_nn_all": dR_qc_nn.assign_attrs(
+                        plot_label="q,c", filename="cross_dR_q,c.png"
+                    ),
+                }
+            )
+    
+        response_attrs = {
+            "dR_era5_all": {"plot_label": "ERA5 all", "filename": "dR_era5_all.png"},
+            "dR_era5_clr": {"plot_label": "ERA5 clear", "filename": "dR_era5_clr.png"},
+            "dR_a_nn_all": {"plot_label": "a", "filename": "dR_a.png", "vmax": 40},
+            "dR_c_nn_all": {"plot_label": "c", "filename": "dR_c.png", "vmax": 60},
+            "dR_q_nn_all": {"plot_label": "q", "filename": "dR_q.png", "vmax": 7},
+            "dR_a_nn_clr": {
+                "plot_label": "a,clr",
+                "filename": "dR_a,clr.png",
+                "vmax": 60,
+            },
+            "dR_q_nn_clr": {
+                "plot_label": "q,clr",
+                "filename": "dR_q,clr.png",
+                "vmax": 4,
+            },
+            "dR_a_k_all": {"plot_label": "a", "filename": "k_dR_a.png", "vmax": 40},
+            "dR_c_k_all": {"plot_label": "c", "filename": "k_dR_c.png", "vmax": 60},
+            "dR_q_k_all": {"plot_label": "q", "filename": "k_dR_q.png", "vmax": 7},
+            "dR_a_k_clr": {
+                "plot_label": "a,clr",
+                "filename": "k_dR_a,clr.png",
+                "vmax": 40,
+            },
+            "dR_q_k_clr": {
+                "plot_label": "q,clr",
+                "filename": "k_dR_q,clr.png",
+                "vmax": 7,
+            },
+        }
+        base_responses = xr.Dataset(
             {
-                "dR_aq_nn_all": dR_aq_nn.assign_attrs(
-                    plot_label="a,q", filename="cross_dR_a,q.png"
-                ),
-                "dR_ac_nn_all": dR_ac_nn.assign_attrs(
-                    plot_label="a,c", filename="cross_dR_a,c.png"
-                ),
-                "dR_qc_nn_all": dR_qc_nn.assign_attrs(
-                    plot_label="q,c", filename="cross_dR_q,c.png"
-                ),
+                name: values.assign_attrs(**response_attrs[name])
+                for name, values in {
+                    "dR_era5_all": dR,
+                    "dR_era5_clr": dR_clr,
+                    "dR_a_nn_all": dR_a_nn,
+                    "dR_c_nn_all": dR_c_nn,
+                    "dR_q_nn_all": dR_q_nn,
+                    "dR_a_nn_clr": dR_a_nn_clr,
+                    "dR_q_nn_clr": dR_q_nn_clr,
+                    "dR_a_k_all": dR_a_k,
+                    "dR_c_k_all": dR_c_k,
+                    "dR_q_k_all": dR_q_k,
+                    "dR_a_k_clr": dR_a_k_clr,
+                    "dR_q_k_clr": dR_q_k_clr,
+                }.items()
             }
         )
+        responses = xr.merge([base_responses, cross_data_vars])
+        responses.to_netcdf(response_save_path)
 
-    response_attrs = {
-        "dR_era5_all": {"plot_label": "ERA5 all", "filename": "dR_era5_all.png"},
-        "dR_era5_clr": {"plot_label": "ERA5 clear", "filename": "dR_era5_clr.png"},
-        "dR_a_nn_all": {"plot_label": "a", "filename": "dR_a.png", "vmax": 40},
-        "dR_c_nn_all": {"plot_label": "c", "filename": "dR_c.png", "vmax": 60},
-        "dR_q_nn_all": {"plot_label": "q", "filename": "dR_q.png", "vmax": 7},
-        "dR_a_nn_clr": {
-            "plot_label": "a,clr",
-            "filename": "dR_a,clr.png",
-            "vmax": 60,
-        },
-        "dR_q_nn_clr": {
-            "plot_label": "q,clr",
-            "filename": "dR_q,clr.png",
-            "vmax": 4,
-        },
-        "dR_a_k_all": {"plot_label": "a", "filename": "k_dR_a.png", "vmax": 40},
-        "dR_c_k_all": {"plot_label": "c", "filename": "k_dR_c.png", "vmax": 60},
-        "dR_q_k_all": {"plot_label": "q", "filename": "k_dR_q.png", "vmax": 7},
-        "dR_a_k_clr": {
-            "plot_label": "a,clr",
-            "filename": "k_dR_a,clr.png",
-            "vmax": 40,
-        },
-        "dR_q_k_clr": {
-            "plot_label": "q,clr",
-            "filename": "k_dR_q,clr.png",
-            "vmax": 7,
-        },
-    }
-    base_responses = xr.Dataset(
-        {
-            name: values.assign_attrs(**response_attrs[name])
-            for name, values in {
-                "dR_era5_all": dR,
-                "dR_era5_clr": dR_clr,
-                "dR_a_nn_all": dR_a_nn,
-                "dR_c_nn_all": dR_c_nn,
-                "dR_q_nn_all": dR_q_nn,
-                "dR_a_nn_clr": dR_a_nn_clr,
-                "dR_q_nn_clr": dR_q_nn_clr,
-                "dR_a_k_all": dR_a_k,
-                "dR_c_k_all": dR_c_k,
-                "dR_q_k_all": dR_q_k,
-                "dR_a_k_clr": dR_a_k_clr,
-                "dR_q_k_clr": dR_q_k_clr,
-            }.items()
-        }
-    )
-    responses = xr.merge([base_responses, cross_data_vars])
+    """
     date_closure_test(
         anomaly,
         ds_monthly,
@@ -1012,6 +1027,7 @@ def main():
         dR_co3_nn=dR_co3_nn,
         dR_co3_nn_clr=dR_co3_nn_clr,
     )
+    """
     timeseries_test(
         responses,
         output_root,
