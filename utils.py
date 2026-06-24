@@ -1,6 +1,7 @@
 from pathlib import Path
 
 import numpy as np
+import pandas as pd
 import xarray as xr
 from mpl_toolkits.basemap import Basemap
 import matplotlib.pyplot as plt
@@ -46,17 +47,17 @@ def setup_global_map() -> Basemap:
     return m
 
 
-def setup_north_pole_map() -> Basemap:
+def setup_north_pole_map(boundary: float = 60) -> Basemap:
     m = Basemap(
         projection="npstere",
-        boundinglat=60,
+        boundinglat=boundary,
         lon_0=0,
         resolution="l",
     )
     m.drawcoastlines()
     m.drawcountries()
     m.drawmapboundary(fill_color="white")
-    m.drawparallels(np.arange(60.0, 91.0, 30.0))
+    m.drawparallels(np.arange(boundary, 91.0, 30.0))
     m.drawmeridians(np.arange(0.0, 360.0, 60.0))
     return m
 
@@ -117,9 +118,10 @@ def plot_north_pole_field(
     vmax: float = 5,
     label: str = r"$W/m^2 1\%$",
     annotation: str | None = None,
+    boundary: float = 60,
 ) -> None:
     fig = plt.figure(figsize=(8, 8), dpi=300)
-    m = setup_north_pole_map()
+    m = setup_north_pole_map(boundary=boundary)
     plot_colormesh_on_map(m, lon, lat, field, cmap=cmap, vmin=vmin, vmax=vmax)
     if annotation is not None:
         plt.text(x=300, y=np.max(lat) + 5, s=annotation, fontsize=20)
@@ -127,6 +129,17 @@ def plot_north_pole_field(
     plt.colorbar(orientation="horizontal", fraction=0.05, pad=0.07, label=label)
     plt.savefig(save_path)
     plt.close(fig)
+
+
+def setup_timeseries_plot():
+    fig, ax = plt.subplots(figsize=(10, 3))
+    ax.set_xticks(
+        pd.date_range(start="2007", end="2017", freq="YS", inclusive="both"),
+        np.arange(2007, 2018),
+    )
+    ax.set_xlabel("date")
+    ax.grid(alpha=0.3)
+    return fig, ax
 
 
 # --- rrtm kernel loading ---
@@ -394,6 +407,187 @@ def filter_by_months(
     if len(months) == 0:
         raise ValueError("months must be non-empty when provided.")
     return ds.sel({time_coord: ds[time_coord].dt.month.isin(months)})
+
+
+def to_monthly(ds: xr.Dataset | xr.DataArray) -> xr.Dataset | xr.DataArray:
+    year = ds.date.dt.year
+    month = ds.date.dt.month
+    ds = ds.assign_coords(year=("date", year.data), month=("date", month.data))
+    return ds.set_index(date=("year", "month")).unstack("date")
+
+
+def to_dates(ds: xr.Dataset | xr.DataArray) -> xr.Dataset | xr.DataArray:
+    ds_stacked = ds.stack(date=("year", "month"))
+    datetime_index = pd.to_datetime(
+        {
+            "year": ds_stacked.year.values,
+            "month": ds_stacked.month.values,
+            "day": 1,
+        }
+    )
+    return (
+        ds_stacked.drop_vars(["date", "year", "month"])
+        .assign_coords(date=datetime_index)
+        .sortby("date")
+    )
+
+
+def nn_pred(
+    ds: xr.Dataset,
+    model: SimpleModel,
+    preprocessor: Preprocessor,
+    config,
+) -> xr.DataArray:
+    year, month = ds.year.values, ds.month.values
+    lon, lat = ds.longitude.values, ds.latitude.values
+    target_var = target_var_from_config(config)
+
+    ds_ordered_np = (
+        ordered_dataset_for_config(ds, config)
+        .to_dataarray()
+        .transpose("year", "month", "latitude", "longitude", "variable")
+        .to_numpy()
+    )
+
+    data_torch = torch.from_numpy(ds_ordered_np).float()
+    model_outputs = model(data_torch[..., : model.input_dim]).detach()
+
+    pred = (
+        preprocessor.preprocessors[-1]
+        .inverse_transform(
+            xr.Dataset(
+                data_vars={
+                    target_var: (
+                        ("year", "month", "latitude", "longitude"),
+                        model_outputs.numpy(),
+                    )
+                },
+                coords={
+                    "year": year,
+                    "month": month,
+                    "longitude": lon,
+                    "latitude": lat,
+                },
+            )
+        )
+        .to_dataarray()
+        .squeeze(dim="variable", drop=True)
+    )
+    return pred
+
+
+def nn_radiative_response(
+    ds: xr.Dataset,
+    anomaly: xr.Dataset,
+    model: SimpleModel,
+    preprocessor: Preprocessor,
+    config,
+    variables,
+) -> list[xr.DataArray]:
+    ds_copies = []
+    for var_list in variables:
+        if not isinstance(var_list, list):
+            var_list = [var_list]
+        ds_copies.append(ds.assign({v: ds[v] + anomaly[v] for v in var_list}))
+
+    ds_original = preprocessor.transform(ds)
+    ds_perturbed = [preprocessor.transform(d) for d in ds_copies]
+
+    pred_original = nn_pred(ds_original, model, preprocessor, config)
+    return [
+        (nn_pred(ds_p, model, preprocessor, config) - pred_original)
+        / SECONDS_PER_DAY
+        for ds_p in ds_perturbed
+    ]
+
+
+def nn_radiative_response_cross(
+    ds: xr.Dataset,
+    anomaly: xr.Dataset,
+    model: SimpleModel,
+    preprocessor: Preprocessor,
+    config,
+    variable_pairs,
+) -> list[xr.DataArray]:
+    all_var_lists = set()
+    for vi, vj in variable_pairs:
+        if not isinstance(vi, list):
+            vi = [vi]
+        if not isinstance(vj, list):
+            vj = [vj]
+        all_var_lists.add(tuple(vi))
+        all_var_lists.add(tuple(vj))
+        all_var_lists.add(tuple(vi + vj))
+
+    ds_original = preprocessor.transform(ds)
+    pred_original = nn_pred(ds_original, model, preprocessor, config)
+
+    preds = {}
+    for var_list in all_var_lists:
+        ds_perturbed = preprocessor.transform(
+            ds.assign({v: ds[v] + anomaly[v] for v in var_list})
+        )
+        preds[var_list] = nn_pred(ds_perturbed, model, preprocessor, config)
+
+    results = []
+    for vi, vj in variable_pairs:
+        if not isinstance(vi, list):
+            vi = [vi]
+        if not isinstance(vj, list):
+            vj = [vj]
+        ki, kj, kij = tuple(vi), tuple(vj), tuple(vi + vj)
+        results.append((preds[kij] - preds[ki] - preds[kj] + pred_original) / SECONDS_PER_DAY)
+
+    return results
+
+
+def global_mean(da: xr.DataArray) -> xr.DataArray:
+    weights = np.cos(np.deg2rad(da.latitude))
+    weights.name = "weights"
+    return da.weighted(weights).mean(dim=["latitude", "longitude"])
+
+
+def global_date_series(da: xr.DataArray) -> xr.DataArray:
+    return global_mean(to_dates(da.copy(deep=True))).compute()
+
+
+def integrate_over_pressure_levels(
+    sp: xr.DataArray,
+    da: xr.DataArray,
+) -> xr.DataArray:
+    p = da.level * 100.0
+    return da.where(p <= sp, 0).sum(dim="level")
+
+
+def weighted_residuals_by_month(
+    da: xr.DataArray,
+    n_samples: int = 2000,
+    rng: np.random.Generator | None = None,
+) -> list[np.ndarray]:
+    rng = rng or np.random.default_rng()
+    result = []
+    for month in range(1, 13):
+        field = (
+            da.sel(month=month)
+            .transpose("year", "latitude", "longitude")
+            .compute()
+            .values
+        )
+        n_year, n_lat, n_lon = field.shape
+
+        lat_vals = da.latitude.values
+        weights = np.clip(np.cos(np.deg2rad(lat_vals)), 0, None)
+        weights_3d = weights[None, :, None] * np.ones((n_year, n_lat, n_lon))
+
+        flat_res = field.ravel()
+        p = weights_3d.ravel().copy()
+        valid = np.isfinite(flat_res)
+        p[~valid] = 0.0
+        p = p / p.sum()
+
+        indices = rng.choice(len(flat_res), size=n_samples, p=p)
+        result.append(flat_res[indices])
+    return result
 
 
 
