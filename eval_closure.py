@@ -24,6 +24,7 @@ from utils import (
     target_var_from_config,
     to_monthly,
     weighted_residuals_by_month,
+    weighted_residuals_by_year_month,
 )
 
 
@@ -294,6 +295,58 @@ def plot_residual_violins(residuals, residuals_np, output_dir: Path) -> None:
         plt.close(fig)
 
 
+def plot_residual_year_month_violins(
+    nn_residual: xr.DataArray,
+    k_residual: xr.DataArray,
+    title: str,
+    save_path: Path,
+    residual_samples: int,
+) -> None:
+    labels, nn_residuals = weighted_residuals_by_year_month(
+        nn_residual, residual_samples, np.random.default_rng(0)
+    )
+    k_labels, k_residuals = weighted_residuals_by_year_month(
+        k_residual, residual_samples, np.random.default_rng(1)
+    )
+    if labels != k_labels:
+        raise ValueError("NN and K residuals do not share year-month coordinates.")
+
+    positions = np.arange(len(labels))
+    colors = {"NN": "tab:blue", "K": "tab:orange"}
+    width = 0.35
+    fig_width = max(14, 0.18 * len(labels))
+    fig, ax = plt.subplots(figsize=(fig_width, 4))
+    for name, data, offset in [
+        ("NN", nn_residuals, -width / 2),
+        ("K", k_residuals, width / 2),
+    ]:
+        parts = ax.violinplot(
+            data,
+            positions=positions + offset,
+            widths=width,
+            showmedians=True,
+            showextrema=False,
+        )
+        for pc in parts["bodies"]:
+            pc.set_facecolor(colors[name])
+            pc.set_alpha(0.6)
+        parts["cmedians"].set_color(colors[name])
+        ax.scatter([], [], color=colors[name], label=name, s=20)
+
+    tick_step = max(1, len(labels) // 24)
+    tick_positions = positions[::tick_step]
+    ax.axhline(0, color="black", alpha=0.2, linewidth=0.8)
+    ax.set_xticks(tick_positions)
+    ax.set_xticklabels([labels[i] for i in tick_positions], rotation=45, ha="right")
+    ax.set_ylabel(r"$\Delta R_{\rm res}$ (W m$^{-2}$)")
+    ax.set_title(title)
+    ax.legend()
+    ax.grid(axis="y", alpha=0.3)
+    fig.tight_layout()
+    fig.savefig(save_path, dpi=200)
+    plt.close(fig)
+
+
 def timeseries_test(
     responses: xr.Dataset,
     output_root: Path,
@@ -465,6 +518,21 @@ def timeseries_test(
     )
     plot_residual_rmse_timeseries(
         residual_series_np, timeseries_clear / "np", clear_sky=True
+    )
+
+    plot_residual_year_month_violins(
+        dR_res_nn,
+        dR_res_k,
+        "Global",
+        timeseries_all / "violin_residuals_by_year_month_global.png",
+        residual_samples,
+    )
+    plot_residual_year_month_violins(
+        dR_res_nn.isel(latitude=NORTH_MASK),
+        dR_res_k.isel(latitude=NORTH_MASK),
+        "North Pole (>75 deg N)",
+        timeseries_all / "np" / "violin_residuals_by_year_month_np.png",
+        residual_samples,
     )
 
     if not has_cross:

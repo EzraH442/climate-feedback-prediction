@@ -590,6 +590,37 @@ def weighted_residuals_by_month(
     return result
 
 
+def weighted_residuals_by_year_month(
+    da: xr.DataArray,
+    n_samples: int = 2000,
+    rng: np.random.Generator | None = None,
+) -> tuple[list[str], list[np.ndarray]]:
+    rng = rng or np.random.default_rng()
+    da = da.transpose("year", "month", "latitude", "longitude")
+    lat_vals = da.latitude.values
+    weights = np.clip(np.cos(np.deg2rad(lat_vals)), 0, None)
+    labels = []
+    result = []
+
+    for year in da.year.values:
+        for month in da.month.values:
+            field = da.sel(year=year, month=month).compute().values
+            n_lat, n_lon = field.shape
+            weights_2d = weights[:, None] * np.ones((n_lat, n_lon))
+
+            flat_res = field.ravel()
+            p = weights_2d.ravel().copy()
+            valid = np.isfinite(flat_res)
+            p[~valid] = 0.0
+            p = p / p.sum()
+
+            indices = rng.choice(len(flat_res), size=n_samples, p=p)
+            labels.append(f"{int(year)}-{int(month):02d}")
+            result.append(flat_res[indices])
+
+    return labels, result
+
+
 
 # ── Feature/target extraction & preprocessing helpers ────────────────────────
 
