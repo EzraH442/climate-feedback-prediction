@@ -258,44 +258,68 @@ def plot_net_timeseries(net_series, save_path: Path) -> None:
     plt.close(fig)
 
 
-def plot_residual_violins(residuals, residuals_np, output_dir: Path) -> None:
+def setup_box_plot(figsize=(14, 4)):
+    fig, ax = plt.subplots(figsize=figsize)
+    ax.axhline(0, color="black", alpha=0.2, linewidth=0.8)
+    ax.set_ylim(-20, 20)
+    ax.set_yticks(np.arange(-20, 21, 5))
+    ax.set_ylabel(r"$\Delta R_{\rm res}$ (W m$^{-2}$)")
+    ax.grid(axis="y", alpha=0.3)
+    return fig, ax
+
+
+def plot_boxes_on_ax(ax, data, positions, width, color, label) -> None:
+    box = ax.boxplot(
+        data,
+        positions=positions,
+        widths=width,
+        patch_artist=True,
+        showfliers=False,
+    )
+    for patch in box["boxes"]:
+        patch.set_facecolor(color)
+        patch.set_alpha(0.6)
+        patch.set_edgecolor(color)
+    for key in ["whiskers", "caps", "medians"]:
+        for artist in box[key]:
+            artist.set_color(color)
+    ax.scatter([], [], color=color, label=label, s=20)
+
+
+def plot_residual_boxplots(residuals, residuals_np, output_dir: Path) -> None:
     colors = {"nn": "tab:blue", "nn_cross": "purple", "kernel": "tab:orange"}
-    width = 0.25
-    offsets = {"nn": -width, "nn_cross": 0, "kernel": width}
+    keys = [key for key in ["nn", "nn_cross", "kernel"] if key in residuals]
+    width = 0.7 / len(keys)
+    offsets = dict(
+        zip(keys, np.linspace(-0.35 + width / 2, 0.35 - width / 2, len(keys)))
+    )
     months = np.arange(1, 13)
 
     for title, data_dict, save_name in [
-        ("Global", residuals, "violin_residuals_by_month_global.png"),
-        ("North Pole (>75 deg N)", residuals_np, "violin_residuals_by_month_np.png"),
+        ("Global", residuals, "boxplot_residuals_by_month_global.png"),
+        ("North Pole (>75 deg N)", residuals_np, "boxplot_residuals_by_month_np.png"),
     ]:
-        fig, ax = plt.subplots(figsize=(14, 4))
-        for key in ["nn", "nn_cross", "kernel"]:
-            parts = ax.violinplot(
+        fig, ax = setup_box_plot()
+        for key in keys:
+            plot_boxes_on_ax(
+                ax,
                 data_dict[key],
-                positions=months + offsets[key],
-                widths=width * 0.9,
-                showmedians=True,
-                showextrema=False,
+                months + offsets[key],
+                width * 0.9,
+                colors[key],
+                key,
             )
-            for pc in parts["bodies"]:
-                pc.set_facecolor(colors[key])
-                pc.set_alpha(0.6)
-            parts["cmedians"].set_color(colors[key])
-            ax.scatter([], [], color=colors[key], label=key, s=20)
 
-        ax.axhline(0, color="black", alpha=0.2, linewidth=0.8)
         ax.set_xticks(months)
         ax.set_xticklabels(MONTH_NAMES)
-        ax.set_ylabel(r"$\Delta R_{\rm res}$ (W m$^{-2}$)")
         ax.set_title(title)
         ax.legend()
-        ax.grid(axis="y", alpha=0.3)
         fig.tight_layout()
         fig.savefig(output_dir / save_name, dpi=200)
         plt.close(fig)
 
 
-def plot_residual_year_month_violins(
+def plot_residual_year_month_boxplots(
     nn_residual: xr.DataArray,
     k_residual: xr.DataArray,
     title: str,
@@ -315,33 +339,26 @@ def plot_residual_year_month_violins(
     colors = {"NN": "tab:blue", "K": "tab:orange"}
     width = 0.35
     fig_width = max(14, 0.18 * len(labels))
-    fig, ax = plt.subplots(figsize=(fig_width, 4))
+    fig, ax = setup_box_plot(figsize=(fig_width, 4))
     for name, data, offset in [
         ("NN", nn_residuals, -width / 2),
         ("K", k_residuals, width / 2),
     ]:
-        parts = ax.violinplot(
+        plot_boxes_on_ax(
+            ax,
             data,
-            positions=positions + offset,
-            widths=width,
-            showmedians=True,
-            showextrema=False,
+            positions + offset,
+            width,
+            colors[name],
+            name,
         )
-        for pc in parts["bodies"]:
-            pc.set_facecolor(colors[name])
-            pc.set_alpha(0.6)
-        parts["cmedians"].set_color(colors[name])
-        ax.scatter([], [], color=colors[name], label=name, s=20)
 
-    tick_step = max(1, len(labels) // 24)
+    tick_step = 6
     tick_positions = positions[::tick_step]
-    ax.axhline(0, color="black", alpha=0.2, linewidth=0.8)
     ax.set_xticks(tick_positions)
     ax.set_xticklabels([labels[i] for i in tick_positions], rotation=45, ha="right")
-    ax.set_ylabel(r"$\Delta R_{\rm res}$ (W m$^{-2}$)")
     ax.set_title(title)
     ax.legend()
-    ax.grid(axis="y", alpha=0.3)
     fig.tight_layout()
     fig.savefig(save_path, dpi=200)
     plt.close(fig)
@@ -520,20 +537,49 @@ def timeseries_test(
         residual_series_np, timeseries_clear / "np", clear_sky=True
     )
 
-    plot_residual_year_month_violins(
+    plot_residual_year_month_boxplots(
         dR_res_nn,
         dR_res_k,
         "Global",
-        timeseries_all / "violin_residuals_by_year_month_global.png",
+        timeseries_all / "boxplot_residuals_by_year_month_global.png",
         residual_samples,
     )
-    plot_residual_year_month_violins(
+    plot_residual_year_month_boxplots(
         dR_res_nn.isel(latitude=NORTH_MASK),
         dR_res_k.isel(latitude=NORTH_MASK),
         "North Pole (>75 deg N)",
-        timeseries_all / "np" / "violin_residuals_by_year_month_np.png",
+        timeseries_all / "np" / "boxplot_residuals_by_year_month_np.png",
         residual_samples,
     )
+    plot_residual_year_month_boxplots(
+        dR_res_nn_clr,
+        dR_res_k_clr,
+        "Global clear-sky",
+        timeseries_clear / "boxplot_residuals_by_year_month_global.png",
+        residual_samples,
+    )
+    plot_residual_year_month_boxplots(
+        dR_res_nn_clr.isel(latitude=NORTH_MASK),
+        dR_res_k_clr.isel(latitude=NORTH_MASK),
+        "North Pole (>75 deg N) clear-sky",
+        timeseries_clear / "np" / "boxplot_residuals_by_year_month_np.png",
+        residual_samples,
+    )
+
+    rng = np.random.default_rng(0)
+    residuals_clear = {
+        "nn": weighted_residuals_by_month(dR_res_nn_clr, residual_samples, rng),
+        "kernel": weighted_residuals_by_month(dR_res_k_clr, residual_samples, rng),
+    }
+    residuals_clear_np = {
+        "nn": weighted_residuals_by_month(
+            dR_res_nn_clr.isel(latitude=NORTH_MASK), residual_samples, rng
+        ),
+        "kernel": weighted_residuals_by_month(
+            dR_res_k_clr.isel(latitude=NORTH_MASK), residual_samples, rng
+        ),
+    }
+    plot_residual_boxplots(residuals_clear, residuals_clear_np, timeseries_clear)
 
     if not has_cross:
         return
@@ -555,7 +601,7 @@ def timeseries_test(
             dR_res_k.isel(latitude=NORTH_MASK), residual_samples, rng
         ),
     }
-    plot_residual_violins(residuals, residuals_np, timeseries_all)
+    plot_residual_boxplots(residuals, residuals_np, timeseries_all)
 
 
 def date_closure_test(
