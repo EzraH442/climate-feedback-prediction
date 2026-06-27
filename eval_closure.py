@@ -103,6 +103,7 @@ def plot_field_pair(
     np_save_path: Path,
     vmax: float,
     label: str,
+    np_vmax: float | None = None,
 ) -> None:
     if NORTH_MASK is None:
         raise RuntimeError("NORTH_MASK must be initialized before plotting.")
@@ -127,11 +128,12 @@ def plot_field_pair(
         lat,
         title=title,
         save_path=np_save_path,
-        vmin=-vmax,
-        vmax=vmax,
+        vmin=-(np_vmax if np_vmax is not None else vmax),
+        vmax=np_vmax if np_vmax is not None else vmax,
         annotation=f"{ann_np:.2f}",
         label=label,
         boundary=NORTH_BOUNDARY,
+        contours=True
     )
 
 
@@ -150,7 +152,7 @@ def plot_input_anomalies(
         ("lcc", "", None),
         ("tcwv", "kg/m^2", None),
         ("tco3", "kg/m^2", None),
-        ("tsr", "W/m^2", 45),
+        ("tsr", "W/m^2", 24),
     ]
     for var, label, fixed_vmax in specs:
         field = anomaly.sel(month=month, year=year)[var].compute()
@@ -201,6 +203,7 @@ def plot_response_dataset(
             np_save_path=output_dir / "np" / filename,
             vmax=vmax,
             label="W/m^2",
+            np_vmax=24
         )
 
 
@@ -244,7 +247,24 @@ def plot_residual_rmse_timeseries(series, output_dir: Path, clear_sky: bool) -> 
     fig.savefig(output_dir / "timeseries_rmse.png", dpi=200)
     plt.close(fig)
 
-
+def plot_residual_mbe_timeseries(series, output_dir: Path, clear_sky: bool) -> None:
+    fig, ax = setup_timeseries_plot()
+    ylabel = (
+        rf"MBE $\Delta R_{{net,clr}}$ ($W m^{{-2}}$)"
+        if clear_sky
+        else rf"MBE $\Delta R_{{net}}$ ($W m^{{-2}}$)"
+    )
+    for source in ["nn", "k"]:
+        name = f"dR_res_{source}" + ("_clr" if clear_sky else "")
+        ax.scatter(x=series[name]["date"], y=series[name], s=1, label=source)
+    ax.set_yticks(np.arange(0, 11, 2))
+    ax.set_ylabel(ylabel)
+    ax.legend()
+    ax.grid(alpha=0.5)
+    fig.tight_layout()
+    fig.savefig(output_dir / "timeseries_mbe.png", dpi=200)
+    plt.close(fig)
+    
 def plot_net_timeseries(net_series, save_path: Path) -> None:
     fig, ax = setup_timeseries_plot()
     ax.axhline(0, alpha=0.1)
@@ -257,14 +277,7 @@ def plot_net_timeseries(net_series, save_path: Path) -> None:
     fig.savefig(save_path, dpi=200)
     plt.close(fig)
 
-def setup_box_plot(figsize=(14, 4)):
-    fig, ax = plt.subplots(figsize=figsize)
-    ax.axhline(0, color="black", alpha=0.2, linewidth=0.8)
-    ax.set_ylim(-20, 20)
-    ax.set_yticks(np.arange(-20, 21, 5))
-    ax.set_ylabel(r"$\Delta R_{\rm res}$ (W m$^{-2}$)")
-    ax.grid(axis="y", alpha=0.3)
-    return fig, ax
+
 
 def setup_box_plot(figsize=(14, 4)):
     fig, ax = plt.subplots(figsize=figsize)
@@ -511,6 +524,31 @@ def timeseries_test(
         fig.tight_layout()
         fig.savefig(timeseries_all / "timeseries_sum_cross.png", dpi=200)
         plt.close(fig)
+
+    residual_series = {
+        "dR_res_nn": global_date_series(dR_res_nn),
+        "dR_res_k": global_date_series(dR_res_k),
+        "dR_res_nn_clr": global_date_series(dR_res_nn_clr),
+        "dR_res_k_clr": global_date_series(dR_res_k_clr),
+    }
+    residual_series_np = {
+        "dR_res_nn": global_date_series(dR_res_nn.isel(latitude=NORTH_MASK)),
+        "dR_res_k": global_date_series(dR_res_k.isel(latitude=NORTH_MASK)),
+        "dR_res_nn_clr": global_date_series(dR_res_nn_clr.isel(latitude=NORTH_MASK)),
+        "dR_res_k_clr": global_date_series(dR_res_k_clr.isel(latitude=NORTH_MASK)),
+    }
+    plot_residual_mbe_timeseries(
+        residual_series, timeseries_all, clear_sky=False
+    )
+    plot_residual_mbe_timeseries(
+        residual_series, timeseries_clear, clear_sky=True
+    )
+    plot_residual_mbe_timeseries(
+        residual_series_np, timeseries_all / "np", clear_sky=False
+    )
+    plot_residual_mbe_timeseries(
+        residual_series_np, timeseries_clear / "np", clear_sky=True
+    )
 
     residual_series = {
         "dR_res_nn": np.sqrt(global_date_series(np.power(dR_res_nn, 2))),
@@ -847,6 +885,38 @@ def date_closure_test(
         "NN",
     )
 
+def feedback_test(
+    temperature_anomaly: xr.Dataset,
+    responses: xr.Dataset,
+    output_root: Path,
+) -> None:
+    output_root.mkdir(exist_ok=True, parents=True)
+    output_clr = output_root / "clr"
+    output_all = output_root / "all"
+    output_clr.mkdir(exist_ok=True, parents=True)
+    output_all.mkdir(exist_ok=True, parents=True)
+    
+    dR = responses["dR_era5_all"]
+    dR_clr = responses["dR_era5_clr"]
+
+    responses['dt2m'] = temperature_anomaly # (lat, lon, year, month) -> (year, month)
+    responses_global_mean = global_date_series(responses)
+    responses_global_mean = responses_global_mean.set_coords('dt2m')
+    print(responses_global_mean)
+
+    respones_regression_results = responses_global_mean.polyfit('dt2m', deg=1, cov=True)
+    print(respones_regression_results)
+    #respones_regression_results.to_netcdf(output_root / 'feedbacks.nc')  
+
+    xmin, xmax = responses_global_mean.dt2m.min().values, responses_global_mean.dt2m.max().values
+    for var in responses_global_mean.data_vars:
+        responses_global_mean[var].plot.scatter(x='dt2m')
+
+        m = respones_regression_results[f"{var}_polyfit_coefficients"].sel(degree=1)
+        b = respones_regression_results[f"{var}_polyfit_coefficients"].sel(degree=0)
+        plt.plot([xmin, xmax], [xmin * m + b, xmax * m + b], linestyle='--', alpha=0.3)
+        plt.savefig(output_root / f'reg_{var}.png')
+        plt.close()
 
 response_save_path = 'closure_test_2/saved_responses_closure_test_2.nc'
 def main():
@@ -895,11 +965,13 @@ def main():
     ds_monthly = to_monthly(ds.copy(deep=True))
     ds_monthly_means = ds_monthly.mean("year")
     anomaly = ds_monthly - ds_monthly_means
+    # print(ds_monthly_means)
 
     cloud_vars = ["tcc", "hcc", "mcc", "lcc", "tciw", "tclw"]
     ds_monthly_clr = ds_monthly.assign(
         {v: xr.zeros_like(ds_monthly[v]) for v in cloud_vars}
     )
+    ds_monthly_means_clr = ds_monthly_clr.mean('year')
 
     ds_tsrc = xr.open_mfdataset(list(data_path.glob("era5_tsrc_monthly_*.nc")))
     ds_tsrc = ds_tsrc.sel(date=slice(args.start_date, args.end_date)).tsrc
@@ -911,21 +983,21 @@ def main():
     if Path(response_save_path).exists():
         responses = xr.load_dataset(response_save_path)
     else:
-        dR_a_nn, dR_c_nn, dR_q_nn, dR_co3_nn = nn_radiative_response(
-            ds_monthly,
+        dR_a_nn, dR_c_nn, dR_q_nn = nn_radiative_response(
+            ds_monthly_means,
             anomaly,
             model,
             preprocessor,
             config,
-            ["fal", cloud_vars, "tcwv", "tco3"],
+            ["fal", cloud_vars, "tcwv"],
         )
-        dR_a_nn_clr, dR_q_nn_clr, dR_co3_nn_clr = nn_radiative_response(
-            ds_monthly_clr,
+        dR_a_nn_clr, dR_q_nn_clr = nn_radiative_response(
+            ds_monthly_means_clr,
             anomaly,
             model,
             preprocessor,
             config,
-            ["fal", "tcwv", "tco3"],
+            ["fal", "tcwv"],
         )
     
         ds_qt = xr.load_dataset(QT_PATH)
@@ -941,7 +1013,7 @@ def main():
                 ("tcwv", ["hcc", "mcc", "lcc", "tcc", "tciw", "tclw"]),
             ]
             dR_aq_nn, dR_ac_nn, dR_qc_nn = nn_radiative_response_cross(
-                ds_monthly,
+                ds_monthly_means,
                 anomaly,
                 model,
                 preprocessor,
@@ -1013,7 +1085,7 @@ def main():
         )
         responses = xr.merge([base_responses, cross_data_vars])
         responses.to_netcdf(response_save_path)
-
+    
     """
     date_closure_test(
         anomaly,
@@ -1024,16 +1096,24 @@ def main():
         output_root,
         year,
         month,
-        dR_co3_nn=dR_co3_nn,
-        dR_co3_nn_clr=dR_co3_nn_clr,
     )
-    """
     timeseries_test(
         responses,
         output_root,
         args.residual_samples,
     )
+    """
 
+    ds_t2m = xr.open_mfdataset(list(data_path.glob("era5_t2m_monthly_*.nc")))
+    ds_t2m = ds_t2m.sel(date=slice(args.start_date, args.end_date)).t2m
+    ds_t2m = ds_t2m.interp(**kernel_grid).compute()
+    ds_t2m_monthly = to_monthly(ds_t2m.copy(deep=True))
+    dt2m = ds_t2m_monthly - ds_t2m_monthly.mean('year')
+    feedback_test(
+        dt2m,
+        responses,
+        output_root,
+    )
 
 if __name__ == "__main__":
     main()

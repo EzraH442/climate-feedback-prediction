@@ -39,6 +39,15 @@ def monthly_old_inputs(scaled: xr.Dataset) -> np.ndarray:
     )
 
 
+
+def monthly_old_inputs_no_yr(scaled: xr.Dataset) -> np.ndarray:
+    return (
+        scaled[OLD_INPUT_ORDER]
+        .to_dataarray()
+        .transpose("month", "latitude", "longitude", "variable")
+        .to_numpy()
+    )
+    
 def old_predict_monthly_tsr(model, ds, scaler, batch_size: int) -> xr.DataArray:
     pred_scaled = predict(model, monthly_old_inputs(old_scale(ds, scaler)), batch_size)
     pred = old_inverse_tsr(pred_scaled, scaler)
@@ -52,7 +61,20 @@ def old_predict_monthly_tsr(model, ds, scaler, batch_size: int) -> xr.DataArray:
             "longitude": ds.longitude,
         },
     )
-
+    
+def old_predict_monthly_tsr_no_yr(model, ds, scaler, batch_size: int) -> xr.DataArray:
+    print(ds)
+    pred_scaled = predict(model, monthly_old_inputs_no_yr(old_scale(ds, scaler)), batch_size)
+    pred = old_inverse_tsr(pred_scaled, scaler)
+    return xr.DataArray(
+        pred,
+        dims=("month", "latitude", "longitude"),
+        coords={
+            "month": ds.month,
+            "latitude": ds.latitude,
+            "longitude": ds.longitude,
+        },
+    )
 
 def refresh_ecod_fal(ds: xr.Dataset) -> xr.Dataset:
     if "ecod" in ds and "fal" in ds:
@@ -76,7 +98,7 @@ def old_nn_radiative_response(
     variables,
     batch_size: int,
 ) -> list[xr.DataArray]:
-    pred_original = old_predict_monthly_tsr(model, ds, scaler, batch_size)
+    pred_original = old_predict_monthly_tsr_no_yr(model, ds, scaler, batch_size)
     results = []
 
     for var_list in variables:
@@ -113,20 +135,23 @@ def build_old_response_dataset(
     batch_size: int,
     skip_cross: bool,
 ) -> xr.Dataset:
-    dR_a_nn, dR_c_nn, dR_q_nn, dR_co3_nn = old_nn_radiative_response(
-        ds_monthly,
+    ds_monthly_means = ds_monthly.mean("year")
+    ds_monthly_means_clr = ds_monthly_clr.mean('year')
+    
+    dR_a_nn, dR_c_nn, dR_q_nn = old_nn_radiative_response(
+        ds_monthly_means,
         anomaly,
         model,
         scaler,
-        ["fal", OLD_CLOUD_VARS, "tcwv", "tco3"],
+        ["fal", OLD_CLOUD_VARS, "tcwv"],
         batch_size,
     )
-    dR_a_nn_clr, dR_q_nn_clr, dR_co3_nn_clr = old_nn_radiative_response(
-        ds_monthly_clr,
+    dR_a_nn_clr, dR_q_nn_clr = old_nn_radiative_response(
+        ds_monthly_means_clr,
         anomaly,
         model,
         scaler,
-        ["fal", "tcwv", "tco3"],
+        ["fal", "tcwv"],
         batch_size,
     )
 
@@ -181,7 +206,7 @@ def build_old_response_dataset(
 
     if not skip_cross:
         dR_aq_nn, dR_ac_nn, dR_qc_nn = old_nn_radiative_response(
-            ds_monthly,
+            ds_monthly_means,
             anomaly,
             model,
             scaler,
@@ -210,8 +235,6 @@ def build_old_response_dataset(
         )
 
     responses = xr.Dataset(data_vars)
-    responses["dR_co3_nn_all"] = dR_co3_nn
-    responses["dR_co3_nn_clr"] = dR_co3_nn_clr
     return responses
 
 
@@ -270,8 +293,6 @@ def main():
         args.output_dir,
         args.year,
         args.month,
-        dR_co3_nn=responses.get("dR_co3_nn_all"),
-        dR_co3_nn_clr=responses.get("dR_co3_nn_clr"),
     )
     closure.timeseries_test(
         responses,

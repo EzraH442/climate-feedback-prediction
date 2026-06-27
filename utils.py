@@ -63,6 +63,24 @@ def setup_north_pole_map(boundary: float = 60) -> Basemap:
 
 
 def plot_colormesh_on_map(m, lon, lat, data, cmap, vmin, vmax) -> None:
+    lon_arr = np.asarray(lon)
+    lat_arr = np.asarray(lat)
+    data_arr = np.asarray(data)
+
+    lat_mask = (lat_arr >= m.latmin) & (lat_arr <= m.latmax)
+    lat_idx = np.where(lat_mask)[0]
+    # Add one row of padding on each side so boundary cell quads are complete
+    i_min = max(lat_idx.min() - 1, 0)
+    i_max = min(lat_idx.max() + 1, len(lat_arr) - 1)
+
+    lat_sub = lat_arr[i_min:i_max + 1]
+    data_sub = data_arr[i_min:i_max + 1, :]
+
+    lon_grid, lat_grid = np.meshgrid(lon_arr, lat_sub)
+    x, y = m(lon_grid, lat_grid)
+    return m.pcolormesh(x, y, data_sub, shading="nearest", cmap=cmap, vmin=vmin, vmax=vmax)
+
+def plot_contours_on_map(m, lon, lat, data, cmap, vmin, vmax) -> None:
     #lon_grid, lat_grid = np.meshgrid(np.asarray(lon), np.asarray(lat))
     #m.pcolormesh(lon_grid, lat_grid, np.asarray(data), latlon=True, shading="nearest", cmap=cmap, vmin=vmin, vmax=vmax)
 
@@ -83,7 +101,23 @@ def plot_colormesh_on_map(m, lon, lat, data, cmap, vmin, vmax) -> None:
 
     lon_grid, lat_grid = np.meshgrid(lon_arr, lat_sub)
     x, y = m(lon_grid, lat_grid)
-    m.pcolormesh(x, y, data_sub, shading="nearest", cmap=cmap, vmin=vmin, vmax=vmax)
+
+    data_range = vmax - vmin
+    step = data_range // 12
+    if step == 0:
+        step = data_range / 12
+    true_min = np.min(data).values
+    true_max = np.max(data).values
+    print(true_min, true_max)
+    levels_up = np.arange(0, true_max-1+step, step)
+    levels_down = -np.arange(step, -true_min-1+step, step)
+    levels = list(reversed(list(levels_down))) + list(levels_up)
+    print(levels)
+    
+    cs_halo = m.contour(x, y, data_sub, colors='white', linewidths=3.0, levels=levels)
+    contours = m.contour(x, y, data_sub, colors='#333333', linewidths=1.2, levels=levels)
+    plt.clabel(contours, inline=True, fmt='%.1f', fontsize=10)
+    return contours
 
 def plot_global_field(
     field: np.ndarray,
@@ -96,13 +130,17 @@ def plot_global_field(
     vmax: float = 5,
     label: str = r"$W/m^2 1\%$",
     annotation: str | None = None,
+    contours = False
 ) -> None:
     fig = plt.figure(figsize=(8, 6), dpi=300)
     m = setup_global_map()
-    plot_colormesh_on_map(m, lon, lat, field, cmap=cmap, vmin=vmin, vmax=vmax)
+    artist = plot_colormesh_on_map(m, lon, lat, field, cmap=cmap, vmin=vmin, vmax=vmax)
+    if contours:
+        plot_contours_on_map(m, lon, lat, field, cmap=cmap, vmin=vmin, vmax=vmax)
     if annotation is not None:
         plt.text(x=300, y=np.max(lat) + 5, s=annotation, fontsize=20)
-    plt.colorbar(orientation="horizontal", fraction=0.075, label=label)
+    #fig.colorbar(artist, m, orientation="horizontal", fraction=0.075, label=label)
+    plt.colorbar(artist, orientation="horizontal", fraction=0.075, label=label)
     plt.title(title)
     plt.savefig(save_path)
     plt.close(fig)
@@ -119,14 +157,17 @@ def plot_north_pole_field(
     label: str = r"$W/m^2 1\%$",
     annotation: str | None = None,
     boundary: float = 60,
+    contours = False
 ) -> None:
     fig = plt.figure(figsize=(8, 8), dpi=300)
     m = setup_north_pole_map(boundary=boundary)
-    plot_colormesh_on_map(m, lon, lat, field, cmap=cmap, vmin=vmin, vmax=vmax)
+    artist = plot_colormesh_on_map(m, lon, lat, field, cmap=cmap, vmin=vmin, vmax=vmax)
+    if contours:
+        plot_contours_on_map(m, lon, lat, field, cmap=cmap, vmin=vmin, vmax=vmax)
     if annotation is not None:
         plt.text(x=300, y=np.max(lat) + 5, s=annotation, fontsize=20)
     plt.title(title)
-    plt.colorbar(orientation="horizontal", fraction=0.05, pad=0.07, label=label)
+    plt.colorbar(artist, orientation="horizontal", fraction=0.05, pad=0.07, label=label)
     plt.savefig(save_path)
     plt.close(fig)
 
@@ -431,13 +472,55 @@ def to_dates(ds: xr.Dataset | xr.DataArray) -> xr.Dataset | xr.DataArray:
         .sortby("date")
     )
 
-
 def nn_pred(
     ds: xr.Dataset,
     model: SimpleModel,
     preprocessor: Preprocessor,
     config,
 ) -> xr.DataArray:
+    month = ds.month.values
+    lon, lat = ds.longitude.values, ds.latitude.values
+    target_var = target_var_from_config(config)
+
+    ds_ordered_np = (
+        ordered_dataset_for_config(ds, config)
+        .to_dataarray()
+        .transpose("month", "latitude", "longitude", "variable")
+        .to_numpy()
+    )
+
+    data_torch = torch.from_numpy(ds_ordered_np).float()
+    model_outputs = model(data_torch[..., : model.input_dim]).detach()
+
+    pred = (
+        preprocessor.preprocessors[-1]
+        .inverse_transform(
+            xr.Dataset(
+                data_vars={
+                    target_var: (
+                        ("month", "latitude", "longitude"),
+                        model_outputs.numpy(),
+                    )
+                },
+                coords={
+                    "month": month,
+                    "longitude": lon,
+                    "latitude": lat,
+                },
+            )
+        )
+        .to_dataarray()
+        .squeeze(dim="variable", drop=True)
+    )
+    return pred
+
+def nn_pred_yr(
+    ds: xr.Dataset,
+    model: SimpleModel,
+    preprocessor: Preprocessor,
+    config,
+) -> xr.DataArray:
+    print(ds)
     year, month = ds.year.values, ds.month.values
     lon, lat = ds.longitude.values, ds.latitude.values
     target_var = target_var_from_config(config)
@@ -475,7 +558,6 @@ def nn_pred(
     )
     return pred
 
-
 def nn_radiative_response(
     ds: xr.Dataset,
     anomaly: xr.Dataset,
@@ -488,14 +570,20 @@ def nn_radiative_response(
     for var_list in variables:
         if not isinstance(var_list, list):
             var_list = [var_list]
-        ds_copies.append(ds.assign({v: ds[v] + anomaly[v] for v in var_list}))
+
+        modified = ds.assign({v: ds[v] + anomaly[v] for v in var_list})
+        #print(ds.coords)
+        #print(anomaly.coords)
+        #print(modified.coords)
+        #print(modified)
+        ds_copies.append(modified)
 
     ds_original = preprocessor.transform(ds)
     ds_perturbed = [preprocessor.transform(d) for d in ds_copies]
 
     pred_original = nn_pred(ds_original, model, preprocessor, config)
     return [
-        (nn_pred(ds_p, model, preprocessor, config) - pred_original)
+        (nn_pred_yr(ds_p, model, preprocessor, config) - pred_original)
         / SECONDS_PER_DAY
         for ds_p in ds_perturbed
     ]
@@ -527,7 +615,7 @@ def nn_radiative_response_cross(
         ds_perturbed = preprocessor.transform(
             ds.assign({v: ds[v] + anomaly[v] for v in var_list})
         )
-        preds[var_list] = nn_pred(ds_perturbed, model, preprocessor, config)
+        preds[var_list] = nn_pred_yr(ds_perturbed, model, preprocessor, config)
 
     results = []
     for vi, vj in variable_pairs:
@@ -581,8 +669,6 @@ def weighted_residuals_by_month(
 
         flat_res = field.ravel()
         p = weights_3d.ravel().copy()
-        valid = np.isfinite(flat_res)
-        p[~valid] = 0.0
         p = p / p.sum()
 
         indices = rng.choice(len(flat_res), size=n_samples, p=p)
@@ -598,6 +684,7 @@ def weighted_residuals_by_year_month(
     rng = rng or np.random.default_rng()
     da = da.transpose("year", "month", "latitude", "longitude")
     lat_vals = da.latitude.values
+    print(lat_vals)
     weights = np.clip(np.cos(np.deg2rad(lat_vals)), 0, None)
     labels = []
     result = []
@@ -607,13 +694,13 @@ def weighted_residuals_by_year_month(
             field = da.sel(year=year, month=month).compute().values
             n_lat, n_lon = field.shape
             weights_2d = weights[:, None] * np.ones((n_lat, n_lon))
+            print(weights_2d)
+
 
             flat_res = field.ravel()
             p = weights_2d.ravel().copy()
-            valid = np.isfinite(flat_res)
-            p[~valid] = 0.0
             p = p / p.sum()
-
+            print(p)
             indices = rng.choice(len(flat_res), size=n_samples, p=p)
             labels.append(f"{int(year)}-{int(month):02d}")
             result.append(flat_res[indices])
