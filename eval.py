@@ -160,7 +160,7 @@ def kernel_ecod_fal_contour_test(
     model: SimpleModel,
     config,
     figures_path: Path = Path("."),
-    date='2015-06',
+    date='2015-09',
     latitude=83.625,
     longitude=17.375,
     scatter=True,
@@ -297,7 +297,7 @@ def tsr_ecod_fal_contour_test(
     model: SimpleModel,
     config,
     figures_path: Path = Path("."),
-    date="2015-06",
+    date="2015-09",
     latitude=83.625,
     longitude=17.375,
     scatter=True,
@@ -1156,6 +1156,7 @@ def main():
     preprocessor.load(config.preprocess.params_dir)
 
     # --- run tests ---
+    """
     global_tsr_test(
         ds=processed_dataset,
         preprocessor=preprocessor,
@@ -1181,6 +1182,7 @@ def main():
         true_kernel=kernels_dataset.sel(date="2015-09"),
         date="2015-09"
     )
+    """
     kernel_ecod_fal_contour_test(
         processed_ds=processed_dataset,
         preprocessor=preprocessor,
@@ -1188,7 +1190,8 @@ def main():
         config=config,
         figures_path=output_dir,
         scatter=False,
-        extrapolate=True,
+        extrapolate=False,
+        date="2015-09"
     )
     tsr_ecod_fal_contour_test(
         processed_ds=processed_dataset,
@@ -1197,8 +1200,10 @@ def main():
         config=config,
         figures_path=output_dir,
         scatter=False,
-        extrapolate=True,
+        extrapolate=False,
+        date="2015-09"
     )
+    """
     second_order_test(
         ds=raw_dataset,
         preprocessor=preprocessor,
@@ -1217,6 +1222,7 @@ def main():
         true_kernel=kernels_dataset.sel(date="2015-12"),
         date="2015-12"
     )
+    """
     #test_4(
     #    raw_dataset=filter_by_years(raw_dataset, [2015]),
     #    preprocessor=preprocessor,

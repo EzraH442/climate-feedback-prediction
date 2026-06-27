@@ -477,7 +477,7 @@ def main():
         scaler,
         args.output_dir,
         scatter=False,
-        extrapolate=True,
+        extrapolate=False,
     )
     kernel_ecod_fal_contour_test(
         ds_all,
@@ -485,7 +485,7 @@ def main():
         scaler,
         args.output_dir,
         scatter=False,
-        extrapolate=True,
+        extrapolate=False,
     )
 
     kernels = load_rrtm_kernels(args.kernel_dir)
