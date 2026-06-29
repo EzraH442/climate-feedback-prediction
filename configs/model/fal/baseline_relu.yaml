@@ -7,6 +7,7 @@ train:
   name: "baseline_relu"
   checkpoint_dir: "./checkpoints/fal/baseline_relu"
   sobolev: False
+  sobolev_vars: []
 
 preprocess:
   params_dir: 'preprocess_states/fal/baseline'

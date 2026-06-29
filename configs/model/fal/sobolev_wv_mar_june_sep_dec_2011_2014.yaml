@@ -13,9 +13,6 @@ dataset:
     - tisr
     - ecod
     - ecod_fal
-  kernel_input_vars:
-    - fal
-    - tcwv
   clear_sky_zero_vars:
     - hcc
     - mcc
@@ -60,5 +57,8 @@ model:
 train:
   name: "sob_wv_mar_june_sep_dec_2011_2014"
   checkpoint_dir: "./checkpoints/fal/sob_wv_mar_june_sep_dec_2011_2014"
-  sobolev: "wv"
+  sobolev: True
+  sobolev_vars:
+    - fal
+    - tcwv
   sobolev_alpha: 0.5

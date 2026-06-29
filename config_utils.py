@@ -4,7 +4,39 @@ from omegaconf import DictConfig, OmegaConf
 
 
 def load_config(config_path: str | Path) -> DictConfig:
-    return _load_config_recursive(Path(config_path).resolve(), seen=set())
+    config = _load_config_recursive(Path(config_path).resolve(), seen=set())
+    validate_config(config)
+    return config
+
+
+def validate_config(config: DictConfig) -> None:
+    if "dataset" not in config:
+        return
+
+    if "model" in config and "input_vars" in config.dataset:
+        input_vars = config.dataset.input_vars
+        if input_vars and config.model.input_dim != len(input_vars):
+            raise ValueError(
+                f"model.input_dim={config.model.input_dim} but dataset.input_vars has {len(input_vars)} fields."
+            )
+
+    if "clear_sky_zero_vars" in config.dataset and "input_vars" in config.dataset:
+        input_vars = config.dataset.input_vars
+        missing = [
+            var for var in config.dataset.clear_sky_zero_vars
+            if var not in input_vars
+        ]
+        if missing:
+            raise ValueError(f"clear_sky_zero_vars not in dataset.input_vars: {missing}")
+
+    if "train" in config and "sobolev" in config.train:
+        sobolev_vars = config.train.sobolev_vars
+        input_vars = config.dataset.input_vars
+        if config.train.sobolev and not sobolev_vars:
+            raise ValueError("train.sobolev=True requires train.sobolev_vars.")
+        missing = [var for var in sobolev_vars if var not in input_vars]
+        if missing:
+            raise ValueError(f"train.sobolev_vars not in dataset.input_vars: {missing}")
 
 
 def _load_config_recursive(config_path: Path, seen: set[Path]) -> DictConfig:

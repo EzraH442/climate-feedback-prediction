@@ -39,3 +39,4 @@ train:
   name: "ts_baseline"
   checkpoint_dir: "./checkpoints/ts/baseline"
   sobolev: False
+  sobolev_vars: []

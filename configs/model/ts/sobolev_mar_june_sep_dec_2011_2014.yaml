@@ -52,5 +52,7 @@ model:
 train:
   name: "ts_sob_cld_mar_june_sep_dec_2011_2014"
   checkpoint_dir: "./checkpoints/ts/sob_cld_mar_june_sep_dec_2011_2014"
-  sobolev: "cld"
+  sobolev: True
+  sobolev_vars:
+    - skt
   sobolev_alpha: 0.5
