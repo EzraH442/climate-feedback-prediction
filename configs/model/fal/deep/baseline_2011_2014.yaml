@@ -51,3 +51,4 @@ train:
   name: "baseline_deep_2011_2014"
   checkpoint_dir: "./checkpoints/fal/deep/sob_deep_2011_2014"
   sobolev: False
+  sobolev_vars: []

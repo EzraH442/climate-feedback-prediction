@@ -22,3 +22,4 @@ train:
   name: "old_mar_sep"
   checkpoint_dir: "./checkpoints/old_mar_sep"
   sobolev: False
+  sobolev_vars: []

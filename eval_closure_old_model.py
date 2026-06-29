@@ -21,7 +21,6 @@ OLD_MODEL_DATA_PATH = Path(
     "old/era5_1deg_monthly_avg_sl_1990-2020_tisr_tciw_tclw_tcwv_hcc_mcc_lcc_sp_tco3_fal_tsr_msl_ecod_noZeros.nc"
 )
 OLD_MODEL_WEIGHTS_PATH = Path("model_weights.npz")
-ERA5_DATA_PATH = Path("data/era5")
 OLD_CLOUD_VARS = ["hcc", "mcc", "lcc", "tciw", "tclw", "ecod"]
 
 
@@ -112,16 +111,6 @@ def old_nn_radiative_response(
     return results
 
 
-def load_clear_sky_response(data_path: Path, ds: xr.Dataset) -> xr.DataArray:
-    paths = sorted(data_path.glob("era5_tsrc_monthly_*.nc"))
-    if not paths:
-        raise FileNotFoundError(f"No era5_tsrc_monthly_*.nc files found in {data_path}")
-
-    ds_tsrc = xr.open_mfdataset(paths).tsrc
-    ds_tsrc = ds_tsrc.sel(date=slice(ds.date.min().values, ds.date.max().values))
-    ds_tsrc = ds_tsrc.interp(latitude=ds.latitude, longitude=ds.longitude).compute()
-    ds_tsrc_monthly = to_monthly(ds_tsrc / SECONDS_PER_DAY)
-    return ds_tsrc_monthly - ds_tsrc_monthly.mean("year")
 
 
 def build_old_response_dataset(
@@ -248,7 +237,6 @@ def main():
     parser = argparse.ArgumentParser(description="Run old-model closure analysis.")
     parser.add_argument("--data_path", type=Path, default=OLD_MODEL_DATA_PATH)
     parser.add_argument("--weights_path", type=Path, default=OLD_MODEL_WEIGHTS_PATH)
-    parser.add_argument("--era5_data_path", type=Path, default=ERA5_DATA_PATH)
     parser.add_argument("--output_dir", type=Path, default=Path("closure_test_2_old_model"))
     parser.add_argument("--year", type=int, default=2012)
     parser.add_argument("--month", type=int, default=9)
@@ -274,7 +262,7 @@ def main():
     anomaly = ds_monthly - ds_monthly_means
     anomaly["tsr"] = anomaly["tsr"] / SECONDS_PER_DAY
     dR = anomaly["tsr"].compute()
-    dR_clr = load_clear_sky_response(args.era5_data_path, ds)
+    dR_clr = anomaly["tsrc"].compute()
     ds_monthly_clr = old_clear_sky(ds_monthly)
 
     print(ds_monthly)

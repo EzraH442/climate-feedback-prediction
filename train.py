@@ -10,8 +10,11 @@ import omegaconf
 from omegaconf import OmegaConf
 
 from config_utils import load_config
-from dataloader import ClimateTorchDataset, KernelDataset, make_era5_filename
-from model import SimpleModelTrainer, SimpleModelSobolevTrainer, SimpleModelAllSobolevTrainer
+from dataloader import ClimateTorchDataset, make_era5_filename
+from model import (
+    SimpleModelTrainer,
+    SimpleModelSobolevTrainer,
+)
 
 
 def comet_experiment_key_path(checkpoint_dir: str) -> Path:
@@ -86,43 +89,19 @@ def create_comet_experiment(
     return experiment
 
 
-def validate_training_config(config: omegaconf.DictConfig):
-    input_vars = list(getattr(config.dataset, "input_vars", []) or [])
-    if input_vars and config.model.input_dim != len(input_vars):
-        raise ValueError(
-            f"model.input_dim={config.model.input_dim} but dataset.input_vars has {len(input_vars)} fields."
-        )
-
-    zero_vars = list(getattr(config.dataset, "clear_sky_zero_vars", []) or [])
-    missing = [var for var in zero_vars if var not in input_vars]
-    if missing:
-        raise ValueError(f"clear_sky_zero_vars not in dataset.input_vars: {missing}")
-
-
 def train(config_path: str, resume: bool = True):
     staged_config_path = stage_training_data(config_path)
     config = load_config(staged_config_path)
     assert isinstance(config, omegaconf.DictConfig), ""
-    validate_training_config(config)
 
-    if config.train.sobolev in ("cld", "all"):
-        train_dataset = KernelDataset(
-            config_path=staged_config_path,
-            data_type="train",
-        )
-        val_dataset = KernelDataset(
-            config_path=staged_config_path,
-            data_type="val",
-        )
-    else:
-        train_dataset = ClimateTorchDataset(
-            config_path=staged_config_path,
-            data_type="train",
-        )
-        val_dataset = ClimateTorchDataset(
-            config_path=staged_config_path,
-            data_type="val",
-        )
+    train_dataset = ClimateTorchDataset(
+        config_path=staged_config_path,
+        data_type="train",
+    )
+    val_dataset = ClimateTorchDataset(
+        config_path=staged_config_path,
+        data_type="val",
+    )
 
     torch.manual_seed(config.seed)
     device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -190,15 +169,8 @@ def train(config_path: str, resume: bool = True):
 
     experiment = create_comet_experiment(config, checkpoint_path=checkpoint_path)
 
-    if config.train.sobolev == "cld":
+    if config.train.sobolev:
         trainer = SimpleModelSobolevTrainer(
-            config=config,
-            experiment=experiment,
-            device=device,
-            checkpoint_path=checkpoint_path,
-        )
-    elif config.train.sobolev == "all":
-        trainer = SimpleModelAllSobolevTrainer(
             config=config,
             experiment=experiment,
             device=device,

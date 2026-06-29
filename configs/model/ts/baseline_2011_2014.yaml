@@ -48,3 +48,4 @@ train:
   name: "ts_baseline_2011_2014"
   checkpoint_dir: "./checkpoints/ts/baseline_2011_2014"
   sobolev: False
+  sobolev_vars: []

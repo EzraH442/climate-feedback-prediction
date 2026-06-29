@@ -46,3 +46,4 @@ train:
   name: "baseline_cos"
   checkpoint_dir: './checkpoints/fal/baseline_cosine_annealing'
   sobolev: False
+  sobolev_vars: []

@@ -36,10 +36,12 @@ def interpolate_kernel_dataset(
 
 def preprocess(config_path):
     conf = load_config(config_path)
-    months = list(getattr(conf.dataset, "months", []) or [])
-    input_var = getattr(conf.dataset, "input_var", "fal")
-    target_var = getattr(conf.dataset, "target_var", "tsr")
-    input_vars = list(getattr(conf.dataset, "input_vars", []) or [])
+    months = conf.dataset.months
+    input_var = conf.dataset.input_var
+    target_var = conf.dataset.target_var
+    input_vars = conf.dataset.input_vars
+    clear_sky = conf.dataset.clear_sky_training
+    clear_sky_enabled = bool(clear_sky.enabled)
 
     # --- make paths ---
     train_paths = [
@@ -71,6 +73,11 @@ def preprocess(config_path):
     print(f"Loading ERA5 val data from: {val_paths}")
     val_data = xr.open_mfdataset(val_paths, combine="nested", concat_dim="date")
     val_data = filter_by_months(val_data, months)
+    train_clear_sky_target = None
+    val_clear_sky_target = None
+    if clear_sky_enabled:
+        train_clear_sky_target = train_data[clear_sky.source_var]
+        val_clear_sky_target = val_data[clear_sky.source_var]
     """
        tcc        (date, latitude, longitude) float64 100MB 
        fal        (date, latitude, longitude) float64 100MB 0.7555 0.7555 ... 0.85
@@ -105,6 +112,21 @@ def preprocess(config_path):
     print("Transforming training and validation data...")
     train_preprocessed = preprocessor.transform(train_data)
     val_preprocessed = preprocessor.transform(val_data)
+    if clear_sky_enabled:
+        output_var = clear_sky.output_var
+        spatial_preprocessor = preprocessor.preprocessors[-2]
+        scaler = preprocessor.preprocessors[-1]
+        denom = scaler.data_max_[target_var] - scaler.data_min_[target_var]
+        denom = denom.where(denom != 0, 1.0)
+        for ds, raw_clear_sky_target in [
+            (train_preprocessed, train_clear_sky_target),
+            (val_preprocessed, val_clear_sky_target),
+        ]:
+            clear_sky_ds = xr.Dataset({target_var: raw_clear_sky_target})
+            clear_sky_ds = spatial_preprocessor.transform(clear_sky_ds)
+            ds[output_var] = (
+                (clear_sky_ds[target_var] - scaler.data_min_[target_var]) / denom
+            ) * (scaler.max_val - scaler.min_val) + scaler.min_val
 
     Path(conf.dataset.era5.path).mkdir(parents=True, exist_ok=True)
     Path(conf.dataset.kernels.path).mkdir(parents=True, exist_ok=True)

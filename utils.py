@@ -231,18 +231,6 @@ def interpolate_spatial_field(
 
 # ── Dataset construction & ordering ──────────────────────────────────────────
 
-def target_var_from_config(config) -> str:
-    return getattr(config.dataset, "target_var", None) or "tsr"
-
-
-def input_var_from_config(config) -> str:
-    return getattr(config.dataset, "input_var", None) or "fal"
-
-
-def input_vars_from_config(config) -> list[str]:
-    return list(getattr(config.dataset, "input_vars", []) or [])
-
-
 def dataset_from_array(arr, date, lon, lat, target_var: str = "tsr") -> xr.Dataset:
     return xr.Dataset(
         data_vars={target_var: (("date", "latitude", "longitude"), arr)},
@@ -294,21 +282,21 @@ def ordered_dataset(
 def ordered_dataset_for_config(ds: xr.Dataset, config) -> xr.Dataset:
     return ordered_dataset(
         ds,
-        target_var=target_var_from_config(config),
-        ecod=getattr(config.preprocess, "ecod", True),
-        input_var=input_var_from_config(config),
-        input_vars=input_vars_from_config(config),
+        target_var=config.dataset.target_var,
+        ecod=config.preprocess.ecod,
+        input_var=config.dataset.input_var,
+        input_vars=config.dataset.input_vars,
     )
 
 
 def kernel_delta(config) -> float:
-    return 0.01 if input_var_from_config(config) == "fal" else 1.0
+    return 0.01 if config.dataset.input_var == "fal" else 1.0
 
 
 def kernel_title(config) -> str:
     return (
         "Surface Albedo"
-        if input_var_from_config(config) == "fal"
+        if config.dataset.input_var == "fal"
         else "Surface Temperature"
     )
 
@@ -316,14 +304,14 @@ def kernel_title(config) -> str:
 def kernel_label(config) -> str:
     return (
         r"$W/m^2 1\%$"
-        if input_var_from_config(config) == "fal"
+        if config.dataset.input_var == "fal"
         else r"$W/m^2 K^{-1}$"
     )
 
 
 def clear_sky_raw(ds: xr.Dataset, config) -> xr.Dataset:
     ds_clr = ds.copy(deep=True)
-    zero_vars = set(getattr(config.dataset, "clear_sky_zero_vars", []) or [])
+    zero_vars = set(config.dataset.clear_sky_zero_vars)
     zero_vars.update(["hcc", "mcc", "lcc", "tcc", "tciw", "tclw"])
     for name in zero_vars.intersection(ds_clr.data_vars):
         ds_clr[name][:] = 0
@@ -344,8 +332,8 @@ def compute_nn_kernel(
     model: SimpleModel,
     config,
 ):
-    input_var = input_var_from_config(config)
-    target = target_var_from_config(config)
+    input_var = config.dataset.input_var
+    target = config.dataset.target_var
     ds_perturbed = ds.copy(deep=True)
     ds_perturbed[input_var] = ds[input_var] + kernel_delta(config)
 
@@ -403,8 +391,8 @@ def compute_nn_kernel_autograd(
     lon = processed_ds.longitude
     lat = processed_ds.latitude
 
-    target = target_var_from_config(config)
-    input_var = input_var_from_config(config)
+    target = config.dataset.target_var
+    input_var = config.dataset.input_var
 
     ordered = ordered_dataset_for_config(processed_ds, config)
     feature_names = [v for v in ordered.data_vars if v != target]
@@ -480,7 +468,7 @@ def nn_pred(
 ) -> xr.DataArray:
     month = ds.month.values
     lon, lat = ds.longitude.values, ds.latitude.values
-    target_var = target_var_from_config(config)
+    target_var = config.dataset.target_var
 
     ds_ordered_np = (
         ordered_dataset_for_config(ds, config)
@@ -523,7 +511,7 @@ def nn_pred_yr(
     print(ds)
     year, month = ds.year.values, ds.month.values
     lon, lat = ds.longitude.values, ds.latitude.values
-    target_var = target_var_from_config(config)
+    target_var = config.dataset.target_var
 
     ds_ordered_np = (
         ordered_dataset_for_config(ds, config)

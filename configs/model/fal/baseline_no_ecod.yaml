@@ -36,3 +36,4 @@ train:
   name: "baseline_no_ecod"
   checkpoint_dir: "./checkpoints/fal/baseline_no_ecod"
   sobolev: False
+  sobolev_vars: []

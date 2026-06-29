@@ -42,3 +42,4 @@ train:
   name: "ts_deep"
   checkpoint_dir: "./checkpoints/ts/deep/deep"
   sobolev: False
+  sobolev_vars: []
