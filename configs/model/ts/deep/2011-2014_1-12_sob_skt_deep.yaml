@@ -1,4 +1,4 @@
-base: ../../base/model/common.yaml
+base: ../../../base/model/common.yaml
 
 dataset:
   input_vars:
@@ -10,6 +10,7 @@ dataset:
     - tciw
     - tclw
     - tcwv
+    - tisr
     - ecod
   clear_sky_zero_vars:
     - hcc
@@ -20,14 +21,11 @@ dataset:
     - ecod
   input_var: "skt"
   target_var: "ttr"
-  months:
-    - 3
-    - 9
   era5:
-    path: "./data/ts/era5_processed_mar_sep_2011_2014"
+    path: './data/ts/era5_processed'
   kernels:
     raw_path: "./data/ts/kernels"
-    path: "./data/ts/kernels_processed_mar_sep_2011_2014"
+    path: './data/ts/kernels_processed'
   train_years:
     - 2011
     - 2012
@@ -37,19 +35,21 @@ dataset:
     - 2015
   test_years:
     - 2015
-
+    
 preprocess:
-  params_dir: "preprocess_states/ts/baseline_mar_sep_2011_2014"
+  params_dir: "preprocess_states/ts/baseline_2011_2014"
   ecod: True
 
 model:
-  input_dim: 9
+  input_dim: 10
   hidden_dim_sizes:
     - 11
+    - 11
+    - 8
 
 train:
-  name: "2011-2014_sob_skt_mar_sep"
-  checkpoint_dir: "./checkpoints/ts/2011-2014_sob_skt_mar_sep"
+  name: "2011-2014_1-12_sob_skt_deep"
+  checkpoint_dir: "./checkpoints/ts/deep/2011-2014_1-12_sob_skt_deep"
   sobolev: True
   sobolev_vars:
     - skt

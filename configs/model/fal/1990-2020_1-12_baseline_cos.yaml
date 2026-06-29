@@ -21,18 +21,21 @@ dataset:
     - tclw
     - ecod
     - ecod_fal
-  months:
-    - 3
-    - 9
   era5:
-    path: "./data/fal/era5_processed_mar_sep"
+    path: './data/fal/era5_processed'
   kernels:
     raw_path: "./data/fal/kernels"
-    path: "./data/fal/kernels_processed_mar_sep"
+    path: './data/fal/kernels_processed'
 
 preprocess:
-  params_dir: "preprocess_states/fal/baseline_mar_sep"
+  params_dir: 'preprocess_states/fal/baseline'
   ecod: True
+
+optimizer:
+  scheduler:
+    type: cosine_annealing
+    t_max: 100
+    eta_min: 1.0e-6
 
 model:
   input_dim: 11
@@ -40,7 +43,7 @@ model:
     - 11
 
 train:
-  name: "1990-2020_baseline_mar_sep"
-  checkpoint_dir: "./checkpoints/fal/1990-2020_baseline_mar_sep"
+  name: "1990-2020_1-12_baseline_cos"
+  checkpoint_dir: "./checkpoints/fal/1990-2020_1-12_baseline_cos"
   sobolev: False
   sobolev_vars: []

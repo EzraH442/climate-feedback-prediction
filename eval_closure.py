@@ -879,7 +879,7 @@ def main():
     parser = argparse.ArgumentParser(description="Run closure-test analysis.")
     parser.add_argument(
         "--config_file",
-        default="configs/model/fal/2011-2014_sob_fal_mar_june_sep_dec.yaml",
+        default="configs/model/fal/2011-2014_3-6-9-12_sob_fal.yaml",
         help="Path to OmegaConf YAML config.",
     )
     parser.add_argument("--checkpoint_path", help="Path to model checkpoint.")

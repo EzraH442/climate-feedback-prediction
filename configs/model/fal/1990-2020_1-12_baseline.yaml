@@ -1,4 +1,4 @@
-base: ../../../base/model/common.yaml
+base: ../../base/model/common.yaml
 
 dataset:
   input_vars:
@@ -26,31 +26,18 @@ dataset:
   kernels:
     raw_path: "./data/fal/kernels"
     path: './data/fal/kernels_processed'
-  train_years:
-    - 2011
-    - 2012
-    - 2013
-    - 2014
-  val_years:
-    - 2015
-  test_years:
-    - 2015
-    
+
 preprocess:
-  params_dir: "preprocess_states/fal/baseline_2011_2014"
+  params_dir: 'preprocess_states/fal/baseline'
   ecod: True
 
 model:
   input_dim: 11
   hidden_dim_sizes:
     - 11
-    - 11
-    - 8
 
 train:
-  name: "2011-2014_sob_fal_deep"
-  checkpoint_dir: "./checkpoints/fal/deep/2011-2014_sob_fal_deep"
-  sobolev: True
-  sobolev_vars:
-    - fal
-  sobolev_alpha: 0.5
+  name: "1990-2020_1-12_baseline"
+  checkpoint_dir: "./checkpoints/fal/1990-2020_1-12_baseline"
+  sobolev: False
+  sobolev_vars: []

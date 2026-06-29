@@ -30,13 +30,19 @@ preprocess:
   params_dir: 'preprocess_states/ts/baseline'
   ecod: True
 
+optimizer:
+  scheduler:
+    type: cosine_annealing
+    t_max: 100
+    eta_min: 1.0e-6
+
 model:
   input_dim: 9
   hidden_dim_sizes:
     - 11
 
 train:
-  name: "1990-2020_baseline"
-  checkpoint_dir: "./checkpoints/ts/1990-2020_baseline"
+  name: "1990-2020_1-12_baseline_cos"
+  checkpoint_dir: "./checkpoints/ts/1990-2020_1-12_baseline_cos"
   sobolev: False
   sobolev_vars: []

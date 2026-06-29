@@ -1,4 +1,4 @@
-base: ../../base/model/common.yaml
+base: ../../../base/model/common.yaml
 
 dataset:
   input_vars:
@@ -10,6 +10,7 @@ dataset:
     - tciw
     - tclw
     - tcwv
+    - tisr
     - ecod
   clear_sky_zero_vars:
     - hcc
@@ -30,19 +31,15 @@ preprocess:
   params_dir: 'preprocess_states/ts/baseline'
   ecod: True
 
-optimizer:
-  scheduler:
-    type: cosine_annealing
-    t_max: 100
-    eta_min: 1.0e-6
-
 model:
-  input_dim: 9
+  input_dim: 10
   hidden_dim_sizes:
     - 11
+    - 11
+    - 8
 
 train:
-  name: "1990-2020_baseline_cos"
-  checkpoint_dir: "./checkpoints/ts/1990-2020_baseline_cos"
+  name: "1990-2020_1-12_baseline_deep"
+  checkpoint_dir: "./checkpoints/ts/deep/1990-2020_1-12_baseline_deep"
   sobolev: False
   sobolev_vars: []

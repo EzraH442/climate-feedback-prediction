@@ -21,11 +21,14 @@ dataset:
     - ecod
   input_var: "skt"
   target_var: "ttr"
+  months:
+    - 3
+    - 9
   era5:
-    path: './data/ts/era5_processed'
+    path: "./data/ts/era5_processed_mar_sep_2011_2014"
   kernels:
     raw_path: "./data/ts/kernels"
-    path: './data/ts/kernels_processed'
+    path: "./data/ts/kernels_processed_mar_sep_2011_2014"
   train_years:
     - 2011
     - 2012
@@ -35,9 +38,9 @@ dataset:
     - 2015
   test_years:
     - 2015
-    
+
 preprocess:
-  params_dir: "preprocess_states/ts/baseline_2011_2014"
+  params_dir: "preprocess_states/ts/baseline_mar_sep_2011_2014"
   ecod: True
 
 model:
@@ -48,7 +51,9 @@ model:
     - 8
 
 train:
-  name: "2011-2014_baseline_deep"
-  checkpoint_dir: "./checkpoints/ts/deep/2011-2014_baseline_deep"
-  sobolev: False
-  sobolev_vars: []
+  name: "2011-2014_3-9_sob_skt_deep"
+  checkpoint_dir: "./checkpoints/ts/deep/2011-2014_3-9_sob_skt_deep"
+  sobolev: True
+  sobolev_vars:
+    - skt
+  sobolev_alpha: 0.5

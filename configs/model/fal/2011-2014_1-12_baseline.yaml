@@ -46,9 +46,7 @@ model:
     - 11
 
 train:
-  name: "2011-2014_sob_fal"
-  checkpoint_dir: "./checkpoints/fal/2011-2014_sob_fal"
-  sobolev: True
-  sobolev_vars:
-    - fal
-  sobolev_alpha: 0.5
+  name: "2011-2014_1-12_baseline"
+  checkpoint_dir: "./checkpoints/fal/2011-2014_1-12_baseline"
+  sobolev: False
+  sobolev_vars: []

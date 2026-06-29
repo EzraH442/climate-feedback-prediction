@@ -19,7 +19,7 @@ model:
     - 11
 
 train:
-  name: "1990-2020_baseline_mar_sep_old"
-  checkpoint_dir: "./checkpoints/1990-2020_baseline_mar_sep_old"
+  name: "1990-2020_3-9_baseline_old"
+  checkpoint_dir: "./checkpoints/1990-2020_3-9_baseline_old"
   sobolev: False
   sobolev_vars: []

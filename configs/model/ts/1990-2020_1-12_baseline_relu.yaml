@@ -1,11 +1,11 @@
-base: 1990-2020_baseline.yaml
+base: 1990-2020_1-12_baseline.yaml
 
 model:
   activation: "relu"
 
 train:
-  name: "1990-2020_baseline_relu"
-  checkpoint_dir: "./checkpoints/ts/1990-2020_baseline_relu"
+  name: "1990-2020_1-12_baseline_relu"
+  checkpoint_dir: "./checkpoints/ts/1990-2020_1-12_baseline_relu"
   sobolev: False
   sobolev_vars: []
 
