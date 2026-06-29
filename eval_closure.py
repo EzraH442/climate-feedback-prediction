@@ -14,14 +14,12 @@ from utils import (
     SECONDS_PER_DAY,
     global_date_series,
     global_mean,
-    input_vars_from_config,
     integrate_over_pressure_levels,
     nn_radiative_response,
     nn_radiative_response_cross,
     plot_global_field,
     plot_north_pole_field,
     setup_timeseries_plot,
-    target_var_from_config,
     to_monthly,
     weighted_residuals_by_month,
     weighted_residuals_by_year_month,
@@ -961,6 +959,7 @@ def main():
     ds = xr.open_mfdataset(list(data_path.glob("era5_single_levels_monthly_*.nc")))
     ds = ds.sel(date=slice(args.start_date, args.end_date)).interp(**kernel_grid)
     ds["tsr"] = ds.tsr / SECONDS_PER_DAY
+    ds["tsrc"] = ds.tsrc / SECONDS_PER_DAY
 
     ds_monthly = to_monthly(ds.copy(deep=True))
     ds_monthly_means = ds_monthly.mean("year")
@@ -973,11 +972,7 @@ def main():
     )
     ds_monthly_means_clr = ds_monthly_clr.mean('year')
 
-    ds_tsrc = xr.open_mfdataset(list(data_path.glob("era5_tsrc_monthly_*.nc")))
-    ds_tsrc = ds_tsrc.sel(date=slice(args.start_date, args.end_date)).tsrc
-    ds_tsrc = ds_tsrc.interp(**kernel_grid).compute() / SECONDS_PER_DAY
-    ds_tsrc_monthly = to_monthly(ds_tsrc.copy(deep=True))
-    dR_clr = ds_tsrc_monthly - ds_tsrc_monthly.mean("year")
+    dR_clr = ds_monthly.tsrc - ds_monthly.tsrc.mean("year")
     dR = anomaly.tsr.interp(**kernel_grid).compute()
 
     if Path(response_save_path).exists():
@@ -1104,11 +1099,7 @@ def main():
     )
     """
 
-    ds_t2m = xr.open_mfdataset(list(data_path.glob("era5_t2m_monthly_*.nc")))
-    ds_t2m = ds_t2m.sel(date=slice(args.start_date, args.end_date)).t2m
-    ds_t2m = ds_t2m.interp(**kernel_grid).compute()
-    ds_t2m_monthly = to_monthly(ds_t2m.copy(deep=True))
-    dt2m = ds_t2m_monthly - ds_t2m_monthly.mean('year')
+    dt2m = ds_monthly.t2m - ds_monthly.t2m.mean("year")
     feedback_test(
         dt2m,
         responses,
