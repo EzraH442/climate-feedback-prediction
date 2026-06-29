@@ -5,6 +5,9 @@ dataset:
     raw_path: './data/era5'
   kernels:
     raw_path: './data/kernels'
+    vars:
+      - TOA_cld
+      - TOA_clr
   train_years:
     - 1990
     - 1992
