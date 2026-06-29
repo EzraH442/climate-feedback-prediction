@@ -29,6 +29,13 @@ def validate_config(config: DictConfig) -> None:
         if missing:
             raise ValueError(f"clear_sky_zero_vars not in dataset.input_vars: {missing}")
 
+    if (
+        "clear_sky_training" in config.dataset
+        and config.dataset.clear_sky_training.enabled
+        and not config.dataset.clear_sky_zero_vars
+    ):
+        raise ValueError("clear_sky_training requires dataset.clear_sky_zero_vars.")
+
     if "train" in config and "sobolev" in config.train:
         sobolev_vars = config.train.sobolev_vars
         input_vars = config.dataset.input_vars
@@ -37,6 +44,12 @@ def validate_config(config: DictConfig) -> None:
         missing = [var for var in sobolev_vars if var not in input_vars]
         if missing:
             raise ValueError(f"train.sobolev_vars not in dataset.input_vars: {missing}")
+
+        if config.dataset.clear_sky_training.enabled and config.train.sobolev:
+            if len(sobolev_vars) != 1:
+                raise ValueError("clear_sky_training with Sobolev requires exactly one sobolev var.")
+            if "TOA_clr" not in config.dataset.kernels.vars:
+                raise ValueError("clear_sky_training with Sobolev requires TOA_clr in dataset.kernels.vars.")
 
 
 def _load_config_recursive(config_path: Path, seen: set[Path]) -> DictConfig:
