@@ -578,6 +578,8 @@ def nn_radiative_response(
         #print(modified)
         ds_copies.append(modified)
 
+    ds_copies.append(ds + anomaly)
+    
     ds_original = preprocessor.transform(ds)
     ds_perturbed = [preprocessor.transform(d) for d in ds_copies]
 

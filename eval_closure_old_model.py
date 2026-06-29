@@ -63,7 +63,6 @@ def old_predict_monthly_tsr(model, ds, scaler, batch_size: int) -> xr.DataArray:
     )
     
 def old_predict_monthly_tsr_no_yr(model, ds, scaler, batch_size: int) -> xr.DataArray:
-    print(ds)
     pred_scaled = predict(model, monthly_old_inputs_no_yr(old_scale(ds, scaler)), batch_size)
     pred = old_inverse_tsr(pred_scaled, scaler)
     return xr.DataArray(
@@ -101,11 +100,12 @@ def old_nn_radiative_response(
     pred_original = old_predict_monthly_tsr_no_yr(model, ds, scaler, batch_size)
     results = []
 
-    for var_list in variables:
+    for var_list in (variables + [list(anomaly.data_vars)]):
         if not isinstance(var_list, list):
             var_list = [var_list]
         perturbed = ds.assign({name: ds[name] + anomaly[name] for name in var_list})
         perturbed = refresh_ecod_fal(perturbed)
+        print(var_list)
         pred_perturbed = old_predict_monthly_tsr(model, perturbed, scaler, batch_size)
         results.append((pred_perturbed - pred_original) / SECONDS_PER_DAY)
 
@@ -138,7 +138,7 @@ def build_old_response_dataset(
     ds_monthly_means = ds_monthly.mean("year")
     ds_monthly_means_clr = ds_monthly_clr.mean('year')
     
-    dR_a_nn, dR_c_nn, dR_q_nn = old_nn_radiative_response(
+    dR_a_nn, dR_c_nn, dR_q_nn, dR_nn = old_nn_radiative_response(
         ds_monthly_means,
         anomaly,
         model,
@@ -146,7 +146,7 @@ def build_old_response_dataset(
         ["fal", OLD_CLOUD_VARS, "tcwv"],
         batch_size,
     )
-    dR_a_nn_clr, dR_q_nn_clr = old_nn_radiative_response(
+    dR_a_nn_clr, dR_q_nn_clr, dR_nn_clr = old_nn_radiative_response(
         ds_monthly_means_clr,
         anomaly,
         model,
@@ -171,6 +171,12 @@ def build_old_response_dataset(
         ),
         "dR_era5_clr": dR_clr.assign_attrs(
             plot_label="ERA5 clear", filename="old_dR_era5_clr.png"
+        ),
+        "dR_nn_all": dR_nn.assign_attrs(
+            plot_label="NN all", filename="old_dR_nn_all.png"
+        ),
+        "dR_nn_clr": dR_nn_clr.assign_attrs(
+            plot_label="NN clear", filename="old_dR_nn_clr.png"
         ),
         "dR_a_nn_all": dR_a_nn.assign_attrs(
             plot_label="a", filename="old_dR_a.png", vmax=40
@@ -205,7 +211,7 @@ def build_old_response_dataset(
     }
 
     if not skip_cross:
-        dR_aq_nn, dR_ac_nn, dR_qc_nn = old_nn_radiative_response(
+        dR_aq_nn, dR_ac_nn, dR_qc_nn, _ = old_nn_radiative_response(
             ds_monthly_means,
             anomaly,
             model,
