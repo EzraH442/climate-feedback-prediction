@@ -2,7 +2,7 @@ base: ../../base/model/common.yaml
 
 dataset:
   input_vars:
-    - fal
+    - skt
     - hcc
     - mcc
     - lcc
@@ -10,9 +10,7 @@ dataset:
     - tciw
     - tclw
     - tcwv
-    - tisr
     - ecod
-    - ecod_fal
   clear_sky_zero_vars:
     - hcc
     - mcc
@@ -20,17 +18,16 @@ dataset:
     - tciw
     - tclw
     - ecod
-    - ecod_fal
+  input_var: "skt"
+  target_var: "ttr"
   months:
     - 3
-    - 6
     - 9
-    - 12
   era5:
-    path: "./data/fal/era5_processed_mar_june_sep_dec_2011_2014"
+    path: "./data/ts/era5_processed_mar_sep_2011_2014"
   kernels:
-    raw_path: "./data/fal/kernels"
-    path: "./data/fal/kernels_processed_mar_june_sep_dec_2011_2014"
+    raw_path: "./data/ts/kernels"
+    path: "./data/ts/kernels_processed_mar_sep_2011_2014"
   train_years:
     - 2011
     - 2012
@@ -42,18 +39,18 @@ dataset:
     - 2015
 
 preprocess:
-  params_dir: "preprocess_states/fal/baseline_mar_june_sep_dec_2011_2014"
+  params_dir: "preprocess_states/ts/baseline_mar_sep_2011_2014"
   ecod: True
 
 model:
-  input_dim: 11
+  input_dim: 9
   hidden_dim_sizes:
     - 11
 
 train:
-  name: "sob_cld_mar_june_sep_dec_2011_2014"
-  checkpoint_dir: "./checkpoints/fal/sob_cld_mar_june_sep_dec_2011_2014"
+  name: "2011-2014_sob_skt_mar_sep"
+  checkpoint_dir: "./checkpoints/ts/2011-2014_sob_skt_mar_sep"
   sobolev: True
   sobolev_vars:
-    - fal
+    - skt
   sobolev_alpha: 0.5

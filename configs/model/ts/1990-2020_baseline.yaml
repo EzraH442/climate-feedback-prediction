@@ -2,7 +2,7 @@ base: ../../base/model/common.yaml
 
 dataset:
   input_vars:
-    - fal
+    - skt
     - hcc
     - mcc
     - lcc
@@ -10,9 +10,7 @@ dataset:
     - tciw
     - tclw
     - tcwv
-    - tisr
     - ecod
-    - ecod_fal
   clear_sky_zero_vars:
     - hcc
     - mcc
@@ -20,24 +18,25 @@ dataset:
     - tciw
     - tclw
     - ecod
-    - ecod_fal
+  input_var: "skt"
+  target_var: "ttr"
   era5:
-    path: './data/fal/era5_processed'
+    path: './data/ts/era5_processed'
   kernels:
-    raw_path: "./data/fal/kernels"
-    path: './data/fal/kernels_processed'
+    raw_path: "./data/ts/kernels"
+    path: './data/ts/kernels_processed'
 
 preprocess:
-  params_dir: 'preprocess_states/fal/baseline'
+  params_dir: 'preprocess_states/ts/baseline'
   ecod: True
 
 model:
-  input_dim: 11
+  input_dim: 9
   hidden_dim_sizes:
     - 11
 
 train:
-  name: "baseline"
-  checkpoint_dir: "./checkpoints/fal/baseline"
+  name: "1990-2020_baseline"
+  checkpoint_dir: "./checkpoints/ts/1990-2020_baseline"
   sobolev: False
   sobolev_vars: []

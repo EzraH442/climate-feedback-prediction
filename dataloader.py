@@ -34,7 +34,7 @@ def area_weights_from_latitudes(
 class ClimateTorchDataset(torch.utils.data.Dataset):
     def __init__(
         self,
-        config_path="configs/model/baseline.yaml",
+        config_path="configs/model/fal/1990-2020_baseline.yaml",
         data_type="train",
         target_var=None,
     ):

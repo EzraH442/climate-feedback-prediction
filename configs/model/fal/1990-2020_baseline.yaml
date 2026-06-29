@@ -1,4 +1,4 @@
-base: ../../../base/model/common.yaml
+base: ../../base/model/common.yaml
 
 dataset:
   input_vars:
@@ -35,11 +35,9 @@ model:
   input_dim: 11
   hidden_dim_sizes:
     - 11
-    - 11
-    - 8
 
 train:
-  name: "deep"
-  checkpoint_dir: "./checkpoints/fal/deep/deep"
+  name: "1990-2020_baseline"
+  checkpoint_dir: "./checkpoints/fal/1990-2020_baseline"
   sobolev: False
   sobolev_vars: []

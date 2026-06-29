@@ -39,7 +39,7 @@ model:
     - 8
 
 train:
-  name: "ts_deep"
-  checkpoint_dir: "./checkpoints/ts/deep/deep"
+  name: "1990-2020_baseline_deep"
+  checkpoint_dir: "./checkpoints/ts/deep/1990-2020_baseline_deep"
   sobolev: False
   sobolev_vars: []

@@ -193,7 +193,7 @@ def main():
         type=str,
         required=False,
         help="Path to config file",
-        default="configs/model/baseline.yaml",
+        default="configs/model/fal/1990-2020_baseline.yaml",
     )
     parser.add_argument(
         "--resume",

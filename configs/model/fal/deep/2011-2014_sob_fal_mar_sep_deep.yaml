@@ -21,11 +21,14 @@ dataset:
     - tclw
     - ecod
     - ecod_fal
+  months:
+    - 3
+    - 9
   era5:
-    path: './data/fal/era5_processed'
+    path: "./data/fal/era5_processed_mar_sep_2011_2014"
   kernels:
     raw_path: "./data/fal/kernels"
-    path: './data/fal/kernels_processed'
+    path: "./data/fal/kernels_processed_mar_sep_2011_2014"
   train_years:
     - 2011
     - 2012
@@ -35,9 +38,9 @@ dataset:
     - 2015
   test_years:
     - 2015
-    
+
 preprocess:
-  params_dir: "preprocess_states/fal/baseline_2011_2014"
+  params_dir: "preprocess_states/fal/baseline_mar_sep_2011_2014"
   ecod: True
 
 model:
@@ -48,8 +51,8 @@ model:
     - 8
 
 train:
-  name: "sob_cld_deep_2011_2014"
-  checkpoint_dir: "./checkpoints/fal/deep/sob_cld_deep_2011_2014"
+  name: "2011-2014_sob_fal_mar_sep_deep"
+  checkpoint_dir: "./checkpoints/fal/deep/2011-2014_sob_fal_mar_sep_deep"
   sobolev: True
   sobolev_vars:
     - fal

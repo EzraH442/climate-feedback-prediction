@@ -33,7 +33,7 @@ model:
     - 11
 
 train:
-  name: "baseline_no_ecod"
-  checkpoint_dir: "./checkpoints/fal/baseline_no_ecod"
+  name: "1990-2020_baseline_no_ecod"
+  checkpoint_dir: "./checkpoints/fal/1990-2020_baseline_no_ecod"
   sobolev: False
   sobolev_vars: []
