@@ -10,7 +10,7 @@ import omegaconf
 from omegaconf import OmegaConf
 
 from config_utils import load_config
-from dataloader import ClimateTorchDataset, KernelDataset, make_era5_filename
+from dataloader import ClimateTorchDataset, make_era5_filename
 from model import (
     SimpleModelTrainer,
     SimpleModelSobolevTrainer,
@@ -94,24 +94,14 @@ def train(config_path: str, resume: bool = True):
     config = load_config(staged_config_path)
     assert isinstance(config, omegaconf.DictConfig), ""
 
-    if config.train.sobolev:
-        train_dataset = KernelDataset(
-            config_path=staged_config_path,
-            data_type="train",
-        )
-        val_dataset = KernelDataset(
-            config_path=staged_config_path,
-            data_type="val",
-        )
-    else:
-        train_dataset = ClimateTorchDataset(
-            config_path=staged_config_path,
-            data_type="train",
-        )
-        val_dataset = ClimateTorchDataset(
-            config_path=staged_config_path,
-            data_type="val",
-        )
+    train_dataset = ClimateTorchDataset(
+        config_path=staged_config_path,
+        data_type="train",
+    )
+    val_dataset = ClimateTorchDataset(
+        config_path=staged_config_path,
+        data_type="val",
+    )
 
     torch.manual_seed(config.seed)
     device = "cuda" if torch.cuda.is_available() else "cpu"
