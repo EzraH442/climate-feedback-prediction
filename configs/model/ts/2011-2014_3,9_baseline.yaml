@@ -48,7 +48,7 @@ model:
     - 11
 
 train:
-  name: "2011-2014_3-9_baseline"
-  checkpoint_dir: "./checkpoints/ts/2011-2014_3-9_baseline"
+  name: "2011-2014_3,9_baseline"
+  checkpoint_dir: "./checkpoints/ts/2011-2014_3,9_baseline"
   sobolev: False
   sobolev_vars: []

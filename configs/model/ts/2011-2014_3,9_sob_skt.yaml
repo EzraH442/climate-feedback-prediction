@@ -48,8 +48,8 @@ model:
     - 11
 
 train:
-  name: "2011-2014_3-9_sob_skt"
-  checkpoint_dir: "./checkpoints/ts/2011-2014_3-9_sob_skt"
+  name: "2011-2014_3,9_sob_skt"
+  checkpoint_dir: "./checkpoints/ts/2011-2014_3,9_sob_skt"
   sobolev: True
   sobolev_vars:
     - skt

@@ -871,18 +871,17 @@ def feedback_test(
         plt.savefig(output_root / f'reg_{var}.png')
         plt.close()
 
-response_save_path = 'closure_test_2/saved_responses_closure_test_2.nc'
 def main():
     global NORTH_BOUNDARY, NORTH_MASK
 
     parser = argparse.ArgumentParser(description="Run closure-test analysis.")
     parser.add_argument(
         "--config_file",
-        default="configs/model/fal/2011-2014_3-6-9-12_sob_fal.yaml",
+        default="configs/model/fal/2011-2014_3,6,9,12_sob_fal.yaml",
         help="Path to OmegaConf YAML config.",
     )
     parser.add_argument("--checkpoint_path", help="Path to model checkpoint.")
-    parser.add_argument("--output_dir", default="closure_test_2", help="Output directory.")
+    parser.add_argument("--output_dir", help="Output directory.")
     parser.add_argument("--year", type=int, default=2012)
     parser.add_argument("--month", type=int, default=9)
     parser.add_argument("--start_date", default="2007-01")
@@ -893,10 +892,14 @@ def main():
     parser.add_argument("--skip_cross", action="store_true")
     args = parser.parse_args()
 
-    year, month = args.year, args.month
-    output_root = Path(args.output_dir)
-
     config = load_config(args.config_file)
+    year, month = args.year, args.month
+    output_root = (
+        Path(args.output_dir)
+        if args.output_dir
+        else Path(config.train.checkpoint_dir) / "figures" / "closure_test"
+    )
+    response_save_path = output_root / "saved_responses_closure_test.nc"
     checkpoint_path = (
         Path(args.checkpoint_path)
         if args.checkpoint_path
@@ -930,7 +933,7 @@ def main():
     dR_clr = ds_monthly.tsrc - ds_monthly.tsrc.mean("year")
     dR = anomaly.tsr.interp(**kernel_grid).compute()
 
-    if Path(response_save_path).exists():
+    if response_save_path.exists():
         responses = xr.load_dataset(response_save_path)
     else:
         dR_a_nn, dR_c_nn, dR_q_nn, dR_nn_all = nn_radiative_response(
@@ -1000,6 +1003,14 @@ def main():
             "dR_a_k_clr":  {"plot_label": "a,clr",      "filename": "k_dR_a,clr.png", "vmax": 40},
             "dR_q_k_clr":  {"plot_label": "q,clr",      "filename": "k_dR_q,clr.png", "vmax": 7},
         }
+        bad_attr_names = [
+            key
+            for attrs in response_attrs.values()
+            for key in attrs
+            if key.strip() != key
+        ]
+        if bad_attr_names:
+            raise ValueError(f"Illegal response attribute names: {bad_attr_names}")
         base_responses = xr.Dataset(
             {
                 name: values.assign_attrs(**response_attrs[name])
@@ -1025,6 +1036,7 @@ def main():
         # print(responses)
         # print(list(responses.data_vars))
         # print(responses.attrs)
+        output_root.mkdir(exist_ok=True, parents=True)
         responses.to_netcdf(response_save_path)
     
     
