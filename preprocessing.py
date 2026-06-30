@@ -1,4 +1,5 @@
 import os
+import numpy as np
 import xarray as xr
 from pathlib import Path
 import pickle
@@ -152,6 +153,16 @@ class XarrayMinMaxScaler(Preprocessor):
         # Only the final min/max values are computed and pulled into memory
         self.data_min_ = ds.min(dim=self.dim).compute()
         self.data_max_ = ds.max(dim=self.dim).compute()
+
+    def update_shared_range(self, target_var: str, linked_var: str, linked_values):
+        linked_min = linked_values.min(dim=self.dim).compute()
+        linked_max = linked_values.max(dim=self.dim).compute()
+        shared_min = xr.apply_ufunc(np.minimum, self.data_min_[target_var], linked_min)
+        shared_max = xr.apply_ufunc(np.maximum, self.data_max_[target_var], linked_max)
+        self.data_min_[target_var] = shared_min
+        self.data_min_[linked_var] = shared_min
+        self.data_max_[target_var] = shared_max
+        self.data_max_[linked_var] = shared_max
 
     def transform(self, ds):
         """Scale data to the [min_val, max_val] range."""
