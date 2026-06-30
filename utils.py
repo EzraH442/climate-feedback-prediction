@@ -247,7 +247,12 @@ def ordered_vars(
 ) -> list[str]:
     if input_vars:
         result = list(dict.fromkeys([*input_vars, target_var]))
-        assert set(result) == set(dataset.data_vars), (
+
+        dataset_vars = set(dataset.data_vars)
+        if 'tsrc' in dataset_vars:
+            dataset_vars.remove('tsrc')
+            
+        assert set(result) == dataset_vars, (
             f"ordered_vars is missing or adding vars: "
             f"{set(result).symmetric_difference(set(dataset.data_vars))}"
         )

@@ -51,8 +51,8 @@ def load_model_and_preprocessor(config, checkpoint_path: Path):
     model.eval()
 
     preprocessor = create_2024_preprocessor_no_downscaling(
-        input_vars=input_vars_from_config(config),
-        target_var=target_var_from_config(config),
+        input_vars=list(config.dataset.input_vars),
+        target_var=config.dataset.target_var,
         ecod=config.preprocess.ecod,
     )
     preprocessor.load(model.config.preprocess.params_dir)
@@ -698,7 +698,6 @@ def date_closure_test(
         year,
         month,
     )
-
     nn_responses_to_print = [
         ("dR_nn", responses["dR_nn_all"]),
         ("dR_nn_clr", responses["dR_nn_clr"]),
@@ -1023,6 +1022,9 @@ def main():
             }
         )
         responses = xr.merge([base_responses, cross_data_vars])
+        print(responses)
+        print(list(responses.data_vars))
+        print(responses.attrs)
         responses.to_netcdf(response_save_path)
     
     
@@ -1036,21 +1038,20 @@ def main():
         year,
         month,
     )
-    """
     timeseries_test(
         responses,
         output_root,
         args.residual_samples,
     )
-    
 
+    """
     dt2m = ds_monthly.t2m - ds_monthly.t2m.mean("year")
     feedback_test(
         dt2m,
         responses,
         output_root,
     )
-    """
+"""
 
 if __name__ == "__main__":
     main()

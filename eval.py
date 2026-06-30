@@ -22,8 +22,8 @@ from utils import (
     preprocessed_feature_target_arrays, empirical_copula_values,
     unpreprocess_feature_values, inverse_transform_without_upsampling, make_kernel_filename,
     make_era5_filename,
-    SECONDS_PER_DAY, target_var_from_config, input_var_from_config,
-    input_vars_from_config, ordered_dataset_for_config, kernel_delta,
+    SECONDS_PER_DAY,
+    ordered_dataset_for_config, kernel_delta,
     kernel_title, kernel_label, clear_sky_raw, scale_minmax_value,
     compute_nn_kernel, compute_nn_kernel_autograd,
 )
@@ -62,7 +62,7 @@ def global_tsr_test(
     lat = ds.latitude.values
     lon = ds.longitude.values
 
-    target = target_var_from_config(config)
+    target = config.dataset.target_var
     target_label = target.upper()
 
     ds_ordered_np = (
@@ -171,12 +171,12 @@ def kernel_ecod_fal_contour_test(
     assert isinstance(preprocessor, SequentialPreprocessor)
     scaler = preprocessor.preprocessors[-1]
     assert isinstance(scaler, XarrayMinMaxScaler)
-    if input_var_from_config(config) != "fal":
+    if 'fal' not in config.dataset.input_vars:
         print("Skipping fal/ecod kernel contour; model input variable is not fal.")
         return
 
     ordered = ordered_dataset_for_config(processed_ds, config)
-    feature_names = [v for v in ordered.data_vars if v != target_var_from_config(config)]
+    feature_names = [v for v in ordered.data_vars if v != config.dataset.target_var]
     required = {"fal", "ecod"}
     missing = required.difference(feature_names)
     if missing:
@@ -241,7 +241,7 @@ def kernel_ecod_fal_contour_test(
         :, feature_names.index("fal")
     ]
 
-    target = target_var_from_config(config)
+    target = config.dataset.target_var
     target_range = float(scaler.data_max_[target] - scaler.data_min_[target])
     fal_range = float(scaler.data_max_["fal"] - scaler.data_min_["fal"])
     kernel = (
@@ -308,12 +308,12 @@ def tsr_ecod_fal_contour_test(
     assert isinstance(preprocessor, SequentialPreprocessor)
     scaler = preprocessor.preprocessors[-1]
     assert isinstance(scaler, XarrayMinMaxScaler)
-    if input_var_from_config(config) != "fal":
+    if 'fal' not in config.dataset.input_vars:
         print("Skipping fal/ecod TSR contour; model input variable is not fal.")
         return
 
     ordered = ordered_dataset_for_config(processed_ds, config)
-    target = target_var_from_config(config)
+    target = config.dataset.target_var
     feature_names = [v for v in ordered.data_vars if v != target]
     required = {"fal", "ecod"}
     missing = required.difference(feature_names)
@@ -1149,14 +1149,13 @@ def main():
 
     # --- load preprocessor ---
     preprocessor = create_2024_preprocessor(
-        input_vars=input_vars_from_config(config),
-        target_var=target_var_from_config(config),
+        input_vars=list(config.dataset.input_vars),
+        target_var=config.dataset.target_var,
         ecod=config.preprocess.ecod,
     )
     preprocessor.load(config.preprocess.params_dir)
 
     # --- run tests ---
-    """
     global_tsr_test(
         ds=processed_dataset,
         preprocessor=preprocessor,
@@ -1182,7 +1181,6 @@ def main():
         true_kernel=kernels_dataset.sel(date="2015-09"),
         date="2015-09"
     )
-    """
     kernel_ecod_fal_contour_test(
         processed_ds=processed_dataset,
         preprocessor=preprocessor,
@@ -1203,7 +1201,6 @@ def main():
         extrapolate=False,
         date="2015-09"
     )
-    """
     second_order_test(
         ds=raw_dataset,
         preprocessor=preprocessor,
@@ -1222,7 +1219,6 @@ def main():
         true_kernel=kernels_dataset.sel(date="2015-12"),
         date="2015-12"
     )
-    """
     #test_4(
     #    raw_dataset=filter_by_years(raw_dataset, [2015]),
     #    preprocessor=preprocessor,
