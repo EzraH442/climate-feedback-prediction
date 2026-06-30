@@ -54,8 +54,8 @@ model:
     - 11
 
 train:
-  name: "2011-2014_3-6-9-12_sob_fal"
-  checkpoint_dir: "./checkpoints/fal/2011-2014_3-6-9-12_sob_fal_clearsky"
+  name: "2011-2014_3,6,9,12_sob_fal_clearsky"
+  checkpoint_dir: "./checkpoints/fal/2011-2014_3,6,9,12_sob_fal_clearsky"
   sobolev: True
   sobolev_vars:
     - fal
