@@ -4,23 +4,8 @@ import xarray as xr
 from pathlib import Path
 import pickle
 
-def compute_cloud_optical_depth(
-    tclw,  # total column liquid water
-    tciw,  # total column ice water
-    tcc,  # total cloud cover (0–1)
-    re_liquid=10e-6,  # liquid effective radius (m)
-    re_ice=30e-6,  # ice effective radius (m)
-    rho_water=1000.0,  # water density (kg/m^3)
-    rho_ice=917.0,  # ice density (kg/m^3)
-):
+from ecod_calculation import ecod_from_profiles
 
-    tau_l = 1.5 * tclw / (rho_water * re_liquid)
-    tau_i = 1.5 * tciw / (rho_ice * re_ice)
-
-    tau_total = tau_l + tau_i
-    tau_effective = tau_total * tcc
-
-    return tau_effective
 
 class Preprocessor:
     def __init__(self):
@@ -50,15 +35,21 @@ class ECOD_Calculator(Preprocessor):
     def __init__(self):
         super().__init__()
 
+    def _ensure_required_vars(self, ds):
+        required_vars = ["ciwc", "clwc", "level"]
+        missing_vars = [var for var in required_vars if var not in ds.data_vars]
+        if missing_vars:
+            raise ValueError(
+                f"Dataset must contain ciwc, clwc, and level to calculate ECOD. Missing variables: {missing_vars}"
+            )
+
     def transform(self, ds):
-        """Calculate ECOD from ERA5 variables."""
-        print("Calculating ECOD...")
-        ecod_ds = compute_cloud_optical_depth(
-            tclw=ds["tclw"], tciw=ds["tciw"], tcc=ds["tcc"]
+        self._ensure_required_vars(ds)
+        ds = ds.assign(
+            ecod=ecod_from_profiles(ds["ciwc"], ds["clwc"], ds["level"] * 100.0)
         )
-        ds["ecod"] = ecod_ds
         ds["ecod_fal"] = ds["ecod"] * ds["fal"]
-        ds = ds.drop_vars("tcc")
+        ds = ds.drop_vars([var for var in ("ciwc", "clwc", "tcc") if var in ds])
         return ds
 
     def inverse_transform(self, ds):
@@ -271,9 +262,8 @@ def create_2024_preprocessor(input_vars=None, target_var="tsr", ecod=True):
             XarrayMinMaxScaler(dim=("date", "latitude", "longitude")),
         ]
     )
-    return SequentialPreprocessor(
-        preprocessors=preprocessors
-    )
+    return SequentialPreprocessor(preprocessors=preprocessors)
+
 
 def create_2024_preprocessor_no_downscaling(input_vars=None, target_var="tsr", ecod=True):
     preprocessors = []
@@ -287,6 +277,4 @@ def create_2024_preprocessor_no_downscaling(input_vars=None, target_var="tsr", e
             XarrayMinMaxScaler(dim=("date", "latitude", "longitude")),
         ]
     )
-    return SequentialPreprocessor(
-        preprocessors=preprocessors
-    )
+    return SequentialPreprocessor(preprocessors=preprocessors)

@@ -16,12 +16,31 @@ def make_kernel_filename(year):
     return f"RRTM_kernel_monthly_{year}_alb_TOA_SFC.nc"
 
 
+def make_cloud_profile_filename(year):
+    return f"era5_plev_ciwc_clwc_monthly_{year}.nc"
+
+
 def open_years(path: str, years, filename_fn, months):
     paths = [Path(path) / filename_fn(year) for year in years]
     print(f"Loading data from: {paths}")
     return filter_by_months(
         xr.open_mfdataset(paths, combine="nested", concat_dim="date"),
         months,
+    )
+
+
+def load_cloud_profiles(path: str, years, months, target_grid: xr.Dataset) -> xr.Dataset:
+    profiles = open_years(path, years, make_cloud_profile_filename, months)
+    profiles = profiles[["ciwc", "clwc"]]
+    if profiles.latitude.equals(target_grid.latitude) and profiles.longitude.equals(
+        target_grid.longitude
+    ):
+        return profiles
+    return profiles.interp(
+        latitude=target_grid.latitude,
+        longitude=target_grid.longitude,
+        method="linear",
+        kwargs={"fill_value": "extrapolate"},
     )
 
 
@@ -75,6 +94,27 @@ def preprocess(config_path):
         )
         val_data = val_data.assign(
             {clear_sky.output_var: val_data[clear_sky.source_var]}
+        )
+    if conf.preprocess.ecod:
+        train_cloud_profiles = load_cloud_profiles(
+            conf.dataset.era5.raw_path,
+            conf.dataset.train_years,
+            conf.dataset.months,
+            train_data,
+        )
+        val_cloud_profiles = load_cloud_profiles(
+            conf.dataset.era5.raw_path,
+            conf.dataset.val_years,
+            conf.dataset.months,
+            val_data,
+        )
+        train_data = train_data.assign(
+            ciwc=train_cloud_profiles["ciwc"],
+            clwc=train_cloud_profiles["clwc"],
+        )
+        val_data = val_data.assign(
+            ciwc=val_cloud_profiles["ciwc"],
+            clwc=val_cloud_profiles["clwc"],
         )
 
     kern_data = open_years(
