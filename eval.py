@@ -8,6 +8,7 @@ import xarray as xr
 from scipy.stats import linregress
 
 from config_utils import load_config
+from preprocess import load_cloud_profiles
 from preprocessing import (
     Preprocessor,
     SequentialPreprocessor,
@@ -1142,6 +1143,17 @@ def main():
     ]
     
     raw_dataset = xr.open_mfdataset(raw_era5_paths, combine="nested", concat_dim="date")
+    if config.preprocess.ecod:
+        cloud_profiles = load_cloud_profiles(
+            config.dataset.era5.raw_path,
+            range(1990, 2021),
+            range(1, 13),
+            raw_dataset,
+        )
+        raw_dataset = raw_dataset.assign(
+            ciwc=cloud_profiles["ciwc"],
+            clwc=cloud_profiles["clwc"],
+        )
     processed_dataset = xr.open_mfdataset(
         test_era5_paths, combine="nested", concat_dim="date"
     )

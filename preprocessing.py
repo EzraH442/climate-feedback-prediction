@@ -37,8 +37,8 @@ class ECOD_Calculator(Preprocessor):
 
     def _ensure_required_vars(self, ds):
         required_vars = ["ciwc", "clwc", "level"]
-        missing_vars = [var for var in required_vars if var not in ds.data_vars]
-        if missing_vars:
+        missing_vars = [var for var in required_vars if var not in ds]
+        if len(missing_vars) > 0:
             raise ValueError(
                 f"Dataset must contain ciwc, clwc, and level to calculate ECOD. Missing variables: {missing_vars}"
             )

@@ -9,6 +9,7 @@ import xarray as xr
 
 from config_utils import load_config
 from model import SimpleModel
+from preprocess import load_cloud_profiles
 from preprocessing import create_2024_preprocessor_no_downscaling
 from utils import (
     SECONDS_PER_DAY,
@@ -916,6 +917,20 @@ def main():
     data_path = Path(args.data_path)
     ds = xr.open_mfdataset(list(data_path.glob("era5_single_levels_monthly_*.nc")))
     ds = ds.sel(date=slice(args.start_date, args.end_date)).interp(**kernel_grid)
+    if config.preprocess.ecod:
+        cloud_profiles = load_cloud_profiles(
+            args.data_path,
+            range(
+                pd.Timestamp(args.start_date).year,
+                pd.Timestamp(args.end_date).year + 1,
+            ),
+            range(1, 13),
+            ds,
+        )
+        ds = ds.assign(
+            ciwc=cloud_profiles["ciwc"],
+            clwc=cloud_profiles["clwc"],
+        )
     ds["tsr"] = ds.tsr / SECONDS_PER_DAY
     ds["tsrc"] = ds.tsrc / SECONDS_PER_DAY
 
@@ -925,10 +940,13 @@ def main():
     # print(ds_monthly_means)
 
     cloud_vars = ["tcc", "hcc", "mcc", "lcc", "tciw", "tclw"]
+    if config.preprocess.ecod:
+        cloud_vars.extend(["ciwc", "clwc"])
     ds_monthly_clr = ds_monthly.assign(
         {v: xr.zeros_like(ds_monthly[v]) for v in cloud_vars}
     )
     ds_monthly_means_clr = ds_monthly_clr.mean('year')
+    anomaly_clr = anomaly.assign({v: xr.zeros_like(anomaly[v]) for v in cloud_vars})
 
     dR_clr = ds_monthly.tsrc - ds_monthly.tsrc.mean("year")
     dR = anomaly.tsr.interp(**kernel_grid).compute()
@@ -946,7 +964,7 @@ def main():
         )
         dR_a_nn_clr, dR_q_nn_clr, dR_nn_clr = nn_radiative_response(
             ds_monthly_means_clr,
-            anomaly,
+            anomaly_clr,
             model,
             preprocessor,
             config,

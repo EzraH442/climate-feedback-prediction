@@ -317,7 +317,7 @@ def kernel_label(config) -> str:
 def clear_sky_raw(ds: xr.Dataset, config) -> xr.Dataset:
     ds_clr = ds.copy(deep=True)
     zero_vars = set(config.dataset.clear_sky_zero_vars)
-    zero_vars.update(["hcc", "mcc", "lcc", "tcc", "tciw", "tclw"])
+    zero_vars.update(["hcc", "mcc", "lcc", "tcc", "tciw", "tclw", "ciwc", "clwc"])
     for name in zero_vars.intersection(ds_clr.data_vars):
         ds_clr[name][:] = 0
     return ds_clr
