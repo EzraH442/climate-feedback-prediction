@@ -513,7 +513,6 @@ def nn_pred_yr(
     preprocessor: Preprocessor,
     config,
 ) -> xr.DataArray:
-    print(ds)
     year, month = ds.year.values, ds.month.values
     lon, lat = ds.longitude.values, ds.latitude.values
     target_var = config.dataset.target_var
@@ -679,7 +678,7 @@ def weighted_residuals_by_year_month(
     rng = rng or np.random.default_rng()
     da = da.transpose("year", "month", "latitude", "longitude")
     lat_vals = da.latitude.values
-    print(lat_vals)
+    # print(lat_vals)
     weights = np.clip(np.cos(np.deg2rad(lat_vals)), 0, None)
     labels = []
     result = []
@@ -689,13 +688,12 @@ def weighted_residuals_by_year_month(
             field = da.sel(year=year, month=month).compute().values
             n_lat, n_lon = field.shape
             weights_2d = weights[:, None] * np.ones((n_lat, n_lon))
-            print(weights_2d)
-
+            # print(weights_2d)
 
             flat_res = field.ravel()
             p = weights_2d.ravel().copy()
             p = p / p.sum()
-            print(p)
+            # print(p)
             indices = rng.choice(len(flat_res), size=n_samples, p=p)
             labels.append(f"{int(year)}-{int(month):02d}")
             result.append(flat_res[indices])

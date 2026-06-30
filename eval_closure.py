@@ -998,7 +998,7 @@ def main():
             "dR_c_k_all":  {"plot_label": "c",          "filename": "k_dR_c.png",     "vmax": 60},
             "dR_q_k_all":  {"plot_label": "q",          "filename": "k_dR_q.png",     "vmax": 7},
             "dR_a_k_clr":  {"plot_label": "a,clr",      "filename": "k_dR_a,clr.png", "vmax": 40},
-            "dR_q_k_clr":  {"plot_label": "q,clr",      "filename": "k_dR_q,clr.png"," vmax": 7},
+            "dR_q_k_clr":  {"plot_label": "q,clr",      "filename": "k_dR_q,clr.png", "vmax": 7},
         }
         base_responses = xr.Dataset(
             {
@@ -1022,9 +1022,9 @@ def main():
             }
         )
         responses = xr.merge([base_responses, cross_data_vars])
-        print(responses)
-        print(list(responses.data_vars))
-        print(responses.attrs)
+        # print(responses)
+        # print(list(responses.data_vars))
+        # print(responses.attrs)
         responses.to_netcdf(response_save_path)
     
     
