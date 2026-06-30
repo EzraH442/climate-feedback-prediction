@@ -104,6 +104,45 @@ def retrieve_era5_plevl_qt(years=(2006, 2008), data_path="data/era5"):
             str(path),
         )
 
+def retrieve_era5_plevl_ciwc_clwc(years=(2006, 2008), data_path="data/era5"):
+    data_path = Path(data_path)
+    data_path.mkdir(parents=True, exist_ok=True)
+    
+    for year in years:
+        path = data_path / f"era5_plev_ciwc_clwc_monthly_{year}.grib"
+        if path.exists():
+            print(f"found existing data for year {year}, skipping")
+            continue
+
+        c.retrieve(
+            "reanalysis-era5-pressure-levels-monthly-means",
+            {
+                "product_type": "monthly_averaged_reanalysis",
+                "pressure_level": [
+                    "1", "2", "3",
+                    "5", "7", "10",
+                    "20", "30", "50",
+                    "70", "100", "125",
+                    "150", "175", "200",
+                    "225", "250", "300",
+                    "350", "400", "450",
+                    "500", "550", "600",
+                    "650", "700", "750",
+                    "775", "800", "825",
+                    "850", "875", "900",
+                    "925", "950", "975",
+                    "1000"
+                ],
+                "variable": ["specific_cloud_ice_water_content", "specific_cloud_liquid_water_content"],
+                "year": year,
+                "month": MONTHS,
+                "time": "00:00",
+                "data_format": "grib",
+                "download_format": "unarchived"
+            },
+            str(path),
+        )
+
 def load_all_era5_data(years):
     datasets = []
     for year in years:
@@ -185,6 +224,7 @@ def retrieve_era5_daily_stats(year, month, day):
 if __name__ == "__main__":
     retrieve_era5_years_data(range(1990, 2021))
     retrieve_era5_plevl_qt(range(2006,2017))
+    retrieve_era5_plevl_ciwc_clwc(range(2006,2017))
     # retrieve_era5_single_levels_3hr([2015])
     retrieve_era5_daily_stats(2015, 3, 1)
     retrieve_era5_daily_stats(2015, 6, 1)
