@@ -939,7 +939,8 @@ def main():
 
     cloud_vars = ["tcc", "hcc", "mcc", "lcc", "tciw", "tclw"]
     if config.preprocess.ecod.enabled:
-        cloud_vars.extend(["ciwc", "clwc"])
+        cloud_vars.append("ecod")
+    cloud_vars = [v for v in cloud_vars if v in ds_monthly]
     ds_monthly_clr = ds_monthly.assign(
         {v: xr.zeros_like(ds_monthly[v]) for v in cloud_vars}
     )
