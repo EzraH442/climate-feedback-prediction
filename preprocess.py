@@ -5,6 +5,7 @@ import xarray as xr
 import argparse
 
 from config_utils import load_config
+from ecod_calculation import ecod_from_profiles
 from utils import filter_by_months
 
 
@@ -18,6 +19,10 @@ def make_kernel_filename(year):
 
 def make_cloud_profile_filename(year):
     return f"era5_plev_ciwc_clwc_monthly_{year}.nc"
+
+
+def make_ecod_filename(year):
+    return f"era5_ecod_monthly_{year}.nc"
 
 
 def open_years(path: str, years, filename_fn, months):
@@ -42,6 +47,37 @@ def load_cloud_profiles(path: str, years, months, target_grid: xr.Dataset) -> xr
         method="linear",
         kwargs={"fill_value": "extrapolate"},
     )
+
+
+def raw_era5_years(path: str) -> list[int]:
+    prefix = "era5_single_levels_monthly_"
+    return sorted(
+        int(p.stem.removeprefix(prefix))
+        for p in Path(path).glob(f"{prefix}*.nc")
+    )
+
+
+def cache_ecod(path: str, years) -> None:
+    root = Path(path)
+    for year in years:
+        output_path = root / make_ecod_filename(year)
+        if output_path.exists():
+            continue
+        raw = xr.open_dataset(root / make_era5_filename(year))
+        profiles = load_cloud_profiles(path, [year], None, raw)
+        ecod = ecod_from_profiles(
+            profiles["ciwc"],
+            profiles["clwc"],
+            profiles["level"] * 100.0,
+        )
+        print(f"Saving cached ECOD for {year} to {output_path}...")
+        ecod.to_dataset(name="ecod").to_netcdf(output_path)
+        raw.close()
+        profiles.close()
+
+
+def load_ecod(path: str, years, months) -> xr.DataArray:
+    return open_years(path, years, make_ecod_filename, months)["ecod"]
 
 
 def interpolate_kernel_dataset(
@@ -69,6 +105,11 @@ def preprocess(config_path):
     input_vars = conf.dataset.input_vars
     clear_sky = conf.dataset.clear_sky_training
     clear_sky_enabled = bool(clear_sky.enabled)
+    if conf.preprocess.ecod:
+        cache_ecod(
+            conf.dataset.era5.raw_path,
+            raw_era5_years(conf.dataset.era5.raw_path),
+        )
 
     all_kern_years = [
         y
@@ -96,25 +137,19 @@ def preprocess(config_path):
             {clear_sky.output_var: val_data[clear_sky.source_var]}
         )
     if conf.preprocess.ecod:
-        train_cloud_profiles = load_cloud_profiles(
-            conf.dataset.era5.raw_path,
-            conf.dataset.train_years,
-            conf.dataset.months,
-            train_data,
-        )
-        val_cloud_profiles = load_cloud_profiles(
-            conf.dataset.era5.raw_path,
-            conf.dataset.val_years,
-            conf.dataset.months,
-            val_data,
-        )
         train_data = train_data.assign(
-            ciwc=train_cloud_profiles["ciwc"],
-            clwc=train_cloud_profiles["clwc"],
+            ecod=load_ecod(
+                conf.dataset.era5.raw_path,
+                conf.dataset.train_years,
+                conf.dataset.months,
+            )
         )
         val_data = val_data.assign(
-            ciwc=val_cloud_profiles["ciwc"],
-            clwc=val_cloud_profiles["clwc"],
+            ecod=load_ecod(
+                conf.dataset.era5.raw_path,
+                conf.dataset.val_years,
+                conf.dataset.months,
+            )
         )
 
     kern_data = open_years(

@@ -4,8 +4,6 @@ import xarray as xr
 from pathlib import Path
 import pickle
 
-from ecod_calculation import ecod_from_profiles
-
 
 class Preprocessor:
     def __init__(self):
@@ -35,19 +33,9 @@ class ECOD_Calculator(Preprocessor):
     def __init__(self):
         super().__init__()
 
-    def _ensure_required_vars(self, ds):
-        required_vars = ["ciwc", "clwc", "level"]
-        missing_vars = [var for var in required_vars if var not in ds]
-        if len(missing_vars) > 0:
-            raise ValueError(
-                f"Dataset must contain ciwc, clwc, and level to calculate ECOD. Missing variables: {missing_vars}"
-            )
-
     def transform(self, ds):
-        self._ensure_required_vars(ds)
-        ds = ds.assign(
-            ecod=ecod_from_profiles(ds["ciwc"], ds["clwc"], ds["level"] * 100.0)
-        )
+        if "ecod" not in ds:
+            raise ValueError("Dataset must contain cached 'ecod'. Run preprocess.py first.")
         ds["ecod_fal"] = ds["ecod"] * ds["fal"]
         ds = ds.drop_vars([var for var in ("ciwc", "clwc", "tcc") if var in ds])
         return ds

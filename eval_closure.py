@@ -9,7 +9,7 @@ import xarray as xr
 
 from config_utils import load_config
 from model import SimpleModel
-from preprocess import load_cloud_profiles
+from preprocess import load_ecod
 from preprocessing import create_2024_preprocessor_no_downscaling
 from utils import (
     SECONDS_PER_DAY,
@@ -918,18 +918,15 @@ def main():
     ds = xr.open_mfdataset(list(data_path.glob("era5_single_levels_monthly_*.nc")))
     ds = ds.sel(date=slice(args.start_date, args.end_date)).interp(**kernel_grid)
     if config.preprocess.ecod:
-        cloud_profiles = load_cloud_profiles(
-            args.data_path,
-            range(
-                pd.Timestamp(args.start_date).year,
-                pd.Timestamp(args.end_date).year + 1,
-            ),
-            range(1, 13),
-            ds,
-        )
         ds = ds.assign(
-            ciwc=cloud_profiles["ciwc"],
-            clwc=cloud_profiles["clwc"],
+            ecod=load_ecod(
+                args.data_path,
+                range(
+                    pd.Timestamp(args.start_date).year,
+                    pd.Timestamp(args.end_date).year + 1,
+                ),
+                range(1, 13),
+            ).interp(**kernel_grid)
         )
     ds["tsr"] = ds.tsr / SECONDS_PER_DAY
     ds["tsrc"] = ds.tsrc / SECONDS_PER_DAY
