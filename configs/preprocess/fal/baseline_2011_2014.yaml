@@ -28,4 +28,6 @@ dataset:
 
 preprocess:
   params_dir: "preprocess_states/fal/baseline_2011_2014"
-  ecod: True
+  ecod:
+    enabled: True
+    method: "true"

@@ -288,7 +288,7 @@ def ordered_dataset_for_config(ds: xr.Dataset, config) -> xr.Dataset:
     return ordered_dataset(
         ds,
         target_var=config.dataset.target_var,
-        ecod=config.preprocess.ecod,
+        ecod=config.preprocess.ecod.enabled,
         input_var=config.dataset.input_var,
         input_vars=config.dataset.input_vars,
     )

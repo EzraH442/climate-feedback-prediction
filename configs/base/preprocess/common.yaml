@@ -58,3 +58,8 @@ dataset:
     - 10
     - 11
     - 12
+
+preprocess:
+  ecod:
+    enabled: True
+    method: "true"

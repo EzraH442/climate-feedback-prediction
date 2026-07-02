@@ -21,8 +21,23 @@ def make_cloud_profile_filename(year):
     return f"era5_plev_ciwc_clwc_monthly_{year}.nc"
 
 
-def make_ecod_filename(year):
-    return f"era5_ecod_monthly_{year}.nc"
+def make_ecod_filename(year, fast_ecod=False):
+    prefix = "era5_fast_ecod" if fast_ecod else "era5_ecod"
+    return f"{prefix}_monthly_{year}.nc"
+
+
+def compute_cloud_optical_depth(
+    tclw,
+    tciw,
+    tcc,
+    re_liquid=10e-6,
+    re_ice=30e-6,
+    rho_water=1000.0,
+    rho_ice=917.0,
+):
+    tau_l = 1.5 * tclw / (rho_water * re_liquid)
+    tau_i = 1.5 * tciw / (rho_ice * re_ice)
+    return (tau_l + tau_i) * tcc
 
 
 def open_years(path: str, years, filename_fn, months):
@@ -57,27 +72,35 @@ def raw_era5_years(path: str) -> list[int]:
     )
 
 
-def cache_ecod(path: str, years) -> None:
+def cache_ecod(path: str, years, fast_ecod=False) -> None:
     root = Path(path)
     for year in years:
-        output_path = root / make_ecod_filename(year)
+        output_path = root / make_ecod_filename(year, fast_ecod)
         if output_path.exists():
             continue
         raw = xr.open_dataset(root / make_era5_filename(year))
-        profiles = load_cloud_profiles(path, [year], None, raw)
-        ecod = ecod_from_profiles(
-            profiles["ciwc"],
-            profiles["clwc"],
-            profiles["level"] * 100.0,
-        )
+        if fast_ecod:
+            ecod = compute_cloud_optical_depth(raw["tclw"], raw["tciw"], raw["tcc"])
+        else:
+            profiles = load_cloud_profiles(path, [year], None, raw)
+            ecod = ecod_from_profiles(
+                profiles["ciwc"],
+                profiles["clwc"],
+                profiles["level"] * 100.0,
+            )
+            profiles.close()
         print(f"Saving cached ECOD for {year} to {output_path}...")
         ecod.to_dataset(name="ecod").to_netcdf(output_path)
         raw.close()
-        profiles.close()
 
 
-def load_ecod(path: str, years, months) -> xr.DataArray:
-    return open_years(path, years, make_ecod_filename, months)["ecod"]
+def load_ecod(path: str, years, months, fast_ecod=False) -> xr.DataArray:
+    return open_years(
+        path,
+        years,
+        lambda year: make_ecod_filename(year, fast_ecod),
+        months,
+    )["ecod"]
 
 
 def interpolate_kernel_dataset(
@@ -105,10 +128,13 @@ def preprocess(config_path):
     input_vars = conf.dataset.input_vars
     clear_sky = conf.dataset.clear_sky_training
     clear_sky_enabled = bool(clear_sky.enabled)
-    if conf.preprocess.ecod:
+    ecod_enabled = conf.preprocess.ecod.enabled
+    ecod_fast = conf.preprocess.ecod.method == "fast"
+    if ecod_enabled:
         cache_ecod(
             conf.dataset.era5.raw_path,
             raw_era5_years(conf.dataset.era5.raw_path),
+            ecod_fast,
         )
 
     all_kern_years = [
@@ -136,12 +162,13 @@ def preprocess(config_path):
         val_data = val_data.assign(
             {clear_sky.output_var: val_data[clear_sky.source_var]}
         )
-    if conf.preprocess.ecod:
+    if ecod_enabled:
         train_data = train_data.assign(
             ecod=load_ecod(
                 conf.dataset.era5.raw_path,
                 conf.dataset.train_years,
                 conf.dataset.months,
+                ecod_fast,
             )
         )
         val_data = val_data.assign(
@@ -149,6 +176,7 @@ def preprocess(config_path):
                 conf.dataset.era5.raw_path,
                 conf.dataset.val_years,
                 conf.dataset.months,
+                ecod_fast,
             )
         )
 
@@ -163,7 +191,7 @@ def preprocess(config_path):
     preprocessor = create_2024_preprocessor(
         input_vars=input_vars,
         target_var=target_var,
-        ecod=conf.preprocess.ecod,
+        ecod=ecod_enabled,
     )
     print("Fitting preprocessor on training data...")
     preprocessor.fit(train_data)

@@ -13,6 +13,10 @@ def validate_config(config: DictConfig) -> None:
     if "dataset" not in config:
         return
 
+    if "preprocess" in config and "ecod" in config.preprocess:
+        if config.preprocess.ecod.method not in ("true", "fast"):
+            raise ValueError("preprocess.ecod.method must be 'true' or 'fast'.")
+
     if "model" in config and "input_vars" in config.dataset:
         input_vars = config.dataset.input_vars
         if input_vars and config.model.input_dim != len(input_vars):

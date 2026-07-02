@@ -54,7 +54,7 @@ def load_model_and_preprocessor(config, checkpoint_path: Path):
     preprocessor = create_2024_preprocessor_no_downscaling(
         input_vars=list(config.dataset.input_vars),
         target_var=config.dataset.target_var,
-        ecod=config.preprocess.ecod,
+        ecod=config.preprocess.ecod.enabled,
     )
     preprocessor.load(model.config.preprocess.params_dir)
 
@@ -917,7 +917,7 @@ def main():
     data_path = Path(args.data_path)
     ds = xr.open_mfdataset(list(data_path.glob("era5_single_levels_monthly_*.nc")))
     ds = ds.sel(date=slice(args.start_date, args.end_date)).interp(**kernel_grid)
-    if config.preprocess.ecod:
+    if config.preprocess.ecod.enabled:
         ds = ds.assign(
             ecod=load_ecod(
                 args.data_path,
@@ -926,6 +926,7 @@ def main():
                     pd.Timestamp(args.end_date).year + 1,
                 ),
                 range(1, 13),
+                config.preprocess.ecod.method == "fast",
             ).interp(**kernel_grid)
         )
     ds["tsr"] = ds.tsr / SECONDS_PER_DAY
@@ -937,7 +938,7 @@ def main():
     # print(ds_monthly_means)
 
     cloud_vars = ["tcc", "hcc", "mcc", "lcc", "tciw", "tclw"]
-    if config.preprocess.ecod:
+    if config.preprocess.ecod.enabled:
         cloud_vars.extend(["ciwc", "clwc"])
     ds_monthly_clr = ds_monthly.assign(
         {v: xr.zeros_like(ds_monthly[v]) for v in cloud_vars}

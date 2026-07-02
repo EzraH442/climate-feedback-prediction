@@ -1150,12 +1150,13 @@ def main():
     ]
     
     raw_dataset = xr.open_mfdataset(raw_era5_paths, combine="nested", concat_dim="date")
-    if config.preprocess.ecod:
+    if config.preprocess.ecod.enabled:
         raw_dataset = raw_dataset.assign(
             ecod=load_ecod(
                 config.dataset.era5.raw_path,
                 range(1990, 2021),
                 range(1, 13),
+                config.preprocess.ecod.method == "fast",
             )
         )
     processed_dataset = xr.open_mfdataset(
@@ -1167,7 +1168,7 @@ def main():
     preprocessor = create_2024_preprocessor(
         input_vars=list(config.dataset.input_vars),
         target_var=config.dataset.target_var,
-        ecod=config.preprocess.ecod,
+        ecod=config.preprocess.ecod.enabled,
     )
     preprocessor.load(config.preprocess.params_dir)
 

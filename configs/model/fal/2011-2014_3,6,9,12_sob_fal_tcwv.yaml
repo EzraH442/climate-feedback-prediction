@@ -47,7 +47,9 @@ dataset:
 
 preprocess:
   params_dir: "preprocess_states/fal/baseline_mar_june_sep_dec_2011_2014"
-  ecod: True
+  ecod:
+    enabled: True
+    method: "true"
 
 model:
   input_dim: 11

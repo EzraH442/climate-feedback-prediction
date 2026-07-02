@@ -19,4 +19,6 @@ dataset:
 
 preprocess:
   params_dir: "preprocess_states/fal/baseline_no_ecod"
-  ecod: False
+  ecod:
+    enabled: False
+    method: "true"

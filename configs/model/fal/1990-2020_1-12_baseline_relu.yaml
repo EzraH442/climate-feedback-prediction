@@ -11,4 +11,6 @@ train:
 
 preprocess:
   params_dir: 'preprocess_states/fal/baseline'
-  ecod: True
+  ecod:
+    enabled: True
+    method: "true"

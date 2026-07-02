@@ -100,7 +100,13 @@ class ClimateTorchDataset(torch.utils.data.Dataset):
         order_dataset = self.dataset_era5
         if self.clear_sky_target_var in order_dataset:
             order_dataset = order_dataset.drop_vars(self.clear_sky_target_var)
-        all_vars = ordered_vars(order_dataset, target_var, ecod=conf.preprocess.ecod, input_var=input_var, input_vars=input_vars)
+        all_vars = ordered_vars(
+            order_dataset,
+            target_var,
+            ecod=conf.preprocess.ecod.enabled,
+            input_var=input_var,
+            input_vars=input_vars,
+        )
         mmap_vars = [*all_vars]
         if self.clear_sky_enabled:
             if self.clear_sky_target_var not in self.dataset_era5:

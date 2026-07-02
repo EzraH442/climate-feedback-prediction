@@ -44,4 +44,6 @@ dataset:
 
 preprocess:
   params_dir: "preprocess_states/fal/baseline_mar_june_sep_dec_2011_2014_clearsky"
-  ecod: True
+  ecod:
+    enabled: True
+    method: "true"

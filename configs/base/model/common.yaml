@@ -60,6 +60,11 @@ optimizer:
 model:
   activation: "tanh"
 
+preprocess:
+  ecod:
+    enabled: True
+    method: "true"
+
 train:
   max_epochs_without_improvement: 10
   early_stopping_threshold: 0.0001

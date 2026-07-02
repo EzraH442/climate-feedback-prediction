@@ -29,7 +29,9 @@ dataset:
 
 preprocess:
   params_dir: 'preprocess_states/ts/baseline'
-  ecod: True
+  ecod:
+    enabled: True
+    method: "true"
 
 model:
   input_dim: 10

@@ -11,7 +11,9 @@ dataset:
 
 preprocess:
   params_dir: "preprocess_states/old_mar_sep"
-  ecod: True
+  ecod:
+    enabled: True
+    method: "true"
 
 model:
   input_dim: 12
