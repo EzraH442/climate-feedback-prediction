@@ -315,6 +315,11 @@ def tsr_ecod_fal_contour_test(
 
     ordered = ordered_dataset_for_config(processed_ds, config)
     target = config.dataset.target_var
+    output_target = (
+        config.dataset.clear_sky_training.output_var
+        if config.dataset.clear_sky_training.enabled
+        else target
+    )
     feature_names = [v for v in ordered.data_vars if v != target]
     required = {"fal", "ecod"}
     missing = required.difference(feature_names)
@@ -375,8 +380,10 @@ def tsr_ecod_fal_contour_test(
             .reshape(n_ecod, n_fal)
         )
 
-    target_min = float(scaler.data_min_[target])
-    target_range = float(scaler.data_max_[target] - scaler.data_min_[target])
+    target_min = float(scaler.data_min_[output_target])
+    target_range = float(
+        scaler.data_max_[output_target] - scaler.data_min_[output_target]
+    )
     target_scaled = (outputs - scaler.min_val) / (scaler.max_val - scaler.min_val)
     target_values = (target_scaled * target_range + target_min) / SECONDS_PER_DAY
 
@@ -409,13 +416,13 @@ def tsr_ecod_fal_contour_test(
     ax.set_xlabel("fal")
     ax.set_ylabel("ecod")
     ax.set_title(
-        f"NN {target.upper()} over fal/ecod; "
+        f"NN {output_target.upper()} over fal/ecod; "
         f"lat={latitude:.2f}, lon={longitude:.2f}, date={date}"
     )
     cb = fig.colorbar(contour, ax=ax)
     cb.set_label("$W/m^2$")
     fig.tight_layout()
-    fig.savefig(figures_path / f"{target}_contour_fal_ecod.png")
+    fig.savefig(figures_path / f"{output_target}_contour_fal_ecod.png")
     plt.close(fig)
 
 
