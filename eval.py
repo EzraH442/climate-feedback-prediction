@@ -25,6 +25,7 @@ from utils import (
     compute_nn_kernel_autograd,
     nn_pred,
     make_kernel_filename,
+    load_model_and_preprocessor
 )
 
 from model import SimpleModel
@@ -805,43 +806,20 @@ def main():
     )
     args = parser.parse_args()
 
-    # --- load config ---
+    # --- load model ---
     config = load_config(args.config_file)
-
-    # --- load model checkpoint ---
     checkpoint_path = (
         Path(args.checkpoint_path)
         if args.checkpoint_path
         else Path(config.train.checkpoint_dir) / "best_model.pt"
     )
-    checkpoint_data = torch.load(
-        checkpoint_path, map_location="cpu", weights_only=False
-    )
-
-    checkpoint_epoch_label = checkpoint_path.stem
-    if isinstance(checkpoint_data, dict) and "model_state_dict" in checkpoint_data:
-        model_weights = checkpoint_data["model_state_dict"]
-        model_config = checkpoint_data.get("config", config)
-        checkpoint_epoch_label = str(
-            checkpoint_data.get(
-                "best_epoch", checkpoint_data.get("epoch", checkpoint_path.stem)
-            )
-        )
-    else:
-        model_weights = checkpoint_data
-        model_config = config
-
-    model = SimpleModel(model_config)
-    model.load_state_dict(model_weights)
-    model.eval()
-
+    model, preprocessor, epoch = load_model_and_preprocessor(config, checkpoint_path)
+    
     # --- setup output directory ---
-    output_dir = Path(config.train.checkpoint_dir) / "figures" / checkpoint_epoch_label
+    output_dir = Path(config.train.checkpoint_dir) / "figures" / epoch
     if args.output_dir:
         output_dir = Path(args.output_dir)
-
-    if not output_dir.exists():
-        output_dir.mkdir(parents=True, exist_ok=True)
+    output_dir.mkdir(parents=True, exist_ok=True)
 
     # --- load test data ---
     def raw_fal_kernel_filename(year):

@@ -7,12 +7,7 @@ import xarray as xr
 from mpl_toolkits.basemap import Basemap
 import matplotlib.pyplot as plt
 
-from preprocessing import (
-    Preprocessor,
-    SequentialPreprocessor,
-    XarrayMinMaxScaler,
-    DianaPreprocessor,
-)
+from preprocessing import XarrayMinMaxScaler, DianaPreprocessor
 from model import SimpleModel
 import glob
 
@@ -307,6 +302,22 @@ def scale_minmax_value(scaler: XarrayMinMaxScaler, name: str, values):
     ) + scaler.min_val
 
 
+def load_model_and_preprocessor(config, checkpoint_path: Path, downscaling=True):
+    checkpoint_data = torch.load(
+        checkpoint_path, map_location="cpu", weights_only=False
+    )
+    epoch = checkpoint_data["epoch"]
+    model_config = checkpoint_data.get("config", config)
+    model = SimpleModel(model_config)
+    model.load_state_dict(checkpoint_data["model_state_dict"])
+    model.eval()
+
+    preprocessor = DianaPreprocessor(config, downscaling=downscaling)
+    preprocessor.load(model.config.preprocess.params_dir)
+
+    return model, preprocessor, epoch
+
+
 def nn_pred(
     ds: xr.Dataset,
     model: SimpleModel,
@@ -439,34 +450,32 @@ def nn_radiative_response(
     preprocessor: DianaPreprocessor,
     config,
     variables,
+    clear=False
 ) -> list[xr.DataArray]:
-    ds_copies = []
+    datasets_to_test = []
     for var_list in variables:
         if not isinstance(var_list, list):
             var_list = [var_list]
 
         modified = ds.assign({v: ds[v] + anomaly[v] for v in var_list})
-        ds_copies.append(modified)
+        datasets_to_test.append(modified)
+    datasets_to_test.append(ds + anomaly)
 
-    ds_copies.append(ds + anomaly)
-
-    ds_original = preprocessor.transform(ds)
-    ds_perturbed = [preprocessor.transform(d) for d in ds_copies]
+    ds_original = ds
+    ds_stacked = xr.concat(datasets_to_test, dim="run")
 
     dim_names_original = ["month", "latitude", "longitude"]
-    dim_names = ["year", "month", "latitude", "longitude"]
+    dim_names = ["run", "year", "month", "latitude", "longitude"]
 
     pred_original = nn_pred(
-        ds_original, model, preprocessor, config, dim_names=dim_names_original
+        ds_original, model, preprocessor, config, dim_names=dim_names_original, clear=clear
     )
-    return [
-        (
-            nn_pred(ds_p, model, preprocessor, config, dim_names=dim_names)
-            - pred_original
-        )
-        / SECONDS_PER_DAY
-        for ds_p in ds_perturbed
-    ]
+    pred_perturbed = nn_pred(
+        ds_stacked, model, preprocessor, config, dim_names=dim_names, clear=clear
+    )
+
+    results = (pred_perturbed - pred_original) / SECONDS_PER_DAY
+    return [results.isel(run=i) for i in range(0, len(variables) + 1)]
 
 
 def nn_radiative_response_cross(
