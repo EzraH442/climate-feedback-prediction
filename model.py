@@ -141,7 +141,7 @@ class SimpleModelTrainer:
             self.model.train()
             train_loss = 0
 
-            for i, (x, y) in enumerate(train_loader):
+            for i, (x, y, _) in enumerate(train_loader):
                 x, y = x.to(self.device), y.to(self.device)
                 self.optimizer.zero_grad(set_to_none=True)
                 y_pred = self.model(x)
@@ -159,7 +159,7 @@ class SimpleModelTrainer:
             self.model.eval()
             val_loss = 0
             with torch.no_grad():
-                for i, (x_val, y_val) in enumerate(val_loader):
+                for i, (x_val, y_val, _) in enumerate(val_loader):
                     x_val, y_val = x_val.to(self.device), y_val.to(self.device)
                     val_pred = self.model(x_val)
                     v_loss = self.loss_fn(val_pred, y_val)
