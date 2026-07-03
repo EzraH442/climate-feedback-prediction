@@ -13,6 +13,8 @@ dataset:
     - tisr
     - ecod
     - ecod_fal
+  kernel_vars:
+    - fal
   clear_sky_zero_vars:
     - hcc
     - mcc
@@ -21,9 +23,9 @@ dataset:
     - tclw
     - ecod
     - ecod_fal
-  clear_sky_training:
+  clear_sky:
     enabled: True
-    output_var: "tsrc"
+    var: "tsrc"
   months:
     - 3
     - 6

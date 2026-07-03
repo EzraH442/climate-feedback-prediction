@@ -21,6 +21,9 @@ dataset:
     - tclw
     - ecod
     - ecod_fal
+  kernel_vars:
+    - fal
+    - tcwv
   months:
     - 3
     - 6
@@ -31,10 +34,7 @@ dataset:
     raw_path: "./data/era5"
   kernels:
     raw_path: "./data/fal/kernels"
-    path: "./data/fal/wv_kernels_processed_mar_june_sep_dec_2011_2014"
-    vars:
-      - dR_dfal
-      - dR_dtcwv
+    path: "./data/fal/kernels_processed_mar_june_sep_dec_2011_2014"
   train_years:
     - 2011
     - 2012
@@ -46,7 +46,7 @@ dataset:
     - 2015
 
 preprocess:
-  params_dir: "preprocess_states/fal/baseline_mar_june_sep_dec_2011_2014"
+  params_dir: "preprocess_states/fal/2011-2014_3,6,9,12"
   ecod:
     enabled: True
     method: "true"

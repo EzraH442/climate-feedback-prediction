@@ -11,6 +11,8 @@ dataset:
     - tclw
     - tcwv
     - ecod
+  kernel_vars:
+    - skt
   clear_sky_zero_vars:
     - hcc
     - mcc
@@ -18,7 +20,6 @@ dataset:
     - tciw
     - tclw
     - ecod
-  input_var: "skt"
   target_var: "ttr"
   months:
     - 3

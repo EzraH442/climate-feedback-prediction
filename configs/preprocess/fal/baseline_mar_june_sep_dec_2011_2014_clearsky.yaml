@@ -23,7 +23,7 @@ dataset:
     - ecod_fal
   clear_sky_training:
     enabled: True
-    output_var: "tsrc"
+    var: "tsrc"
   months:
     - 3
     - 6

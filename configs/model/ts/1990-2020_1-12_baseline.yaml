@@ -18,7 +18,6 @@ dataset:
     - tciw
     - tclw
     - ecod
-  input_var: "skt"
   target_var: "ttr"
   era5:
     path: './data/ts/era5_processed'

@@ -1,7 +1,6 @@
 seed: 42
 
 dataset:
-  input_var: "fal"
   target_var: "tsr"
   input_vars: []
   clear_sky_zero_vars: []
@@ -9,12 +8,9 @@ dataset:
     raw_path: './data/era5'
   kernels:
     raw_path: './data/kernels'
-    vars:
-      - TOA_cld
-      - TOA_clr
   clear_sky_training:
     enabled: False
-    output_var: "clear_sky_target"
+    var: "tsrc"
   train_years:
     - 1990
     - 1992

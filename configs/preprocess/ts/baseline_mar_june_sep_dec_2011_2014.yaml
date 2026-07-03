@@ -11,7 +11,6 @@ dataset:
     - tclw
     - tcwv
     - ecod
-  input_var: "skt"
   target_var: "ttr"
   months:
     - 3

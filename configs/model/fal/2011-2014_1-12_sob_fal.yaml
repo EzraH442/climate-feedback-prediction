@@ -13,6 +13,8 @@ dataset:
     - tisr
     - ecod
     - ecod_fal
+  kernel_vars:
+    - fal
   clear_sky_zero_vars:
     - hcc
     - mcc
