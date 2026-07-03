@@ -1,56 +1,43 @@
 from pathlib import Path
 
-from preprocessing import create_2024_preprocessor
+from preprocessing import fast_compute_cloud_optical_depth, DianaPreprocessor
 import xarray as xr
 import argparse
 
 from config_utils import load_config
 from ecod_calculation import ecod_from_profiles
-from utils import filter_by_months
+from utils import (
+    load_yearly_and_filter_by_months,
+    make_era5_filename,
+    make_combined_kernel_filename,
+    make_ecod_filename,
+    make_cloud_profile_filename,
+    make_kernel_filename,
+)
+
+# def load_yearly_monthly_data(path: str, years, months, filename_fn):
+#    paths = [Path(path) / filename_fn(year) for year in years]
+#    print(f"Loading data from: {paths}")
+#    return filter_by_months(
+#        xr.open_mfdataset(paths, combine="nested", concat_dim="date"),
+#        months,
+#    )
 
 
-def make_era5_filename(year):
-    return f"era5_single_levels_monthly_{year}.nc"
+
+def load_ecod(path: str, years, months, fast_ecod=False) -> xr.DataArray:
+    ecod_filename_fn = lambda year: make_ecod_filename(year, fast_ecod)
+    ds = load_yearly_and_filter_by_months(path, years, months, ecod_filename_fn)
+
+    return ds.ecod
 
 
-def make_kernel_filename(year):
-    return f"RRTM_kernel_monthly_{year}_alb_TOA_SFC.nc"
-
-
-def make_cloud_profile_filename(year):
-    return f"era5_plev_ciwc_clwc_monthly_{year}.nc"
-
-
-def make_ecod_filename(year, fast_ecod=False):
-    prefix = "era5_fast_ecod" if fast_ecod else "era5_ecod"
-    return f"{prefix}_monthly_{year}.nc"
-
-
-def compute_cloud_optical_depth(
-    tclw,
-    tciw,
-    tcc,
-    re_liquid=10e-6,
-    re_ice=30e-6,
-    rho_water=1000.0,
-    rho_ice=917.0,
-):
-    tau_l = 1.5 * tclw / (rho_water * re_liquid)
-    tau_i = 1.5 * tciw / (rho_ice * re_ice)
-    return (tau_l + tau_i) * tcc
-
-
-def open_years(path: str, years, filename_fn, months):
-    paths = [Path(path) / filename_fn(year) for year in years]
-    print(f"Loading data from: {paths}")
-    return filter_by_months(
-        xr.open_mfdataset(paths, combine="nested", concat_dim="date"),
-        months,
+def load_cloud_profiles(
+    path: str, years, months, target_grid: xr.Dataset
+) -> xr.Dataset:
+    profiles = load_yearly_and_filter_by_months(
+        path, years, months, make_cloud_profile_filename
     )
-
-
-def load_cloud_profiles(path: str, years, months, target_grid: xr.Dataset) -> xr.Dataset:
-    profiles = open_years(path, years, make_cloud_profile_filename, months)
     profiles = profiles[["ciwc", "clwc"]]
     if profiles.latitude.equals(target_grid.latitude) and profiles.longitude.equals(
         target_grid.longitude
@@ -64,14 +51,6 @@ def load_cloud_profiles(path: str, years, months, target_grid: xr.Dataset) -> xr
     )
 
 
-def raw_era5_years(path: str) -> list[int]:
-    prefix = "era5_single_levels_monthly_"
-    return sorted(
-        int(p.stem.removeprefix(prefix))
-        for p in Path(path).glob(f"{prefix}*.nc")
-    )
-
-
 def cache_ecod(path: str, years, fast_ecod=False) -> None:
     root = Path(path)
     for year in years:
@@ -80,7 +59,9 @@ def cache_ecod(path: str, years, fast_ecod=False) -> None:
             continue
         raw = xr.open_dataset(root / make_era5_filename(year))
         if fast_ecod:
-            ecod = compute_cloud_optical_depth(raw["tclw"], raw["tciw"], raw["tcc"])
+            ecod = fast_compute_cloud_optical_depth(
+                raw["tclw"], raw["tciw"], raw["tcc"]
+            )
         else:
             profiles = load_cloud_profiles(path, [year], None, raw)
             ecod = ecod_from_profiles(
@@ -92,15 +73,6 @@ def cache_ecod(path: str, years, fast_ecod=False) -> None:
         print(f"Saving cached ECOD for {year} to {output_path}...")
         ecod.to_dataset(name="ecod").to_netcdf(output_path)
         raw.close()
-
-
-def load_ecod(path: str, years, months, fast_ecod=False) -> xr.DataArray:
-    return open_years(
-        path,
-        years,
-        lambda year: make_ecod_filename(year, fast_ecod),
-        months,
-    )["ecod"]
 
 
 def interpolate_kernel_dataset(
@@ -117,145 +89,120 @@ def interpolate_kernel_dataset(
         latitude=target_latitude,
         longitude=target_longitude,
         method="linear",
-        kwargs={"fill_value": "extrapolate"}
+        kwargs={"fill_value": "extrapolate"},
     )
+
+
+KERNEL_YEARS = set(range(2011, 2016))
 
 
 def preprocess(config_path):
-    conf = load_config(config_path)
-    input_var = conf.dataset.input_var
-    target_var = conf.dataset.target_var
-    input_vars = conf.dataset.input_vars
-    clear_sky = conf.dataset.clear_sky_training
-    clear_sky_enabled = bool(clear_sky.enabled)
-    ecod_enabled = conf.preprocess.ecod.enabled
-    ecod_fast = conf.preprocess.ecod.method == "fast"
+    config = load_config(config_path)
+    input_vars = config.dataset.input_vars
+    target_var = config.dataset.target_var
+
+    ### precompute ecod
+    ecod_enabled = config.preprocess.ecod.enabled
+    ecod_fast = config.preprocess.ecod.method == "fast"
     if ecod_enabled:
         cache_ecod(
-            conf.dataset.era5.raw_path,
-            raw_era5_years(conf.dataset.era5.raw_path),
+            config.dataset.era5.raw_path,
             ecod_fast,
         )
 
-    all_kern_years = [
-        y
-        for y in sorted(conf.dataset.train_years + conf.dataset.val_years)
-        if y in list(range(2011, 2016))
+    ### load raw data
+    train_val_years = [config.dataset.train_years, config.dataset.val_years]
+    train_data, val_data = [
+        load_yearly_and_filter_by_months(
+            config.dataset.era5.raw_path,
+            years,
+            config.dataset.months,
+            make_era5_filename,
+        )
+        for years in train_val_years
     ]
 
-    train_data = open_years(
-        conf.dataset.era5.raw_path,
-        conf.dataset.train_years,
-        make_era5_filename,
-        conf.dataset.months,
-    )
-    val_data = open_years(
-        conf.dataset.era5.raw_path,
-        conf.dataset.val_years,
-        make_era5_filename,
-        conf.dataset.months,
-    )
-    if clear_sky_enabled:
-        train_data = train_data.assign(
-            {clear_sky.output_var: train_data[clear_sky.source_var]}
-        )
-        val_data = val_data.assign(
-            {clear_sky.output_var: val_data[clear_sky.source_var]}
-        )
+    # add ecod if enabled
     if ecod_enabled:
-        train_data = train_data.assign(
-            ecod=load_ecod(
-                conf.dataset.era5.raw_path,
-                conf.dataset.train_years,
-                conf.dataset.months,
-                ecod_fast,
+        train_ecod, val_ecod = [
+            load_ecod(
+                config.dataset.era5.raw_path, years, config.dataset.months, ecod_fast
             )
-        )
-        val_data = val_data.assign(
-            ecod=load_ecod(
-                conf.dataset.era5.raw_path,
-                conf.dataset.val_years,
-                conf.dataset.months,
-                ecod_fast,
-            )
-        )
+            for years in train_val_years
+        ]
+        train_data = train_data.assign(ecod=train_ecod)
+        val_data = val_data.assign(ecod=val_ecod)
 
-    kern_data = open_years(
-        conf.dataset.kernels.raw_path,
-        all_kern_years,
-        make_kernel_filename,
-        conf.dataset.months,
-    )
+    # ensure tsrc is present if clear sky training is enabled
+    if config.dataset.clear_sky.enabled:
+        assert config.dataset.clear_sky.var in train_data.data_vars
+
+    ### load kernels data
+    kernel_vars = config.dataset.kernels.vars
+    all_years = set(config.dataset.train_years + config.dataset.val_years)
+    all_kern_years = all_years.intersection(KERNEL_YEARS)
+    raw_kern_path = config.dataset.kernels.raw_path
+    kern_datasets = [
+        load_yearly_and_filter_by_months(
+            raw_kern_path,
+            all_kern_years,
+            config.dataset.months,
+            lambda year: make_kernel_filename(year, var),
+        )
+        for var in kernel_vars
+    ]  # list of datasets (date, lat, lon, all_clr), with field .<var> for each kernel variable
+
+    # (date, lat, lon, all_clr) with fields for each kernel variable
+    kern_ds_combined = xr.merge(kern_datasets)
 
     # --- preprocess era5 data ---
-    preprocessor = create_2024_preprocessor(
-        input_vars=input_vars,
-        target_var=target_var,
-        ecod=ecod_enabled,
-    )
+    preprocessor = DianaPreprocessor(config)
     print("Fitting preprocessor on training data...")
     preprocessor.fit(train_data)
-    scaler = preprocessor.preprocessors[-1]
-    if clear_sky_enabled:
-        spatial_preprocessor = preprocessor.preprocessors[-2]
-        scaler.update_shared_range(
-            target_var,
-            clear_sky.output_var,
-            spatial_preprocessor.transform(train_data[[clear_sky.output_var]])[
-                clear_sky.output_var
-            ],
-        )
 
     print("Transforming training and validation data...")
     train_preprocessed = preprocessor.transform(train_data)
     val_preprocessed = preprocessor.transform(val_data)
-    if clear_sky_enabled:
-        spatial_preprocessor = preprocessor.preprocessors[-2]
-        for raw, processed in [
-            (train_data, train_preprocessed),
-            (val_data, val_preprocessed),
-        ]:
-            processed[clear_sky.output_var] = scaler.transform(
-                spatial_preprocessor.transform(raw[[clear_sky.output_var]])
-            )[clear_sky.output_var]
 
     print("Saving preprocessor state...")
-    preprocessor.save(conf.preprocess.params_dir)
+    preprocessor.save(config.preprocess.params_dir)
 
-    Path(conf.dataset.era5.path).mkdir(parents=True, exist_ok=True)
-    Path(conf.dataset.kernels.path).mkdir(parents=True, exist_ok=True)
+    Path(config.dataset.era5.path).mkdir(parents=True, exist_ok=True)
 
-    for year in conf.dataset.train_years:
-        path = f"{conf.dataset.era5.path}/era5_single_levels_monthly_{year}.nc"
+    for year in config.dataset.train_years:
+        path = f"{config.dataset.era5.path}/era5_single_levels_monthly_{year}.nc"
         print(f"Saving scaled data for year {year} to {path}...")
         train_preprocessed.sel(date=str(year)).to_netcdf(path)
 
-    for year in conf.dataset.val_years:
-        path = f"{conf.dataset.era5.path}/era5_single_levels_monthly_{year}.nc"
+    for year in config.dataset.val_years:
+        path = f"{config.dataset.era5.path}/era5_single_levels_monthly_{year}.nc"
         print(f"Saving scaled data for year {year} to {path}...")
         val_preprocessed.sel(date=str(year)).to_netcdf(path)
+
+    if len(kernel_vars) == 0:
+        return
+
+    Path(config.dataset.kernels.path).mkdir(parents=True, exist_ok=True)
 
     # --- preprocess kernel data ---
     target_latitude = train_preprocessed["latitude"]
     target_longitude = train_preprocessed["longitude"]
 
-    scaler = preprocessor.preprocessors[-1]  # XarrayMinMaxScaler
-    data_min = scaler.data_min_
-    data_max = scaler.data_max_
+    scalar = preprocessor.scalar
+    ranges = scalar.get_data_max() - scalar.get_data_min()
+    target_range = ranges[target_var]
+
     processed_kernel = interpolate_kernel_dataset(
-        kern_data,
+        kern_ds_combined,
         target_latitude=target_latitude,
         target_longitude=target_longitude,
     )
-    input_range = float(data_max[input_var] - data_min[input_var])
-    target_range = float(data_max[target_var] - data_min[target_var])
-    processed_kernel["TOA_clr"] = processed_kernel["TOA_clr"] * (input_range / target_range) * (3600 * 24)
-    processed_kernel["TOA_cld"] = processed_kernel["TOA_cld"] * (input_range / target_range) * (3600 * 24)
+    processed_kernel = processed_kernel * (ranges) / target_range * (3600 * 24)
 
     for year in all_kern_years:
-        output_kernel_path = Path(conf.dataset.kernels.path) / make_kernel_filename(
-            year
-        )
+        output_kernel_path = Path(
+            config.dataset.kernels.path
+        ) / make_combined_kernel_filename(year)
         yearly_kernel = processed_kernel.sel(date=processed_kernel.date.dt.year == year)
         if int(yearly_kernel.sizes.get("date", 0)) == 0:
             raise ValueError(

@@ -2,6 +2,8 @@ from pathlib import Path
 
 from omegaconf import DictConfig, OmegaConf
 
+import xarray as xr
+import numpy as np
 
 def load_config(config_path: str | Path) -> DictConfig:
     config = _load_config_recursive(Path(config_path).resolve(), seen=set())
@@ -48,12 +50,10 @@ def validate_config(config: DictConfig) -> None:
         missing = [var for var in sobolev_vars if var not in input_vars]
         if missing:
             raise ValueError(f"train.sobolev_vars not in dataset.input_vars: {missing}")
-
-        if config.dataset.clear_sky_training.enabled and config.train.sobolev:
-            if len(sobolev_vars) != 1:
-                raise ValueError("clear_sky_training with Sobolev requires exactly one sobolev var.")
-            if "TOA_clr" not in config.dataset.kernels.vars:
-                raise ValueError("clear_sky_training with Sobolev requires TOA_clr in dataset.kernels.vars.")
+        
+        missing = [var for var in sobolev_vars if var not in config.dataset.kernels.vars]
+        if missing:
+            raise ValueError(f"train.sobolev_vars not in dataset.kernels.vars: {missing}")
 
 
 def _load_config_recursive(config_path: Path, seen: set[Path]) -> DictConfig:
@@ -80,3 +80,64 @@ def _load_config_recursive(config_path: Path, seen: set[Path]) -> DictConfig:
         merged = OmegaConf.merge(merged, _load_config_recursive(base_path, seen))
 
     return OmegaConf.merge(merged, loaded)
+
+from dataclasses import dataclass
+
+@dataclass
+class VariableConfig:
+    input_vars: str
+    target_var: str
+    clear_sky_zero_vars: list[str]
+    clear_sky_target: str
+    kernel_vars: list[str]
+
+
+    def all_vars(self) -> list[str]:
+        var_list = [*self.kernel_vars, *self.input_vars, self.target_var, *self.clear_sky_zero_vars, self.clear_sky_target]
+        return list(set(var_list))
+
+    def input_order(self):
+        ordering = [*self.kernel_vars, *self.input_vars]
+        vars = list(set(ordering))
+        return vars
+
+    def inputs(self, ds: xr.Dataset, clear=False) -> xr.Dataset:
+        out = ds[self.input_order()]
+        if clear:
+            out.assign(
+                {var: xr.zeros_like(out[var]) for var in self.clear_sky_zero_vars}
+            )
+        return out
+
+    def outputs(self, ds: xr.Dataset, clear=False) -> xr.DataArray:
+        if clear:
+            return ds[self.target_var]
+        else:
+            return ds[self.clear_sky_target]
+
+    def outputs_np(self, ds: xr.Dataset, clear=False) -> np.ndarray:
+        return self.outputs(ds, clear).to_numpy()
+
+    def inputs_np(self, ds: xr.Dataset, dim_order=None, clear=False) -> np.ndarray:
+        inputs = self.inputs(ds, clear)
+        da = inputs.to_dataarray()
+        if dim_order is not None:
+            da = da.transpose(*dim_order)
+        return da.values
+
+    def kern_inputs_np(self, ds: xr.Dataset, dim_order=None, clear=False) -> np.ndarray:
+        inputs = self.inputs(ds)
+        da = inputs.to_dataarray()
+        if dim_order is not None:
+            da = da.transpose(*dim_order)
+        return da.values
+
+
+def variable_config_from_omegaconf(config: DictConfig) -> VariableConfig:
+    return VariableConfig(
+        input_vars=config.dataset.input_vars,
+        target_var=config.dataset.target_var,
+        clear_sky_zero_vars=config.clear_sky_zero_vars,
+        clear_sky_target=config.clear_sky.var,
+        kernel_vars=config.kernels.vars,
+    )

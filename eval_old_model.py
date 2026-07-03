@@ -368,7 +368,7 @@ def kernel_ecod_fal_contour_test(
 
 
 def load_rrtm_kernels(kernel_dir: Path) -> xr.Dataset:
-    paths = sorted(kernel_dir.glob("RRTM_kernel_monthly_*_alb_TOA_SFC.nc"))
+    paths = sorted(kernel_dir.glob("RRTM_kernel_monthly_*_fal_TOA_SFC.nc"))
     if not paths:
         raise FileNotFoundError(f"No RRTM kernel files found in {kernel_dir}")
     return xr.open_mfdataset(paths, combine="nested", concat_dim="date")

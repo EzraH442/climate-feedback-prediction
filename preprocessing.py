@@ -1,9 +1,10 @@
 import os
-import numpy as np
 import xarray as xr
 from pathlib import Path
 import pickle
 
+
+from config_utils import variable_config_from_omegaconf
 
 class Preprocessor:
     def __init__(self):
@@ -35,7 +36,9 @@ class ECOD_Calculator(Preprocessor):
 
     def transform(self, ds):
         if "ecod" not in ds:
-            raise ValueError("Dataset must contain cached 'ecod'. Run preprocess.py first.")
+            raise ValueError(
+                "Dataset must contain cached 'ecod'. Run preprocess.py first."
+            )
         ds["ecod_fal"] = ds["ecod"] * ds["fal"]
         ds = ds.drop_vars([var for var in ("ciwc", "clwc", "tcc") if var in ds])
         return ds
@@ -46,9 +49,9 @@ class ECOD_Calculator(Preprocessor):
 
 
 class VariableSelector(Preprocessor):
-    def __init__(self, input_vars, target_var):
+    def __init__(self, vars: list[str]):
         super().__init__()
-        self.vars = list(dict.fromkeys([*input_vars, target_var]))
+        self.vars = vars
 
     def transform(self, ds):
         missing = [var for var in self.vars if var not in ds.data_vars]
@@ -83,7 +86,9 @@ class Downscaler(Preprocessor):
         for coord, vals in self.original_dims_sizes.items():
             interp_kwargs[coord] = vals
 
-        ds_upscaled = ds.interp(**interp_kwargs, method="nearest", kwargs={"fill_value": "extrapolate"})
+        ds_upscaled = ds.interp(
+            **interp_kwargs, method="nearest", kwargs={"fill_value": "extrapolate"}
+        )
         return ds_upscaled
 
     def save(self, path):
@@ -102,6 +107,7 @@ class Downscaler(Preprocessor):
         self.original_dims_sizes = data["original_dims_sizes"]
         self.factor = data["factor"]
 
+
 class Identity(Preprocessor):
     def __init__(self):
         super().__init__()
@@ -117,7 +123,8 @@ class Identity(Preprocessor):
 
     def load(self, path):
         pass
-        
+
+
 class XarrayMinMaxScaler(Preprocessor):
     def __init__(self, dim, min_val=-1, max_val=1):
         self.dim = dim
@@ -133,15 +140,27 @@ class XarrayMinMaxScaler(Preprocessor):
         self.data_min_ = ds.min(dim=self.dim).compute()
         self.data_max_ = ds.max(dim=self.dim).compute()
 
-    def update_shared_range(self, target_var: str, linked_var: str, linked_values):
-        linked_min = linked_values.min(dim=self.dim).compute()
-        linked_max = linked_values.max(dim=self.dim).compute()
-        shared_min = xr.apply_ufunc(np.minimum, self.data_min_[target_var], linked_min)
-        shared_max = xr.apply_ufunc(np.maximum, self.data_max_[target_var], linked_max)
-        self.data_min_[target_var] = shared_min
-        self.data_min_[linked_var] = shared_min
-        self.data_max_[target_var] = shared_max
-        self.data_max_[linked_var] = shared_max
+    def get_data_min(self):
+        if self.data_min_ is None:
+            raise RuntimeError("Scaler must be fitted before accessing data_min_.")
+        return self.data_min_
+
+    def get_data_max(self):
+        if self.data_max_ is None:
+            raise RuntimeError("Scaler must be fitted before accessing data_max_.")
+        return self.data_max_
+
+    def update_shared_range(self, var1, var2):
+        if self.data_min_ is None or self.data_max_ is None:
+            raise RuntimeError("Scaler must be fitted before updating shared range.")
+
+        new_min = min(self.data_min_[var1].values, self.data_min_[var2].values)
+        new_max = max(self.data_max_[var1].values, self.data_max_[var2].values)
+
+        self.data_min_[var1] = new_min
+        self.data_max_[var1] = new_max
+        self.data_min_[var2] = new_min
+        self.data_max_[var2] = new_max
 
     def transform(self, ds):
         """Scale data to the [min_val, max_val] range."""
@@ -167,8 +186,8 @@ class XarrayMinMaxScaler(Preprocessor):
 
     def save(self, path):
         super().save(path)
-        self.data_min_.to_netcdf(Path(path) / "min.nc")
-        self.data_max_.to_netcdf(Path(path) / "max.nc")
+        self.get_data_min().to_netcdf(Path(path) / "min.nc")
+        self.get_data_max().to_netcdf(Path(path) / "max.nc")
 
     def load(self, path):
         super().load(path)
@@ -181,6 +200,16 @@ class XarrayStandardScaler(Preprocessor):
         self.dim = dim
         self.mean_ = None
         self.std_ = None
+
+    def get_mean(self):
+        if self.mean_ is None:
+            raise RuntimeError("Scaler must be fitted before accessing mean_.")
+        return self.mean_
+
+    def get_std(self):
+        if self.std_ is None:
+            raise RuntimeError("Scaler must be fitted before accessing std_.")
+        return self.std_
 
     def fit(self, ds):
         print(f"Fitting scaler across dimension: {self.dim}...")
@@ -195,12 +224,12 @@ class XarrayStandardScaler(Preprocessor):
         return (ds - self.mean_) / self.std_
 
     def inverse_transform(self, ds):
-        return (ds * self.std_) + self.mean_
+        return (ds * self.get_std()) + self.get_mean()
 
     def save(self, path):
         super().save(path)
-        self.mean_.to_netcdf(Path(path) / "mean.nc")
-        self.std_.to_netcdf(Path(path) / "std.nc")
+        self.get_mean().to_netcdf(Path(path) / "mean.nc")
+        self.get_std().to_netcdf(Path(path) / "std.nc")
 
     def load(self, path):
         super().load(path)
@@ -238,31 +267,45 @@ class SequentialPreprocessor(Preprocessor):
             preprocessor.load(Path(path) / f"preprocessor_{i}")
 
 
-def create_2024_preprocessor(input_vars=None, target_var="tsr", ecod=True):
-    preprocessors = []
-    if ecod:
-        preprocessors.append(ECOD_Calculator())
-    if input_vars is not None:
-        preprocessors.append(VariableSelector(input_vars, target_var))
-    preprocessors.extend(
-        [
-            Downscaler(factor=[("latitude", 4), ("longitude", 4)]),
-            XarrayMinMaxScaler(dim=("date", "latitude", "longitude")),
+class DianaPreprocessor(SequentialPreprocessor):
+    def __init__(self, config, downscaling=True):
+        self.config = config
+        self.variable_config = variable_config_from_omegaconf(config)
+        vars = self.variable_config.all_vars()
+
+        self.scalar = XarrayMinMaxScaler(dim=("date", "latitude", "longitude"))
+        preprocessors = [
+            (ECOD_Calculator() if config.preprocess.ecod else Identity()),
+            VariableSelector(vars),
+            (
+                Downscaler(factor=[("latitude", 4), ("longitude", 4)])
+                if downscaling
+                else Identity()
+            ),
+            self.scalar,
         ]
-    )
-    return SequentialPreprocessor(preprocessors=preprocessors)
+
+        super().__init__(preprocessors=preprocessors)
+
+    def fit(self, ds):
+        super().fit(ds)
+
+        if self.variable_config.clear_sky_target:
+            self.scalar.update_shared_range(
+                var1=self.variable_config.target_var,
+                var2=self.variable_config.clear_sky_target,
+            )
 
 
-def create_2024_preprocessor_no_downscaling(input_vars=None, target_var="tsr", ecod=True):
-    preprocessors = []
-    if ecod:
-        preprocessors.append(ECOD_Calculator())
-    if input_vars is not None:
-        preprocessors.append(VariableSelector(input_vars, target_var))
-    preprocessors.extend(
-        [
-            Identity(),
-            XarrayMinMaxScaler(dim=("date", "latitude", "longitude")),
-        ]
-    )
-    return SequentialPreprocessor(preprocessors=preprocessors)
+def fast_compute_cloud_optical_depth(
+    tclw,
+    tciw,
+    tcc,
+    re_liquid=10e-6,
+    re_ice=30e-6,
+    rho_water=1000.0,
+    rho_ice=917.0,
+):
+    tau_l = 1.5 * tclw / (rho_water * re_liquid)
+    tau_i = 1.5 * tciw / (rho_ice * re_ice)
+    return (tau_l + tau_i) * tcc

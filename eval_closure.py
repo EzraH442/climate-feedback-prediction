@@ -29,7 +29,7 @@ from utils import (
 
 NORTH_BOUNDARY = 75
 NORTH_MASK = None
-ALBEDO_KERNEL_PATH = Path("data/ERA5_kernels/ERA5_kernel_alb_TOA.nc")
+ALBEDO_KERNEL_PATH = Path("data/ERA5_kernels/ERA5_kernel_fal_TOA.nc")
 WATER_VAPOR_KERNEL_PATH = Path(
     "data/ERA5_kernels/layer_specified_ta_wv_kernel/ERA5_kernel_wv_sw_nodp_TOA.nc"
 )
