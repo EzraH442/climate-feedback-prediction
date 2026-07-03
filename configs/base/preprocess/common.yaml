@@ -7,7 +7,7 @@ dataset:
     raw_path: "./data/era5"
   kernels:
     raw_path: "./data/kernels"
-  clear_sky_training:
+  clear_sky:
     enabled: False
     var: "tsrc"
   train_years:

@@ -21,7 +21,7 @@ dataset:
     - tclw
     - ecod
     - ecod_fal
-  clear_sky_training:
+  clear_sky:
     enabled: True
     var: "tsrc"
   months:
