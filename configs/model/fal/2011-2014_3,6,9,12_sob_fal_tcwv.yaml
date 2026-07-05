@@ -53,7 +53,7 @@ preprocess:
     method: "true"
 
 model:
-  input_dim: 11
+  input_dim: 12
   hidden_dim_sizes:
     - 11
 

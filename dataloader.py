@@ -55,9 +55,8 @@ class ClimateTorchDataset(torch.utils.data.Dataset):
         self.sobolev = bool(conf.train.sobolev)
 
         ### optional clear sky training setup
-        clear_sky = conf.dataset.clear_sky_training
-        self.clear_sky_enabled = bool(clear_sky.enabled)
-        self.clear_sky_target_var = clear_sky.output_var
+        self.clear_sky_enabled = bool(conf.dataset.clear_sky.enabled)
+        self.clear_sky_target_var = conf.dataset.clear_sky.var
         zero_vars = conf.dataset.clear_sky_zero_vars
         self.clear_sky_zero_indices = [input_vars.index(var) for var in zero_vars]
 
@@ -121,7 +120,7 @@ class ClimateTorchDataset(torch.utils.data.Dataset):
         )
 
         if self.sobolev:
-            return torch.tensor(x), torch.tensor(y), torch.tensor(dy_dx)
+            return torch.tensor(x).to(torch.float32), torch.tensor(y).to(torch.float32), torch.tensor(dy_dx).to(torch.float32)
 
         else:
-            return torch.tensor(x), torch.tensor(y), None
+            return torch.tensor(x).to(torch.float32), torch.tensor(y).to(torch.float32), None

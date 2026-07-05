@@ -10,9 +10,13 @@ dataset:
     - tciw
     - tclw
     - tcwv
+    - tco3
     - tisr
     - ecod
     - ecod_fal
+  kernel_vars:
+    - fal
+    - tcwv
   clear_sky_zero_vars:
     - hcc
     - mcc

@@ -107,6 +107,7 @@ def preprocess(config_path):
     if ecod_enabled:
         cache_ecod(
             config.dataset.era5.raw_path,
+            range(1990, 2021),
             ecod_fast,
         )
 
@@ -138,7 +139,7 @@ def preprocess(config_path):
         assert config.dataset.clear_sky.var in train_data.data_vars
 
     ### load kernels data
-    kernel_vars = config.dataset.kernels.vars
+    kernel_vars = config.dataset.kernel_vars
     all_years = set(config.dataset.train_years + config.dataset.val_years)
     all_kern_years = all_years.intersection(KERNEL_YEARS)
     raw_kern_path = config.dataset.kernels.raw_path

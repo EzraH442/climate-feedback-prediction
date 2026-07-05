@@ -10,6 +10,7 @@ dataset:
     - tciw
     - tclw
     - tcwv
+    - tco3
     - tisr
   era5:
     path: "./data/fal/era5_processed_no_ecod"
