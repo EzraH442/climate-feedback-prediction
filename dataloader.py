@@ -1,3 +1,6 @@
+import os
+from pathlib import Path
+
 import numpy as np
 import torch
 
@@ -11,6 +14,23 @@ from utils import (
 
 def make_mmap_stem(model_name: str, data_type: str, suffix: str) -> str:
     return f"{model_name}_{data_type}_{suffix}.npy"
+
+
+def load_or_create_mmap(path: Path, shape: tuple[int, ...], build_array):
+    if path.exists():
+        mmap = np.load(path, mmap_mode="r")
+        if mmap.shape == shape and mmap.dtype == np.float32:
+            return mmap
+        path.unlink()
+
+    values = build_array().astype(np.float32, copy=False)
+    if values.shape != shape:
+        raise ValueError(f"{path.name} shape {values.shape} does not match {shape}.")
+    mmap = np.lib.format.open_memmap(path, mode="w+", dtype=np.float32, shape=shape)
+    mmap[:] = values
+    mmap.flush()
+    del mmap
+    return np.load(path, mmap_mode="r")
 
 
 def area_weights_from_latitudes(
@@ -43,8 +63,7 @@ class ClimateTorchDataset(torch.utils.data.Dataset):
         self.variable_config = variable_config_from_omegaconf(conf)
         model_name = conf.train.name
 
-        ### input and output setup
-        target_var = target_var or conf.dataset.target_var
+        ### input setup
         input_vars = conf.dataset.input_vars
 
         ### years and months to load
@@ -75,12 +94,12 @@ class ClimateTorchDataset(torch.utils.data.Dataset):
                 filename_fn=make_combined_kernel_filename,
             )
 
-        all_vars = self.variable_config.all_vars()
+        input_order = self.variable_config.input_order()
+        kernel_order = self.variable_config.kern_input_order()
 
         self.n_dates = len(self.dataset_era5.date)
         self.n_lat = len(self.dataset_era5.latitude)
         self.n_lon = len(self.dataset_era5.longitude)
-        self.n_vars = len(all_vars)
         self.base_len = self.n_dates * self.n_lat * self.n_lon
         self.sample_weights = area_weights_from_latitudes(
             self.dataset_era5.latitude.to_numpy(),
@@ -89,6 +108,58 @@ class ClimateTorchDataset(torch.utils.data.Dataset):
         )
         if self.clear_sky_enabled:
             self.sample_weights = torch.cat([self.sample_weights, self.sample_weights])
+
+        slurm_tmpdir = os.getenv("SLURM_TMPDIR")
+        if not slurm_tmpdir:
+            raise EnvironmentError("SLURM_TMPDIR environment variable is not set.")
+        mmap_dir = Path(slurm_tmpdir)
+        mmap_dir.mkdir(parents=True, exist_ok=True)
+
+        grid_shape = (self.n_dates, self.n_lat, self.n_lon)
+        dim_order = ["date", "latitude", "longitude", "variable"]
+        self.x = load_or_create_mmap(
+            mmap_dir / make_mmap_stem(model_name, data_type, "x"),
+            (*grid_shape, len(input_order)),
+            lambda: self.variable_config.inputs_np(self.dataset_era5, dim_order),
+        )
+        self.y = load_or_create_mmap(
+            mmap_dir / make_mmap_stem(model_name, data_type, "y"),
+            (*grid_shape,),
+            lambda: self.variable_config.outputs_np(self.dataset_era5),
+        )
+        if self.clear_sky_enabled:
+            self.x_clear = load_or_create_mmap(
+                mmap_dir / make_mmap_stem(model_name, data_type, "x_clear"),
+                (*grid_shape, len(input_order)),
+                lambda: self.variable_config.inputs_np(
+                    self.dataset_era5, dim_order, clear=True
+                ),
+            )
+            self.y_clear = load_or_create_mmap(
+                mmap_dir / make_mmap_stem(model_name, data_type, "y_clear"),
+                (*grid_shape,),
+                lambda: self.variable_config.outputs_np(self.dataset_era5, clear=True),
+            )
+        if self.sobolev:
+            self.k = load_or_create_mmap(
+                mmap_dir / make_mmap_stem(model_name, data_type, "k"),
+                (*grid_shape, len(kernel_order)),
+                lambda: self.variable_config.kern_inputs_np(
+                    self.dataset_kernels, dim_order
+                ),
+            )
+            if self.clear_sky_enabled:
+                self.k_clear = load_or_create_mmap(
+                    mmap_dir / make_mmap_stem(model_name, data_type, "k_clear"),
+                    (*grid_shape, len(kernel_order)),
+                    lambda: self.variable_config.kern_inputs_np(
+                        self.dataset_kernels, dim_order, clear=True
+                    ),
+                )
+
+        self.dataset_era5.close()
+        if self.sobolev:
+            self.dataset_kernels.close()
 
     def __len__(self):
         return self.base_len * (2 if self.clear_sky_enabled else 1)
@@ -104,23 +175,24 @@ class ClimateTorchDataset(torch.utils.data.Dataset):
         lat_idx = rem // self.n_lon
         lon_idx = rem % self.n_lon
 
-        # select points
-        data_point = self.dataset_era5.isel(
-            date=date_idx, latitude=lat_idx, longitude=lon_idx
-        )
-        kern_data_point = self.dataset_kernels.isel(
-            date=date_idx, latitude=lat_idx, longitude=lon_idx
-        )
+        x_data = self.x_clear if clear_sky_sample else self.x
+        y_data = self.y_clear if clear_sky_sample else self.y
 
-        # order points
-        x = self.variable_config.inputs_np(data_point, clear=clear_sky_sample)
-        y = self.variable_config.outputs_np(data_point, clear=clear_sky_sample)
-        dy_dx = self.variable_config.kern_inputs_np(
-            kern_data_point, clear=clear_sky_sample
-        )
+        x = x_data[date_idx, lat_idx, lon_idx]
+        y = y_data[date_idx, lat_idx, lon_idx]
 
         if self.sobolev:
-            return torch.tensor(x).to(torch.float32), torch.tensor(y).to(torch.float32), torch.tensor(dy_dx).to(torch.float32)
+            k_data = self.k_clear if clear_sky_sample else self.k
+            dy_dx = k_data[date_idx, lat_idx, lon_idx]
+            return (
+                torch.from_numpy(np.array(x, copy=True)).float(),
+                torch.as_tensor(y).float(),
+                torch.from_numpy(np.array(dy_dx, copy=True)).float(),
+            )
 
         else:
-            return torch.tensor(x).to(torch.float32), torch.tensor(y).to(torch.float32), None
+            return (
+                torch.from_numpy(np.array(x, copy=True)).float(),
+                torch.as_tensor(y).float(),
+                None,
+            )
