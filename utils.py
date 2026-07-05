@@ -280,18 +280,16 @@ def interpolate_spatial_field(
 # ── Dataset construction & ordering ──────────────────────────────────────────
 
 
-def kernel_delta(config) -> float:
-    return 0.01 if config.dataset.input_var == "fal" else 1.0
+def kernel_delta(var: str) -> float:
+    return 0.01 if var == "fal" else 1.0
 
 
-def kernel_title(config) -> str:
-    return (
-        "Surface Albedo" if config.dataset.input_var == "fal" else "Surface Temperature"
-    )
+def kernel_title(var: str) -> str:
+    return "Surface Albedo" if var == "fal" else "Surface Temperature"
 
 
-def kernel_label(config) -> str:
-    return r"$W/m^2 1\%$" if config.dataset.input_var == "fal" else r"$W/m^2 K^{-1}$"
+def kernel_label(var: str) -> str:
+    return r"$W/m^2 1\%$" if var == "fal" else r"$W/m^2 K^{-1}$"
 
 
 def scale_minmax_value(scaler: XarrayMinMaxScaler, name: str, values):
@@ -355,12 +353,15 @@ def compute_nn_kernel(
     dim_order=["date", "latitude", "longitude"],
     perturbation_var="fal",
 ):
-    ds_p = ds.assign(input_var=ds[perturbation_var] + kernel_delta(config))
+    ds_p = ds.assign(
+        {perturbation_var: ds[perturbation_var] + kernel_delta(perturbation_var)}
+    )
 
     pred = nn_pred(ds, model, preprocessor, config, dim_order, clear)
     pred_perturbed = nn_pred(ds_p, model, preprocessor, config, dim_order, clear)
 
-    return (pred_perturbed - pred) / SECONDS_PER_DAY
+    kernel = ((pred_perturbed - pred) / SECONDS_PER_DAY).to_numpy().squeeze(axis=0)
+    return kernel, ds.longitude, ds.latitude
 
 
 def compute_nn_kernel_autograd(
@@ -401,7 +402,7 @@ def compute_nn_kernel_autograd(
         * (target_range / input_range)
         / SECONDS_PER_DAY
     )
-    return grad_physical_per_unit * kernel_delta(config), lon, lat
+    return grad_physical_per_unit * kernel_delta(input_var), lon, lat
 
 
 def filter_by_years(ds: xr.Dataset, years, time_coord: str = "date") -> xr.Dataset:

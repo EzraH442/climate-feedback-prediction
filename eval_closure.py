@@ -21,7 +21,11 @@ from utils import (
     to_monthly,
     weighted_residuals_by_month,
     weighted_residuals_by_year_month,
-    load_model_and_preprocessor
+    load_model_and_preprocessor,
+    generate_paths_yearly,
+    make_era5_filename,
+    make_qt_filename,
+    filter_by_months,
 )
 
 
@@ -31,7 +35,6 @@ ALBEDO_KERNEL_PATH = Path("data/ERA5_kernels/ERA5_kernel_fal_TOA.nc")
 WATER_VAPOR_KERNEL_PATH = Path(
     "data/ERA5_kernels/layer_specified_ta_wv_kernel/ERA5_kernel_wv_sw_nodp_TOA.nc"
 )
-QT_PATH = Path("data/era5/era5_plev_qt_monthly_downscaled.nc")
 MONTH_NAMES = [
     "Jan", "Feb", "Mar",
     "Apr", "May", "Jun",
@@ -72,6 +75,13 @@ def water_vapor_kernel_components(
     dR_q_k_clr = dR_q_k_clr.compute()
 
     return dR_q_k, dR_q_k_clr
+
+
+def load_qt(path: str | Path, years, months, kernel_grid) -> xr.Dataset:
+    paths = generate_paths_yearly(path, years, make_qt_filename)
+    ds_qt = xr.open_mfdataset(paths, combine="nested", concat_dim="date")
+    ds_qt = filter_by_months(ds_qt, months)
+    return ds_qt.interp(**kernel_grid)
 
 
 def plot_field_pair(
@@ -851,7 +861,17 @@ def feedback_test(
         plt.savefig(output_root / f'reg_{var}.png')
         plt.close()
 
-def compute_responses(ds_monthly, ds_monthly_means, anomaly, model, preprocessor, config, cloud_vars, cross=True):
+def compute_responses(
+    ds_monthly,
+    ds_monthly_means,
+    anomaly,
+    model,
+    preprocessor,
+    config,
+    cloud_vars,
+    qt_path,
+    cross=True,
+):
     K_a = xr.open_dataset(ALBEDO_KERNEL_PATH)
     K_q = xr.open_dataset(WATER_VAPOR_KERNEL_PATH)
 
@@ -878,7 +898,12 @@ def compute_responses(ds_monthly, ds_monthly_means, anomaly, model, preprocessor
     dR_clr = ds_monthly.tsrc - ds_monthly.tsrc.mean("year")
     dR = anomaly.tsr.interp(**kernel_grid).compute()
 
-    ds_qt = xr.load_dataset(QT_PATH)
+    ds_qt = load_qt(
+        qt_path,
+        sorted(int(year) for year in ds_monthly.year.values),
+        sorted(int(month) for month in ds_monthly.month.values),
+        kernel_grid,
+    )
     dR_a_k, dR_a_k_clr = albedo_kernel_components(anomaly, K_a)
     dR_q_k, dR_q_k_clr = water_vapor_kernel_components(ds_monthly, ds_qt, K_q)
     dR_c_k = (dR - dR_clr) - (dR_a_k - dR_a_k_clr) - (dR_q_k - dR_q_k_clr)
@@ -994,26 +1019,28 @@ def main():
     output_root = (
         Path(args.output_dir)
         if args.output_dir
-        else Path(config.train.checkpoint_dir) / "figures" / epoch / "closure_test" 
+        else Path(config.train.checkpoint_dir) / "figures" / str(epoch) / "closure_test"
     )
-    output_dir = Path(config.train.checkpoint_dir) / "figures" / epoch
-    if args.output_dir:
-        output_dir = Path(args.output_dir)
-    output_dir.mkdir(parents=True, exist_ok=True)
+    output_root.mkdir(parents=True, exist_ok=True)
     response_save_path = output_root / "saved_responses_closure_test.nc"
 
 
     data_path = Path(args.data_path)
-    ds = xr.open_mfdataset(list(data_path.glob("era5_single_levels_monthly_*.nc")))
+    data_years = range(
+        pd.Timestamp(args.start_date).year,
+        pd.Timestamp(args.end_date).year + 1,
+    )
+    ds = xr.open_mfdataset(
+        generate_paths_yearly(data_path, data_years, make_era5_filename),
+        combine="nested",
+        concat_dim="date",
+    )
     ds = ds.sel(date=slice(args.start_date, args.end_date)).interp(**kernel_grid)
     if config.preprocess.ecod.enabled:
         ds = ds.assign(
             ecod=load_ecod(
                 args.data_path,
-                range(
-                    pd.Timestamp(args.start_date).year,
-                    pd.Timestamp(args.end_date).year + 1,
-                ),
+                data_years,
                 range(1, 13),
                 config.preprocess.ecod.method == "fast",
             ).interp(**kernel_grid)
@@ -1035,12 +1062,19 @@ def main():
         responses = xr.load_dataset(response_save_path)
     else:
         responses = compute_responses(
-            ds_monthly, ds_monthly_means, anomaly, model, preprocessor, config, cloud_vars, cross=True
+            ds_monthly,
+            ds_monthly_means,
+            anomaly,
+            model,
+            preprocessor,
+            config,
+            cloud_vars,
+            args.data_path,
+            cross=True,
         )
         # print(responses)
         # print(list(responses.data_vars))
         # print(responses.attrs)
-        output_root.mkdir(exist_ok=True, parents=True)
         responses.to_netcdf(response_save_path)
     
     

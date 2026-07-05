@@ -51,9 +51,14 @@ def validate_config(config: DictConfig) -> None:
         if missing:
             raise ValueError(f"train.sobolev_vars not in dataset.input_vars: {missing}")
         
-        missing = [var for var in sobolev_vars if var not in config.dataset.kernel_vars]
-        if missing:
-            raise ValueError(f"train.sobolev_vars not in dataset.kernel_vars: {missing}")
+        if config.train.sobolev:
+            missing = [
+                var for var in sobolev_vars if var not in config.dataset.kernel_vars
+            ]
+            if missing:
+                raise ValueError(
+                    f"train.sobolev_vars not in dataset.kernel_vars: {missing}"
+                )
 
 
 def _load_config_recursive(config_path: Path, seen: set[Path]) -> DictConfig:
@@ -93,23 +98,28 @@ class VariableConfig:
 
 
     def all_vars(self) -> list[str]:
-        var_list = [*self.kernel_vars, *self.input_vars, self.target_var, *self.clear_sky_zero_vars, self.clear_sky_target]
-        return list(set(var_list))
+        return list(
+            dict.fromkeys(
+                [
+                    *self.kernel_vars,
+                    *self.input_vars,
+                    self.target_var,
+                    *self.clear_sky_zero_vars,
+                    self.clear_sky_target,
+                ]
+            )
+        )
 
     def input_order(self):
-        ordering = [*self.kernel_vars, *self.input_vars]
-        vars = list(set(ordering))
-        return vars
+        return list(dict.fromkeys([*self.kernel_vars, *self.input_vars]))
 
     def kern_input_order(self):
-        ordering = [*self.kernel_vars]
-        vars = list(set(ordering))
-        return vars
+        return list(dict.fromkeys(self.kernel_vars))
 
     def inputs(self, ds: xr.Dataset, clear=False) -> xr.Dataset:
         out = ds[self.input_order()]
         if clear:
-            out.assign(
+            out = out.assign(
                 {var: xr.zeros_like(out[var]) for var in self.clear_sky_zero_vars}
             )
         return out
@@ -123,9 +133,9 @@ class VariableConfig:
             
     def outputs(self, ds: xr.Dataset, clear=False) -> xr.DataArray:
         if clear:
-            return ds[self.target_var]
-        else:
             return ds[self.clear_sky_target]
+        else:
+            return ds[self.target_var]
 
     def outputs_np(self, ds: xr.Dataset, clear=False) -> np.ndarray:
         return self.outputs(ds, clear).to_numpy()

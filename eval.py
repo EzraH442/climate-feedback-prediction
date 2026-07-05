@@ -225,16 +225,17 @@ def kernel_contour_test(
 
     inputs = torch.from_numpy(inputs_np).float().requires_grad_(True)
     outputs = model(inputs)
+    kernel_name = v1
     grads = torch.autograd.grad(outputs=outputs.sum(), inputs=inputs)[0][
-        :, feature_names.index("fal")
+        :, feature_names.index(kernel_name)
     ]
 
     target = config.dataset.target_var
     target_range = float(vmax[target] - vmin[target])
-    v1_range = float(vmax[v1] - vmin[v1])
+    input_range = float(vmax[kernel_name] - vmin[kernel_name])
     kernel = (
-        grads.detach().cpu().numpy() * (target_range / v1_range) / SECONDS_PER_DAY
-    ).reshape(n * n) * kernel_delta(config)
+        grads.detach().cpu().numpy() * (target_range / input_range) / SECONDS_PER_DAY
+    ).reshape(n, n) * kernel_delta(kernel_name)
 
     fig, ax = plt.subplots(figsize=(7, 5), dpi=300)
     max_abs = float(np.nanmax(np.abs(kernel)))
@@ -275,7 +276,7 @@ def kernel_contour_test(
         f"NN surface albedo kernel over {v1}/{v2}; lat={latitude:.2f}, lon={longitude:.2f}, date={date}"
     )
     cb = fig.colorbar(contour, ax=ax)
-    cb.set_label(kernel_label(config))
+    cb.set_label(kernel_label(kernel_name))
     fig.tight_layout()
     fig.savefig(figures_path / f"kernel_contour_{v1}_{v2}.png")
     plt.close(fig)
@@ -308,7 +309,7 @@ def tsr_ecod_fal_contour_test(
         longitude,
         scatter,
         extrapolate,
-        100,
+        n_fal,
     )
 
 
@@ -364,7 +365,7 @@ def tsr_contour_test(
         )
 
     with torch.no_grad():
-        outputs = model(torch.from_numpy(inputs_np).float()).numpy().reshape(100, 100)
+        outputs = model(torch.from_numpy(inputs_np).float()).numpy().reshape(n, n)
 
     target_min = float(vmin[target_var])
     target_range = float(vmax[target_var] - vmin[target_var])
@@ -392,7 +393,7 @@ def tsr_contour_test(
         ax.legend(loc="upper right", markerscale=4)
     ax.scatter(
         [float(observed_base_point[v1])],
-        [float(observed_base_point[v1])],
+        [float(observed_base_point[v2])],
         s=20,
         c="white",
         edgecolors="black",
@@ -419,20 +420,25 @@ def kernel_date_test(
     true_kernel: xr.Dataset,
     figures_path: Path = Path("."),
 ):
-    title = kernel_title(config)
-    label = kernel_label(config)
+    kernel_name = config.dataset.kernel_vars[0]
+    title = kernel_title(kernel_name)
+    label = kernel_label(kernel_name)
 
-    nn_kern_cld, lon, lat = compute_nn_kernel(ds, preprocessor, model, config)
-    nn_kern_clr, _, _ = compute_nn_kernel(ds, preprocessor, model, config, clear=True)
+    nn_kern_cld, lon, lat = compute_nn_kernel(
+        ds, preprocessor, model, config, perturbation_var=kernel_name
+    )
+    nn_kern_clr, _, _ = compute_nn_kernel(
+        ds, preprocessor, model, config, clear=True, perturbation_var=kernel_name
+    )
     nn_grad_cld, grad_lon, grad_lat = compute_nn_kernel_autograd(
-        ds, preprocessor, model, config
+        ds, preprocessor, model, config, var=kernel_name
     )
     nn_grad_clr, _, _ = compute_nn_kernel_autograd(
-        ds, preprocessor, model, config, clear=True
+        ds, preprocessor, model, config, var=kernel_name, clear=True
     )
 
-    rrtm_kern_cld = true_kernel["TOA_cld"].to_numpy()[0] * kernel_delta(config)
-    rrtm_kern_clr = true_kernel["TOA_clr"].to_numpy()[0] * kernel_delta(config)
+    rrtm_kern_cld = true_kernel["TOA_cld"].to_numpy()[0] * kernel_delta(kernel_name)
+    rrtm_kern_clr = true_kernel["TOA_clr"].to_numpy()[0] * kernel_delta(kernel_name)
     kern_lon, kern_lat = true_kernel.longitude, true_kernel.latitude
     # --- clear and all sky plots of nn kernel, global and north pole
     # plot_global_field(
@@ -681,28 +687,29 @@ def second_order_test(
     dates=["2013-09", "2012-09"],
     figures_path: Path = Path("."),
 ):
+    kernel_name = config.dataset.kernel_vars[0]
     nn_kern_cld_1, lon, lat = compute_nn_kernel(
-        ds.sel(date=dates[1]), preprocessor, model, config
+        ds.sel(date=dates[1]), preprocessor, model, config, perturbation_var=kernel_name
     )
     nn_kern_cld_0, _, _ = compute_nn_kernel(
-        ds.sel(date=dates[0]), preprocessor, model, config
+        ds.sel(date=dates[0]), preprocessor, model, config, perturbation_var=kernel_name
     )
     delta_kern_nn = nn_kern_cld_1 - nn_kern_cld_0
     nn_grad_cld_1, grad_lon, grad_lat = compute_nn_kernel_autograd(
-        ds.sel(date=dates[1]), preprocessor, model, config
+        ds.sel(date=dates[1]), preprocessor, model, config, var=kernel_name
     )
     nn_grad_cld_0, _, _ = compute_nn_kernel_autograd(
-        ds.sel(date=dates[0]), preprocessor, model, config
+        ds.sel(date=dates[0]), preprocessor, model, config, var=kernel_name
     )
     delta_kern_nn_grad = nn_grad_cld_1 - nn_grad_cld_0
 
     rrtm_lat, rrtm_lon = true_kernel.latitude, true_kernel.longitude
     rrtm_kern_cld_1 = true_kernel["TOA_cld"].sel(date=dates[1]).as_numpy()[
         0
-    ] * kernel_delta(config)
+    ] * kernel_delta(kernel_name)
     rrtm_kern_cld_0 = true_kernel["TOA_cld"].sel(date=dates[0]).as_numpy()[
         0
-    ] * kernel_delta(config)
+    ] * kernel_delta(kernel_name)
     delta_kern_rrtm = rrtm_kern_cld_1 - rrtm_kern_cld_0
 
     if delta_kern_nn.shape != delta_kern_rrtm.shape:
@@ -816,23 +823,26 @@ def main():
     model, preprocessor, epoch = load_model_and_preprocessor(config, checkpoint_path)
     
     # --- setup output directory ---
-    output_dir = Path(config.train.checkpoint_dir) / "figures" / epoch
+    output_dir = Path(config.train.checkpoint_dir) / "figures" / str(epoch)
     if args.output_dir:
         output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
     # --- load test data ---
-    def raw_fal_kernel_filename(year):
-        return make_kernel_filename(year, "fal")
+    kernel_name = config.dataset.kernel_vars[0]
 
+    def raw_kernel_filename(year):
+        return make_kernel_filename(year, kernel_name)
+
+    eval_years = [2012, 2013, 2015]
     raw_era5_paths = generate_paths_yearly(
-        config.dataset.era5.raw_path, range(1990, 2021), make_era5_filename
+        config.dataset.era5.raw_path, eval_years, make_era5_filename
     )
     test_era5_paths = generate_paths_yearly(
         config.dataset.era5.path, config.dataset.test_years, make_era5_filename
     )
     kernel_paths = generate_paths_yearly(
-        config.dataset.kernels.raw.path, range(2021, 2016), raw_fal_kernel_filename
+        config.dataset.kernels.raw_path, eval_years, raw_kernel_filename
     )
 
     raw_dataset = xr.open_mfdataset(raw_era5_paths, combine="nested", concat_dim="date")
@@ -840,7 +850,7 @@ def main():
         raw_dataset = raw_dataset.assign(
             ecod=load_ecod(
                 config.dataset.era5.raw_path,
-                range(1990, 2021),
+                eval_years,
                 range(1, 13),
                 config.preprocess.ecod.method == "fast",
             )
