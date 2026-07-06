@@ -31,6 +31,12 @@ from utils import (
 from model import SimpleModel
 
 
+def figure_dir(figures_path: Path, *parts: str) -> Path:
+    path = figures_path.joinpath(*parts)
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
 def global_tsr_test(
     ds: xr.Dataset,
     preprocessor: DianaPreprocessor,
@@ -43,6 +49,7 @@ def global_tsr_test(
 
     target = config.dataset.target_var
     target_label = target.upper()
+    output_dir = figure_dir(figures_path, "all", "tsr_test")
 
     pred = nn_pred(ds, model, preprocessor, config, ["date", "latitude", "longitude"])
     true = preprocessor.preprocessors[-1].inverse_transform(ds)[target]
@@ -76,7 +83,7 @@ def global_tsr_test(
         lon,
         lat,
         f"{target_label} (ERA5)",
-        figures_path / f"global_{target}_era5.png",
+        output_dir / "era5.png",
         cmap="Spectral",
         vmin=min_tsr,
         vmax=max_tsr,
@@ -88,7 +95,7 @@ def global_tsr_test(
         lon,
         lat,
         f"{target_label} (NN)",
-        figures_path / f"global_{target}_nn.png",
+        output_dir / "nn.png",
         cmap="Spectral",
         vmin=min_tsr,
         vmax=max_tsr,
@@ -100,7 +107,7 @@ def global_tsr_test(
         lon,
         lat,
         "MBE",
-        figures_path / f"global_{target}_mbe.png",
+        output_dir / "mbe.png",
         cmap="RdBu_r",
         vmin=-20,
         vmax=20,
@@ -112,7 +119,7 @@ def global_tsr_test(
         lon,
         lat,
         "RMSE",
-        figures_path / f"global_{target}_rmse.png",
+        output_dir / "rmse.png",
         cmap="Blues",
         vmin=0,
         vmax=20,
@@ -278,7 +285,8 @@ def kernel_contour_test(
     cb = fig.colorbar(contour, ax=ax)
     cb.set_label(kernel_label(kernel_name))
     fig.tight_layout()
-    fig.savefig(figures_path / f"kernel_contour_{v1}_{v2}.png")
+    output_dir = figure_dir(figures_path, "all", "kernel_contour_test", v1, date)
+    fig.savefig(output_dir / f"{v1}_{v2}.png")
     plt.close(fig)
 
 
@@ -407,8 +415,14 @@ def tsr_contour_test(
     cb = fig.colorbar(contour, ax=ax)
     cb.set_label("$W/m^2$")
     fig.tight_layout()
-    fig.savefig(figures_path / f"{target_var}_contour_fal_ecod.png")
+    output_dir = figure_dir(figures_path, "all", "tsr_contour_test", v1, date)
+    fig.savefig(output_dir / f"{v1}_{v2}.png")
     plt.close(fig)
+
+
+def eval_kernel_vars(config):
+    input_vars = list(config.dataset.input_vars)
+    return [var for var in ("fal", "skt", "tcwv") if var in input_vars]
 
 
 def kernel_date_test(
@@ -421,9 +435,11 @@ def kernel_date_test(
     figures_path: Path = Path("."),
     kernel_name=None,
 ):
-    kernel_name = kernel_name or config.dataset.kernel_vars[0]
+    kernel_name = kernel_name or eval_kernel_vars(config)[0]
     title = kernel_title(kernel_name)
     label = kernel_label(kernel_name)
+    all_dir = figure_dir(figures_path, "all", "kernel_date_test", kernel_name, date)
+    clr_dir = figure_dir(figures_path, "clr", "kernel_date_test", kernel_name, date)
 
     nn_kern_cld, lon, lat = compute_nn_kernel(
         ds, preprocessor, model, config, perturbation_var=kernel_name
@@ -461,7 +477,7 @@ def kernel_date_test(
         grad_lon,
         grad_lat,
         f"NN {title} Kernel via autograd (all)\n{date}",
-        figures_path / f"kern_all_nn_grad_{date}.png",
+        all_dir / "nn_grad.png",
         cmap="RdBu_r",
         vmin=-3,
         vmax=3,
@@ -473,7 +489,7 @@ def kernel_date_test(
         grad_lon,
         grad_lat,
         f"NN {title} Kernel via autograd (clear)\n{date}",
-        figures_path / f"kern_clr_nn_grad_{date}.png",
+        clr_dir / "nn_grad.png",
         cmap="RdBu_r",
         vmin=-3,
         vmax=3,
@@ -501,7 +517,7 @@ def kernel_date_test(
         grad_lon,
         grad_lat,
         f"NN {title} Kernel via autograd (all)\n{date}",
-        figures_path / f"kern_all_nn_grad_np_{date}.png",
+        all_dir / "nn_grad_np.png",
         cmap="RdBu_r",
         vmin=-3,
         vmax=3,
@@ -513,7 +529,7 @@ def kernel_date_test(
         grad_lon,
         grad_lat,
         f"NN {title} Kernel via autograd (clear)\n{date}",
-        figures_path / f"kern_clr_nn_grad_np_{date}.png",
+        clr_dir / "nn_grad_np.png",
         cmap="RdBu_r",
         vmin=-3,
         vmax=3,
@@ -526,7 +542,7 @@ def kernel_date_test(
         kern_lon,
         kern_lat,
         f"RRTM {title} Kernel (all)\n{date}",
-        figures_path / f"kern_all_rrtm_{date}.png",
+        all_dir / "rrtm.png",
         cmap="RdBu_r",
         vmin=-3,
         vmax=3,
@@ -538,7 +554,7 @@ def kernel_date_test(
         kern_lon,
         kern_lat,
         f"RRTM {title} Kernel (clear)\n{date}",
-        figures_path / f"kern_clr_rrtm_{date}.png",
+        clr_dir / "rrtm.png",
         cmap="RdBu_r",
         vmin=-3,
         vmax=3,
@@ -551,7 +567,7 @@ def kernel_date_test(
         kern_lon,
         kern_lat,
         f"RRTM {title} Kernel (all)\n{date}",
-        figures_path / f"kern_all_rrtm_np_{date}.png",
+        all_dir / "rrtm_np.png",
         cmap="RdBu_r",
         vmin=-3,
         vmax=3,
@@ -563,7 +579,7 @@ def kernel_date_test(
         kern_lon,
         kern_lat,
         f"RRTM {title} Kernel (clear)\n{date}",
-        figures_path / f"kern_clr_rrtm_np_{date}.png",
+        clr_dir / "rrtm_np.png",
         cmap="RdBu_r",
         vmin=-3,
         vmax=3,
@@ -619,7 +635,7 @@ def kernel_date_test(
         plot_grad_lon,
         plot_grad_lat,
         f"NN autograd-RRTM {title} Kernel (all)\n{date}",
-        figures_path / f"kern_all_nn_grad-rrtm_{date}.png",
+        all_dir / "nn_grad-rrtm.png",
         cmap="RdBu_r",
         vmin=-0.3,
         vmax=0.3,
@@ -631,7 +647,7 @@ def kernel_date_test(
         plot_grad_lon,
         plot_grad_lat,
         f"NN autograd-RRTM {title} Kernel (clear)\n{date}",
-        figures_path / f"kern_clr_nn_grad-rrtm_{date}.png",
+        clr_dir / "nn_grad-rrtm.png",
         cmap="RdBu_r",
         vmin=-0.3,
         vmax=0.3,
@@ -658,7 +674,7 @@ def kernel_date_test(
         plot_grad_lon,
         plot_grad_lat,
         f"NN autograd-RRTM {title} Kernel (all)\n{date}",
-        figures_path / f"kern_all_nn_grad-rrtm_np_{date}.png",
+        all_dir / "nn_grad-rrtm_np.png",
         cmap="RdBu_r",
         vmin=-1,
         vmax=1,
@@ -670,7 +686,7 @@ def kernel_date_test(
         plot_grad_lon,
         plot_grad_lat,
         f"NN autograd-RRTM {title} Kernel (clear)\n{date}",
-        figures_path / f"kern_clr_nn_grad-rrtm_np_{date}.png",
+        clr_dir / "nn_grad-rrtm_np.png",
         cmap="RdBu_r",
         vmin=-1,
         vmax=1,
@@ -689,7 +705,10 @@ def second_order_test(
     figures_path: Path = Path("."),
     kernel_name=None,
 ):
-    kernel_name = kernel_name or config.dataset.kernel_vars[0]
+    kernel_name = kernel_name or eval_kernel_vars(config)[0]
+    output_dir = figure_dir(
+        figures_path, "clr", "second_order_test", kernel_name, f"{dates[1]}_minus_{dates[0]}"
+    )
     nn_kern_cld_1, lon, lat = compute_nn_kernel(
         ds.sel(date=dates[1]), preprocessor, model, config, perturbation_var=kernel_name
     )
@@ -762,7 +781,7 @@ def second_order_test(
         plot_grad_lon,
         plot_grad_lat,
         "NN autograd kernel difference\n" + f"({dates[1]} minus {dates[0]})",
-        figures_path / "delta_k_nn_grad_np.png",
+        output_dir / "nn_grad_np.png",
         vmin=-1,
         vmax=1,
     )
@@ -771,7 +790,7 @@ def second_order_test(
         plot_lon,
         plot_lat,
         "ERA5 surface albedo kernel difference\n" + f"({dates[1]} minus {dates[0]})",
-        figures_path / "delta_k_rrtm_np.png",
+        output_dir / "rrtm_np.png",
         vmin=-1,
         vmax=1,
     )
@@ -786,7 +805,7 @@ def second_order_test(
         plot_grad_lon,
         plot_grad_lat,
         r"$K_{NN,\mathrm{grad}} - K_{ERA5}$" + "\n" + f"({dates[1]} minus {dates[0]})",
-        figures_path / "delta_k_nn_grad-rrtm_north_pole.png",
+        output_dir / "nn_grad-rrtm_np.png",
         vmin=-1,
         vmax=1,
         annotation=f"{np.mean(delta_k_diff_grad[grad_north_mask]):.2f}; {np.mean(np.abs(delta_k_diff_grad[grad_north_mask])):.2f}",
@@ -866,7 +885,7 @@ def main():
         figures_path=output_dir,
     )
 
-    for kernel_name in config.dataset.kernel_vars:
+    for kernel_name in eval_kernel_vars(config):
         kernel_paths = generate_paths_yearly(
             config.dataset.kernels.raw_path,
             eval_years,

@@ -21,8 +21,9 @@ def make_era5_filename(year):
 
 
 def make_kernel_filename(year, var):
-    assert var in ["fal", "tcwv", "ts"]
-    return f"RRTM_kernel_monthly_{year}_{var}_TOA_SFC.nc"
+    file_var = "ts" if var == "skt" else var
+    assert file_var in ["fal", "tcwv", "ts"]
+    return f"RRTM_kernel_monthly_{year}_{file_var}_TOA_SFC.nc"
 
 
 def make_combined_kernel_filename(year):
@@ -285,11 +286,21 @@ def kernel_delta(var: str) -> float:
 
 
 def kernel_title(var: str) -> str:
-    return {"fal": "Surface Albedo", "tcwv": "Water Vapor", "ts": "Surface Temperature"}[var]
+    return {
+        "fal": "Surface Albedo",
+        "tcwv": "Water Vapor",
+        "skt": "Surface Temperature",
+        "ts": "Surface Temperature",
+    }[var]
 
 
 def kernel_label(var: str) -> str:
-    return {"fal": r"$W/m^2 1\%$", "tcwv": r"$W/m^2 kg^{-1} m^2$", "ts": r"$W/m^2 K^{-1}$"}[var]
+    return {
+        "fal": r"$W/m^2 1\%$",
+        "tcwv": r"$W/m^2 kg^{-1} m^2$",
+        "skt": r"$W/m^2 K^{-1}$",
+        "ts": r"$W/m^2 K^{-1}$",
+    }[var]
 
 
 def scale_minmax_value(scaler: XarrayMinMaxScaler, name: str, values):
