@@ -679,6 +679,7 @@ def date_closure_test(
     ppm = preprocessor.transform(ds_monthly_means.sel(month=month))
     anomaly_ecod = (pp - ppm).ecod.compute()
 
+    """
     plot_input_anomalies(
         anomaly,
         anomaly_ecod,
@@ -687,6 +688,7 @@ def date_closure_test(
         year,
         month,
     )
+    """
     nn_responses_to_print = [
         ("dR_nn", responses["dR_nn_all"]),
         ("dR_nn_clr", responses["dR_nn_clr"]),
@@ -1084,13 +1086,13 @@ def main():
         year,
         month,
     )
+    """
     timeseries_test(
         responses,
         output_root,
         args.residual_samples,
     )
 
-    """
     dt2m = ds_monthly.t2m - ds_monthly.t2m.mean("year")
     feedback_test(
         dt2m,

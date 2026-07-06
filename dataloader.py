@@ -194,5 +194,5 @@ class ClimateTorchDataset(torch.utils.data.Dataset):
             return (
                 torch.from_numpy(np.array(x, copy=True)).float(),
                 torch.as_tensor(y).float(),
-                torch.empty(0),
+                torch.tensor(0),
             )

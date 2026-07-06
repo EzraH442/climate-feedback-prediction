@@ -30,7 +30,6 @@ from utils import (
 
 from model import SimpleModel
 
-
 def figure_dir(figures_path: Path, *parts: str) -> Path:
     path = figures_path.joinpath(*parts)
     path.mkdir(parents=True, exist_ok=True)

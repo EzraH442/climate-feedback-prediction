@@ -291,6 +291,7 @@ def kernel_title(var: str) -> str:
         "tcwv": "Water Vapor",
         "skt": "Surface Temperature",
         "ts": "Surface Temperature",
+        'ecod': "Effective Cloud Optical Depth",
     }[var]
 
 
@@ -300,6 +301,7 @@ def kernel_label(var: str) -> str:
         "tcwv": r"$W/m^2 kg^{-1} m^2$",
         "skt": r"$W/m^2 K^{-1}$",
         "ts": r"$W/m^2 K^{-1}$",
+        'ecod': r"$W/m^2$",
     }[var]
 
 
