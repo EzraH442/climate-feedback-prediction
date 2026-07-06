@@ -760,7 +760,7 @@ def date_closure_test(
     dR_res_nn              = dR     - dR_sum_nn
     dR_res_k               = dR     - dR_sum_k
     dR_res_nn_clr          = dR_clr - dR_sum_nn_clr
-    dR_res_nn_allcross_clr = dR     - responses['dR_nn_clr']
+    dR_res_nn_allcross_clr = dR_clr - responses['dR_nn_clr']
     dR_res_k_clr           = dR_clr - dR_sum_k_clr
 
     nn_all_closure = xr.Dataset({
