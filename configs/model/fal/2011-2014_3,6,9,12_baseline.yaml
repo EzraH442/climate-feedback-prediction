@@ -28,10 +28,10 @@ dataset:
     - 9
     - 12
   era5:
-    path: "./data/fal/era5_processed_mar_sep_2011_2014"
+    path: "./data/fal/era5_processed_mar_june_sep_dec_2011_2014"
   kernels:
     raw_path: "./data/fal/kernels"
-    path: "./data/fal/kernels_processed_mar_sep_2011_2014"
+    path: "./data/fal/kernels_processed_mar_june_sep_dec_2011_2014"
   train_years:
     - 2011
     - 2012
@@ -43,7 +43,7 @@ dataset:
     - 2015
 
 preprocess:
-  params_dir: "preprocess_states/fal/baseline_mar_sep_2011_2014"
+  params_dir: "preprocess_states/fal/baseline_mar_june_sep_dec_2011_2014_clearsky"
   ecod:
     enabled: True
     method: "true"
@@ -54,7 +54,7 @@ model:
     - 11
 
 train:
-  name: "2011-2014_3,9_baseline"
-  checkpoint_dir: "./checkpoints/fal/2011-2014_3,9_baseline"
+  name: "2011-2014_3,6,9,12_baseline"
+  checkpoint_dir: "./checkpoints/fal/2011-2014_3,6,9,12_baseline"
   sobolev: False
   sobolev_vars: []
