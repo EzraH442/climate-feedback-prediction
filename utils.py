@@ -285,11 +285,11 @@ def kernel_delta(var: str) -> float:
 
 
 def kernel_title(var: str) -> str:
-    return "Surface Albedo" if var == "fal" else "Surface Temperature"
+    return {"fal": "Surface Albedo", "tcwv": "Water Vapor", "ts": "Surface Temperature"}[var]
 
 
 def kernel_label(var: str) -> str:
-    return r"$W/m^2 1\%$" if var == "fal" else r"$W/m^2 K^{-1}$"
+    return {"fal": r"$W/m^2 1\%$", "tcwv": r"$W/m^2 kg^{-1} m^2$", "ts": r"$W/m^2 K^{-1}$"}[var]
 
 
 def scale_minmax_value(scaler: XarrayMinMaxScaler, name: str, values):
