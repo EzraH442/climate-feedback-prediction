@@ -29,8 +29,8 @@ PLOTS = [
         for kernel in ("fal", "tcwv")
         for date in ("2013-09", "2015-09", "2015-12")
         for sky, plots in (
-            ("all", ("nn_grad", "nn_grad_np", "rrtm", "rrtm_np", "nn_grad-rrtm", "nn_grad-rrtm_np")),
-            ("clr", ("nn_grad", "nn_grad_np", "rrtm", "rrtm_np", "nn_grad-rrtm", "nn_grad-rrtm_np")),
+            ("all", ("nn", "nn_np", "nn_grad", "nn_grad_np", "rrtm", "rrtm_np", "nn-rrtm", "nn-rrtm_np", "nn_grad-rrtm", "nn_grad-rrtm_np")),
+            ("clr", ("nn", "nn_np", "nn_grad", "nn_grad_np", "rrtm", "rrtm_np", "nn-rrtm", "nn-rrtm_np", "nn_grad-rrtm", "nn_grad-rrtm_np")),
         )
         for plot in plots
     ],
@@ -100,7 +100,7 @@ def stitch(plot_path: str, output: Path, cols: int, skip_missing: bool):
     for ax, (label, img_path) in zip(axes, images):
         if img_path is not None:
             ax.imshow(mpimg.imread(img_path))
-        ax.set_title(label if img_path is not None else f"{label}\nmissing")
+        ax.set_title(label if img_path is not None else f"{label}\nmissing", fontsize=8, pad=1)
         ax.axis("off")
 
     for ax in axes[len(images):]:
