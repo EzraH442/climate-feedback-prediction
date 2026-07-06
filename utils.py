@@ -272,7 +272,7 @@ def interpolate_spatial_field(
         data_vars={"field": (("latitude", "longitude"), data)},
         coords={"longitude": src_lon, "latitude": src_lat},
     )
-    return dataset.interp(longitude=dst_lon, latitude=dst_lat, method="linear")[
+    return dataset.interp(longitude=dst_lon, latitude=dst_lat, method="linear", kwargs={"fill_value": "extrapolate"})[
         "field"
     ].to_numpy()
 
@@ -300,7 +300,7 @@ def scale_minmax_value(scaler: XarrayMinMaxScaler, name: str, values):
     ) + scaler.min_val
 
 
-def load_model_and_preprocessor(config, checkpoint_path: Path, downscaling=True):
+def load_model_and_preprocessor(config, checkpoint_path: Path, downscaling=True, override=None):
     checkpoint_data = torch.load(
         checkpoint_path, map_location="cpu", weights_only=False
     )
@@ -357,11 +357,11 @@ def compute_nn_kernel(
         {perturbation_var: ds[perturbation_var] + kernel_delta(perturbation_var)}
     )
 
-    pred = nn_pred(ds, model, preprocessor, config, dim_order, clear)
-    pred_perturbed = nn_pred(ds_p, model, preprocessor, config, dim_order, clear)
+    pred = nn_pred(preprocessor.transform(ds), model, preprocessor, config, dim_order, clear)
+    pred_perturbed = nn_pred(preprocessor.transform(ds_p), model, preprocessor, config, dim_order, clear)
 
-    kernel = ((pred_perturbed - pred) / SECONDS_PER_DAY).to_numpy().squeeze(axis=0)
-    return kernel, ds.longitude, ds.latitude
+    kernel = ((pred_perturbed - pred) / SECONDS_PER_DAY)
+    return kernel.to_numpy().squeeze(axis=0), kernel.longitude, kernel.latitude
 
 
 def compute_nn_kernel_autograd(
@@ -371,7 +371,7 @@ def compute_nn_kernel_autograd(
     config,
     var="fal",
     clear=False,
-    dim_order=["date", "latitude", "longitude"],
+    dim_order=["date", "latitude", "longitude", "variable"],
 ):
     processed_ds = preprocessor.transform(ds)
     lon = processed_ds.longitude
@@ -403,7 +403,6 @@ def compute_nn_kernel_autograd(
         / SECONDS_PER_DAY
     )
     return grad_physical_per_unit * kernel_delta(input_var), lon, lat
-
 
 def filter_by_years(ds: xr.Dataset, years, time_coord: str = "date") -> xr.Dataset:
     return ds.sel({time_coord: ds[time_coord].dt.year.isin(years)})
@@ -469,10 +468,10 @@ def nn_radiative_response(
     dim_names = ["run", "year", "month", "latitude", "longitude"]
 
     pred_original = nn_pred(
-        ds_original, model, preprocessor, config, dim_names=dim_names_original, clear=clear
+        preprocessor.transform(ds_original), model, preprocessor, config, dim_names=dim_names_original, clear=clear
     )
     pred_perturbed = nn_pred(
-        ds_stacked, model, preprocessor, config, dim_names=dim_names, clear=clear
+        preprocessor.transform(ds_stacked), model, preprocessor, config, dim_names=dim_names, clear=clear
     )
 
     results = (pred_perturbed - pred_original) / SECONDS_PER_DAY
