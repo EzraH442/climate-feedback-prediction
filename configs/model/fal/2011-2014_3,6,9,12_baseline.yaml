@@ -1,0 +1,60 @@
+base: ../../base/model/common.yaml
+
+dataset:
+  input_vars:
+    - fal
+    - hcc
+    - mcc
+    - lcc
+    - sp
+    - tciw
+    - tclw
+    - tcwv
+    - tco3
+    - tisr
+    - ecod
+    - ecod_fal
+  clear_sky_zero_vars:
+    - hcc
+    - mcc
+    - lcc
+    - tciw
+    - tclw
+    - ecod
+    - ecod_fal
+  months:
+    - 3
+    - 6
+    - 9
+    - 12
+  era5:
+    path: "./data/fal/era5_processed_mar_sep_2011_2014"
+  kernels:
+    raw_path: "./data/fal/kernels"
+    path: "./data/fal/kernels_processed_mar_sep_2011_2014"
+  train_years:
+    - 2011
+    - 2012
+    - 2013
+    - 2014
+  val_years:
+    - 2015
+  test_years:
+    - 2015
+
+preprocess:
+  params_dir: "preprocess_states/fal/baseline_mar_sep_2011_2014"
+  ecod:
+    enabled: True
+    method: "true"
+
+model:
+  input_dim: 12
+  hidden_dim_sizes:
+    - 11
+
+train:
+  name: "2011-2014_3,9_baseline"
+  checkpoint_dir: "./checkpoints/fal/2011-2014_3,9_baseline"
+  sobolev: False
+  sobolev_vars: []
