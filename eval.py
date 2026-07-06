@@ -203,8 +203,8 @@ def kernel_contour_test(
 
     vmin, vmax = scaler.get_data_min(), scaler.get_data_max()
 
-    v1_values = np.linspace(vmin[v1], float(vmax[v1]), n)
-    v2_values = np.linspace(vmin[v2], float(vmax[v2]), n)
+    v1_values = np.linspace(float(vmin[v1]), float(vmax[v1]), n)
+    v2_values = np.linspace(float(vmin[v2]), float(vmax[v2]), n)
     if extrapolate:
         v1_values = np.linspace(0, float(vmax[v1]), n)
         v2_values = np.linspace(0, float(vmax[v2]), n)
@@ -344,8 +344,8 @@ def tsr_contour_test(
     )
 
     vmin, vmax = scaler.get_data_min(), scaler.get_data_max()
-    v1_values = np.linspace(vmin[v1], float(vmax[v1]), n)
-    v2_values = np.linspace(vmin[v2], float(vmax[v2]), n)
+    v1_values = np.linspace(float(vmin[v1]), float(vmax[v1]), n)
+    v2_values = np.linspace(float(vmin[v2]), float(vmax[v2]), n)
     if extrapolate:
         v1_values = np.linspace(0, float(vmax[v1]), n)
         v2_values = np.linspace(0, float(vmax[v2]), n)
@@ -437,8 +437,8 @@ def kernel_date_test(
         ds, preprocessor, model, config, var=kernel_name, clear=True
     )
 
-    rrtm_kern_cld = true_kernel["TOA_cld"].to_numpy()[0] * kernel_delta(kernel_name)
-    rrtm_kern_clr = true_kernel["TOA_clr"].to_numpy()[0] * kernel_delta(kernel_name)
+    rrtm_kern_cld = true_kernel[kernel_name].sel(all_clr='all').to_numpy()[0] * kernel_delta(kernel_name)
+    rrtm_kern_clr = true_kernel[kernel_name].sel(all_clr='clr').to_numpy()[0] * kernel_delta(kernel_name)
     kern_lon, kern_lat = true_kernel.longitude, true_kernel.latitude
     # --- clear and all sky plots of nn kernel, global and north pole
     # plot_global_field(
@@ -573,16 +573,16 @@ def kernel_date_test(
 
     plot_lon, plot_lat = lon, lat
     plot_grad_lon, plot_grad_lat = grad_lon, grad_lat
-    if nn_kern_clr.shape != true_kernel["TOA_clr"].shape:
+    if nn_kern_clr.shape != true_kernel[kernel_name].sel(all_clr='clr').shape:
         nn_kern_cld = interpolate_spatial_field(
-            nn_kern_cld, lon, lat, kern_lon, kern_lat
+            nn_kern_cld, lon, lat, kern_lon, kern_lat,
         )
         nn_kern_clr = interpolate_spatial_field(
-            nn_kern_clr, lon, lat, kern_lon, kern_lat
+            nn_kern_clr, lon, lat, kern_lon, kern_lat,
         )
         plot_lon = kern_lon
         plot_lat = kern_lat
-    if nn_grad_clr.shape != true_kernel["TOA_clr"].shape:
+    if nn_grad_clr.shape != true_kernel[kernel_name].sel(all_clr='clr').shape:
         nn_grad_cld = interpolate_spatial_field(
             nn_grad_cld, grad_lon, grad_lat, kern_lon, kern_lat
         )
@@ -704,10 +704,10 @@ def second_order_test(
     delta_kern_nn_grad = nn_grad_cld_1 - nn_grad_cld_0
 
     rrtm_lat, rrtm_lon = true_kernel.latitude, true_kernel.longitude
-    rrtm_kern_cld_1 = true_kernel["TOA_cld"].sel(date=dates[1]).as_numpy()[
+    rrtm_kern_cld_1 = true_kernel[kernel_name].sel(all_clr='clr', date=dates[1]).as_numpy()[
         0
     ] * kernel_delta(kernel_name)
-    rrtm_kern_cld_0 = true_kernel["TOA_cld"].sel(date=dates[0]).as_numpy()[
+    rrtm_kern_cld_0 = true_kernel[kernel_name].sel(all_clr='clr', date=dates[0]).as_numpy()[
         0
     ] * kernel_delta(kernel_name)
     delta_kern_rrtm = rrtm_kern_cld_1 - rrtm_kern_cld_0
