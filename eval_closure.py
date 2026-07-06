@@ -24,8 +24,6 @@ from utils import (
     load_model_and_preprocessor,
     generate_paths_yearly,
     make_era5_filename,
-    make_qt_filename,
-    filter_by_months,
 )
 
 
@@ -35,6 +33,7 @@ ALBEDO_KERNEL_PATH = Path("data/ERA5_kernels/ERA5_kernel_fal_TOA.nc")
 WATER_VAPOR_KERNEL_PATH = Path(
     "data/ERA5_kernels/layer_specified_ta_wv_kernel/ERA5_kernel_wv_sw_nodp_TOA.nc"
 )
+QT_PATH = Path("data/era5/era5_plev_qt_monthly_downscaled.nc")
 MONTH_NAMES = [
     "Jan", "Feb", "Mar",
     "Apr", "May", "Jun",
@@ -77,10 +76,10 @@ def water_vapor_kernel_components(
     return dR_q_k, dR_q_k_clr
 
 
-def load_qt(path: str | Path, years, months, kernel_grid) -> xr.Dataset:
-    paths = generate_paths_yearly(path, years, make_qt_filename)
-    ds_qt = xr.open_mfdataset(paths, combine="nested", concat_dim="date")
-    ds_qt = filter_by_months(ds_qt, months)
+def load_qt(years, months, kernel_grid) -> xr.Dataset:
+    ds_qt = xr.load_dataset(QT_PATH)
+    ds_qt = ds_qt.sel(date=ds_qt.date.dt.year.isin(years))
+    ds_qt = ds_qt.sel(date=ds_qt.date.dt.month.isin(months))
     return ds_qt.interp(**kernel_grid)
 
 
@@ -869,7 +868,6 @@ def compute_responses(
     preprocessor,
     config,
     cloud_vars,
-    qt_path,
     cross=True,
 ):
     K_a = xr.open_dataset(ALBEDO_KERNEL_PATH)
@@ -899,7 +897,6 @@ def compute_responses(
     dR = anomaly.tsr.interp(**kernel_grid).compute()
 
     ds_qt = load_qt(
-        qt_path,
         sorted(int(year) for year in ds_monthly.year.values),
         sorted(int(month) for month in ds_monthly.month.values),
         kernel_grid,
@@ -1069,7 +1066,6 @@ def main():
             preprocessor,
             config,
             cloud_vars,
-            args.data_path,
             cross=True,
         )
         # print(responses)
