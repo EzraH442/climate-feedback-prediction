@@ -422,6 +422,23 @@ def timeseries_test(
     dR_res_k = dR - dR_sum_k
     dR_res_nn_clr = dR_clr - dR_sum_nn_clr
     dR_res_k_clr = dR_clr - dR_sum_k_clr
+    fields = {
+        "dR": dR,
+        "dR_clr": dR_clr,
+        "dR_sum_nn": dR_sum_nn,
+        "dR_sum_k": dR_sum_k,
+        "dR_sum_nn_clr": dR_sum_nn_clr,
+        "dR_sum_k_clr": dR_sum_k_clr,
+        "dR_res_nn": dR_res_nn,
+        "dR_res_k": dR_res_k,
+        "dR_res_nn_clr": dR_res_nn_clr,
+        "dR_res_k_clr": dR_res_k_clr,
+    }
+    series = {key: global_date_series(value) for key, value in fields.items()}
+    series_np = {
+        key: global_date_series(value.isel(latitude=NORTH_MASK))
+        for key, value in fields.items()
+    }
 
     component_inputs = {
         "dR_a_nn": dR_a_nn,
@@ -457,33 +474,33 @@ def timeseries_test(
 
     plot_net_timeseries(
         {
-            "nn": global_date_series(dR_sum_nn),
-            "kernel": global_date_series(dR_sum_k),
-            "era5": global_date_series(dR),
+            "nn": series["dR_sum_nn"],
+            "kernel": series["dR_sum_k"],
+            "era5": series["dR"],
         },
         timeseries_all / "timeseries_net.png",
     )
     plot_net_timeseries(
         {
-            "nn": global_date_series(dR_sum_nn_clr),
-            "kernel": global_date_series(dR_sum_k_clr),
-            "era5": global_date_series(dR_clr),
+            "nn": series["dR_sum_nn_clr"],
+            "kernel": series["dR_sum_k_clr"],
+            "era5": series["dR_clr"],
         },
         timeseries_clear / "timeseries_net.png",
     )
     plot_net_timeseries(
         {
-            "nn": global_date_series(dR_sum_nn.isel(latitude=NORTH_MASK)),
-            "kernel": global_date_series(dR_sum_k.isel(latitude=NORTH_MASK)),
-            "era5": global_date_series(dR.isel(latitude=NORTH_MASK)),
+            "nn": series_np["dR_sum_nn"],
+            "kernel": series_np["dR_sum_k"],
+            "era5": series_np["dR"],
         },
         timeseries_all / "np" / "timeseries_net.png",
     )
     plot_net_timeseries(
         {
-            "nn": global_date_series(dR_sum_nn_clr.isel(latitude=NORTH_MASK)),
-            "kernel": global_date_series(dR_sum_k_clr.isel(latitude=NORTH_MASK)),
-            "era5": global_date_series(dR_clr.isel(latitude=NORTH_MASK)),
+            "nn": series_np["dR_sum_nn_clr"],
+            "kernel": series_np["dR_sum_k_clr"],
+            "era5": series_np["dR_clr"],
         },
         timeseries_clear / "np" / "timeseries_net.png",
     )
@@ -501,9 +518,9 @@ def timeseries_test(
         ax.axhline(0, alpha=0.1)
         colors = ["tab:green", "tab:blue", "tab:orange", "purple", "tab:red"]
         net_series = {
-            "era5": global_date_series(dR),
-            "nn": global_date_series(dR_sum_nn),
-            "kernel": global_date_series(dR_sum_k),
+            "era5": series["dR"],
+            "nn": series["dR_sum_nn"],
+            "kernel": series["dR_sum_k"],
             "nn_cross": global_date_series(dR_sum_nn_cross),
             "cross": global_date_series(dR_aq_nn + dR_ac_nn + dR_qc_nn),
         }
@@ -527,16 +544,16 @@ def timeseries_test(
         plt.close(fig)
 
     residual_series = {
-        "dR_res_nn": global_date_series(dR_res_nn),
-        "dR_res_k": global_date_series(dR_res_k),
-        "dR_res_nn_clr": global_date_series(dR_res_nn_clr),
-        "dR_res_k_clr": global_date_series(dR_res_k_clr),
+        "dR_res_nn": series["dR_res_nn"],
+        "dR_res_k": series["dR_res_k"],
+        "dR_res_nn_clr": series["dR_res_nn_clr"],
+        "dR_res_k_clr": series["dR_res_k_clr"],
     }
     residual_series_np = {
-        "dR_res_nn": global_date_series(dR_res_nn.isel(latitude=NORTH_MASK)),
-        "dR_res_k": global_date_series(dR_res_k.isel(latitude=NORTH_MASK)),
-        "dR_res_nn_clr": global_date_series(dR_res_nn_clr.isel(latitude=NORTH_MASK)),
-        "dR_res_k_clr": global_date_series(dR_res_k_clr.isel(latitude=NORTH_MASK)),
+        "dR_res_nn": series_np["dR_res_nn"],
+        "dR_res_k": series_np["dR_res_k"],
+        "dR_res_nn_clr": series_np["dR_res_nn_clr"],
+        "dR_res_k_clr": series_np["dR_res_k_clr"],
     }
     plot_residual_mbe_timeseries(
         residual_series, timeseries_all, clear_sky=False
@@ -662,6 +679,7 @@ def date_closure_test(
     month: int,
     dR_co3_nn=None,
     dR_co3_nn_clr=None,
+    skip_input_anomaly_plots=False,
 ) -> None:
     if NORTH_MASK is None:
         raise RuntimeError("NORTH_MASK must be initialized before date_closure_test.")
@@ -679,14 +697,15 @@ def date_closure_test(
     ppm = preprocessor.transform(ds_monthly_means.sel(month=month))
     anomaly_ecod = (pp - ppm).ecod.compute()
 
-    plot_input_anomalies(
-        anomaly,
-        anomaly_ecod,
-        dR_clr,
-        date_root,
-        year,
-        month,
-    )
+    if not skip_input_anomaly_plots:
+        plot_input_anomalies(
+            anomaly,
+            anomaly_ecod,
+            dR_clr,
+            date_root,
+            year,
+            month,
+        )
     nn_responses_to_print = [
         ("dR_nn", responses["dR_nn_all"]),
         ("dR_nn_clr", responses["dR_nn_clr"]),
@@ -996,6 +1015,7 @@ def main():
     parser.add_argument("--north_boundary", type=float, default=NORTH_BOUNDARY)
     parser.add_argument("--residual_samples", type=int, default=2000)
     parser.add_argument("--skip_cross", action="store_true")
+    parser.add_argument("--skip_input_anomaly_plots", action="store_true")
     args = parser.parse_args()
 
     #  --- setup global vars ---
@@ -1066,7 +1086,7 @@ def main():
             preprocessor,
             config,
             cloud_vars,
-            cross=True,
+            cross=not args.skip_cross,
         )
         # print(responses)
         # print(list(responses.data_vars))
@@ -1083,6 +1103,7 @@ def main():
         output_root,
         year,
         month,
+        skip_input_anomaly_plots=args.skip_input_anomaly_plots,
     )
     timeseries_test(
         responses,
