@@ -18,23 +18,27 @@ MODELS = [
 ]
 
 PLOTS = [
-    "global_tsr_era5.png",
-    "global_tsr_nn.png",
-    "global_tsr_mbe.png",
-    "global_tsr_rmse.png",
-    "kern_all_rrtm_2015-09.png",
-    "kern_clr_rrtm_2015-09.png",
-    "kern_all_nn_grad_2015-09.png",
-    "kern_clr_nn_grad_2015-09.png",
-    "kern_all_nn_grad-rrtm_2015-09.png",
-    "kern_clr_nn_grad-rrtm_2015-09.png",
-    "kern_all_rrtm_2015-12.png",
-    "kern_clr_rrtm_2015-12.png",
-    "kern_all_nn_grad-rrtm_2015-12.png",
-    "kern_clr_nn_grad-rrtm_2015-12.png",
-    "delta_k_rrtm_np.png",
-    "delta_k_nn_grad-rrtm_north_pole.png",
-    "tsr_contour_fal_ecod.png",
+    "all/tsr_test/era5.png",
+    "all/tsr_test/nn.png",
+    "all/tsr_test/mbe.png",
+    "all/tsr_test/rmse.png",
+    "all/tsr_contour_test/fal/2015-09/fal_ecod.png",
+    "all/kernel_contour_test/ecod/2015-09/ecod_fal.png",
+    *[
+        f"{sky}/kernel_date_test/{kernel}/{date}/{plot}.png"
+        for kernel in ("fal", "tcwv")
+        for date in ("2013-09", "2015-09", "2015-12")
+        for sky, plots in (
+            ("all", ("nn_grad", "nn_grad_np", "rrtm", "rrtm_np", "nn_grad-rrtm", "nn_grad-rrtm_np")),
+            ("clr", ("nn_grad", "nn_grad_np", "rrtm", "rrtm_np", "nn_grad-rrtm", "nn_grad-rrtm_np")),
+        )
+        for plot in plots
+    ],
+    *[
+        f"clr/second_order_test/{kernel}/2013-09_minus_2012-09/{plot}.png"
+        for kernel in ("fal", "tcwv")
+        for plot in ("nn_grad_np", "rrtm_np", "nn_grad-rrtm_np")
+    ],
     "closure_test/2012_09/delta_fal.png",
     "closure_test/2012_09/delta_tcwv.png",
     "closure_test/2012_09/delta_ecod.png",
@@ -77,20 +81,26 @@ def latest_figures_dir(model_dir: Path) -> Path:
 def stitch(plot_path: str, output: Path, cols: int, skip_missing: bool):
     images = []
     for label, model_dir in MODELS:
-        path = latest_figures_dir(model_dir) / plot_path
-        if not path.exists():
-            if skip_missing:
-                continue
-            raise FileNotFoundError(path)
+        try:
+            path = latest_figures_dir(model_dir) / plot_path
+        except FileNotFoundError:
+            path = None
+        if path is not None and not path.exists():
+            path = None
+        if skip_missing and path is None:
+            continue
         images.append((label, path))
+    if not images:
+        return
 
     rows = math.ceil(len(images) / cols)
     fig, axes = plt.subplots(rows, cols, figsize=(4 * cols, 4 * rows))
-    axes = [axes] if len(images) == 1 else axes.ravel()
+    axes = axes.ravel() if hasattr(axes, "ravel") else [axes]
 
     for ax, (label, img_path) in zip(axes, images):
-        ax.imshow(mpimg.imread(img_path))
-        ax.set_title(label)
+        if img_path is not None:
+            ax.imshow(mpimg.imread(img_path))
+        ax.set_title(label if img_path is not None else f"{label}\nmissing")
         ax.axis("off")
 
     for ax in axes[len(images):]:
