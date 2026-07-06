@@ -434,8 +434,8 @@ def timeseries_test(
         "dR_res_nn_clr": dR_res_nn_clr,
         "dR_res_k_clr": dR_res_k_clr,
     }
-    series = {key: global_date_series(value) for key, value in fields.items()}
-    series_np = {
+    field_series = {key: global_date_series(value) for key, value in fields.items()}
+    field_series_np = {
         key: global_date_series(value.isel(latitude=NORTH_MASK))
         for key, value in fields.items()
     }
@@ -474,33 +474,33 @@ def timeseries_test(
 
     plot_net_timeseries(
         {
-            "nn": series["dR_sum_nn"],
-            "kernel": series["dR_sum_k"],
-            "era5": series["dR"],
+            "nn": field_series["dR_sum_nn"],
+            "kernel": field_series["dR_sum_k"],
+            "era5": field_series["dR"],
         },
         timeseries_all / "timeseries_net.png",
     )
     plot_net_timeseries(
         {
-            "nn": series["dR_sum_nn_clr"],
-            "kernel": series["dR_sum_k_clr"],
-            "era5": series["dR_clr"],
+            "nn": field_series["dR_sum_nn_clr"],
+            "kernel": field_series["dR_sum_k_clr"],
+            "era5": field_series["dR_clr"],
         },
         timeseries_clear / "timeseries_net.png",
     )
     plot_net_timeseries(
         {
-            "nn": series_np["dR_sum_nn"],
-            "kernel": series_np["dR_sum_k"],
-            "era5": series_np["dR"],
+            "nn": field_series_np["dR_sum_nn"],
+            "kernel": field_series_np["dR_sum_k"],
+            "era5": field_series_np["dR"],
         },
         timeseries_all / "np" / "timeseries_net.png",
     )
     plot_net_timeseries(
         {
-            "nn": series_np["dR_sum_nn_clr"],
-            "kernel": series_np["dR_sum_k_clr"],
-            "era5": series_np["dR_clr"],
+            "nn": field_series_np["dR_sum_nn_clr"],
+            "kernel": field_series_np["dR_sum_k_clr"],
+            "era5": field_series_np["dR_clr"],
         },
         timeseries_clear / "np" / "timeseries_net.png",
     )
@@ -518,16 +518,16 @@ def timeseries_test(
         ax.axhline(0, alpha=0.1)
         colors = ["tab:green", "tab:blue", "tab:orange", "purple", "tab:red"]
         net_series = {
-            "era5": series["dR"],
-            "nn": series["dR_sum_nn"],
-            "kernel": series["dR_sum_k"],
+            "era5": field_series["dR"],
+            "nn": field_series["dR_sum_nn"],
+            "kernel": field_series["dR_sum_k"],
             "nn_cross": global_date_series(dR_sum_nn_cross),
             "cross": global_date_series(dR_aq_nn + dR_ac_nn + dR_qc_nn),
         }
-        for i, (name, series) in enumerate(net_series.items()):
+        for i, (name, values) in enumerate(net_series.items()):
             ax.scatter(
-                x=series["date"],
-                y=series,
+                x=values["date"],
+                y=values,
                 s=3 if name == "era5" else 1,
                 label=name,
                 color=colors[i],
@@ -544,16 +544,16 @@ def timeseries_test(
         plt.close(fig)
 
     residual_series = {
-        "dR_res_nn": series["dR_res_nn"],
-        "dR_res_k": series["dR_res_k"],
-        "dR_res_nn_clr": series["dR_res_nn_clr"],
-        "dR_res_k_clr": series["dR_res_k_clr"],
+        "dR_res_nn": field_series["dR_res_nn"],
+        "dR_res_k": field_series["dR_res_k"],
+        "dR_res_nn_clr": field_series["dR_res_nn_clr"],
+        "dR_res_k_clr": field_series["dR_res_k_clr"],
     }
     residual_series_np = {
-        "dR_res_nn": series_np["dR_res_nn"],
-        "dR_res_k": series_np["dR_res_k"],
-        "dR_res_nn_clr": series_np["dR_res_nn_clr"],
-        "dR_res_k_clr": series_np["dR_res_k_clr"],
+        "dR_res_nn": field_series_np["dR_res_nn"],
+        "dR_res_k": field_series_np["dR_res_k"],
+        "dR_res_nn_clr": field_series_np["dR_res_nn_clr"],
+        "dR_res_k_clr": field_series_np["dR_res_k_clr"],
     }
     plot_residual_mbe_timeseries(
         residual_series, timeseries_all, clear_sky=False
