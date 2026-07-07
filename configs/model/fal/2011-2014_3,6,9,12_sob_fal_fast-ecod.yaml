@@ -48,7 +48,7 @@ preprocess:
   params_dir: "preprocess_states/fal/baseline_mar_june_sep_dec_2011_2014_fast_ecod"
   ecod:
     enabled: True
-    method: "true"
+    method: "fast"
 
 model:
   input_dim: 12
