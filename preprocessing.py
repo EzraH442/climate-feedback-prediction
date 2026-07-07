@@ -151,6 +151,8 @@ class XarrayMinMaxScaler(Preprocessor):
         return self.data_max_
 
     def update_shared_range(self, var1, var2):
+        print(f"Linking {var1} and {var2}")
+
         if self.data_min_ is None or self.data_max_ is None:
             raise RuntimeError("Scaler must be fitted before updating shared range.")
 
@@ -290,7 +292,7 @@ class DianaPreprocessor(SequentialPreprocessor):
     def fit(self, ds):
         super().fit(ds)
 
-        if self.variable_config.clear_sky_target:
+        if self.config.dataset.clear_sky.enabled:
             self.scalar.update_shared_range(
                 var1=self.variable_config.target_var,
                 var2=self.variable_config.clear_sky_target,

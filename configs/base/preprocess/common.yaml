@@ -9,7 +9,7 @@ dataset:
     raw_path: "./data/kernels"
   clear_sky:
     enabled: False
-    var: "tsrc"
+    var: 'tsrc'
   train_years:
     - 1990
     - 1992
