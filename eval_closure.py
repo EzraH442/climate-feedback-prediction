@@ -258,7 +258,7 @@ def plot_residual_mbe_timeseries(series, output_dir: Path, clear_sky: bool) -> N
     for source in ["nn", "k"]:
         name = f"dR_res_{source}" + ("_clr" if clear_sky else "")
         ax.scatter(x=series[name]["date"], y=series[name], s=1, label=source)
-    ax.set_yticks(np.arange(0, 11, 2))
+    ax.set_yticks(np.arange(-2, 3, 1))
     ax.set_ylabel(ylabel)
     ax.legend()
     ax.grid(alpha=0.5)
