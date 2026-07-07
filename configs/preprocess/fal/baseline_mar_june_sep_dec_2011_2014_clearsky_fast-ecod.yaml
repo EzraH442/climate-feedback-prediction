@@ -26,7 +26,7 @@ dataset:
     - ecod
     - ecod_fal
   clear_sky:
-    enabled: False
+    enabled: True
     var: "tsrc"
   months:
     - 3
@@ -34,10 +34,10 @@ dataset:
     - 9
     - 12
   era5:
-    path: "./data/fal/era5_processed_mar_june_sep_dec_2011_2014"
+    path: "./data/fal/era5_processed_mar_june_sep_dec_2011_2014_clearsky_fast_ecod"
   kernels:
     raw_path: "./data/fal/kernels"
-    path: "./data/fal/kernels_processed_mar_june_sep_dec_2011_2014"
+    path: "./data/fal/kernels_processed_mar_june_sep_dec_2011_2014_clearsky_fast_ecod"
   train_years:
     - 2011
     - 2012
@@ -47,7 +47,7 @@ dataset:
     - 2015
 
 preprocess:
-  params_dir: "preprocess_states/fal/baseline_mar_june_sep_dec_2011_2014"
+  params_dir: "preprocess_states/fal/baseline_mar_june_sep_dec_2011_2014_clearsky_fast_ecod"
   ecod:
     enabled: True
-    method: "true"
+    method: "fast"
