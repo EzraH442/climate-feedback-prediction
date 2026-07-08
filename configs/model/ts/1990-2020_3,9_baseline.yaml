@@ -29,7 +29,7 @@ dataset:
     path: "./data/ts/kernels_processed_mar_sep"
 
 preprocess:
-  params_dir: "preprocess_states/ts/baseline_mar_sep"
+  params_dir: "preprocess_states/ts/1990-2020_3,9"
   ecod:
     enabled: True
     method: "true"

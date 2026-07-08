@@ -13,20 +13,13 @@ dataset:
     - ecod
   target_var: "ttr"
   era5:
-    path: "./data/ts/era5_processed"
+    path: './data/ts/era5_processed'
   kernels:
     raw_path: "./data/ts/kernels"
-    path: "./data/ts/kernels_processed"
-  train_years:
-    - 2011
-    - 2012
-    - 2013
-    - 2014
-  val_years:
-    - 2015
+    path: './data/ts/kernels_processed'
 
 preprocess:
-  params_dir: "preprocess_states/ts/baseline_2011_2014"
+  params_dir: 'preprocess_states/ts/1990-2020_1-12'
   ecod:
     enabled: True
     method: "true"

@@ -2,7 +2,7 @@ base: ../../base/preprocess/common.yaml
 
 dataset:
   input_vars:
-    - skt
+    - fal
     - hcc
     - mcc
     - lcc
@@ -10,19 +10,21 @@ dataset:
     - tciw
     - tclw
     - tcwv
+    - tco3
+    - tisr
     - ecod
-  target_var: "ttr"
+    - ecod_fal
   months:
     - 3
     - 9
   era5:
-    path: "./data/ts/era5_processed_mar_sep"
+    path: "./data/fal/era5_processed_mar_sep"
   kernels:
-    raw_path: "./data/ts/kernels"
-    path: "./data/ts/kernels_processed_mar_sep"
+    raw_path: "./data/fal/kernels"
+    path: "./data/fal/kernels_processed_mar_sep"
 
 preprocess:
-  params_dir: "preprocess_states/ts/baseline_mar_sep"
+  params_dir: "preprocess_states/fal/1990-2020_3,9"
   ecod:
     enabled: True
     method: "true"

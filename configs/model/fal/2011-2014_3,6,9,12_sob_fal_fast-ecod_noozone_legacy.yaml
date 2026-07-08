@@ -44,8 +44,9 @@ dataset:
     - 2015
 
 preprocess:
-  params_dir: "preprocess_states/fal/baseline_mar_june_sep_dec_2011_2014_fast_ecod"
+  params_dir: "preprocess_states/fal/2011-2014_3,6,9,12_fast_ecod"
   ecod:
+    enabled: True
     method: 'fast'
 
 model:
@@ -54,7 +55,7 @@ model:
     - 11
 
 train:
-  name: "2011-2014_sob_fal_mar_june_sep_dec"
+  name: "2011-2014_3,6,9,12_sob_fal_fast_ecod_noozone_legacy"
   checkpoint_dir: "./checkpoints/fal/sob_cld_mar_june_sep_dec_2011_2014"
   sobolev: True
   sobolev_vars:

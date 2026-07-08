@@ -12,14 +12,16 @@ dataset:
     - tcwv
     - tco3
     - tisr
+    - ecod
+    - ecod_fal
   era5:
-    path: "./data/fal/era5_processed_no_ecod"
+    path: './data/fal/era5_processed'
   kernels:
     raw_path: "./data/fal/kernels"
-    path: "./data/fal/kernels_processed_no_ecod"
+    path: './data/fal/kernels_processed'
 
 preprocess:
-  params_dir: "preprocess_states/fal/baseline_no_ecod"
+  params_dir: 'preprocess_states/fal/1990-2020_1-12'
   ecod:
-    enabled: False
+    enabled: True
     method: "true"

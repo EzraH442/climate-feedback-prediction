@@ -47,7 +47,7 @@ dataset:
     - 2015
 
 preprocess:
-  params_dir: "preprocess_states/fal/baseline_mar_june_sep_dec_2011_2014"
+  params_dir: "preprocess_states/fal/2011-2014_3,6,9,12"
   ecod:
     enabled: True
     method: "true"

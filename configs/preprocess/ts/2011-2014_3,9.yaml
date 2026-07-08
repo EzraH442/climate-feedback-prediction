@@ -2,7 +2,7 @@ base: ../../base/preprocess/common.yaml
 
 dataset:
   input_vars:
-    - fal
+    - skt
     - hcc
     - mcc
     - lcc
@@ -10,18 +10,16 @@ dataset:
     - tciw
     - tclw
     - tcwv
-    - tco3
-    - tisr
     - ecod
-    - ecod_fal
+  target_var: "ttr"
   months:
     - 3
     - 9
   era5:
-    path: "./data/fal/era5_processed_mar_sep_2011_2014"
+    path: "./data/ts/era5_processed_mar_sep_2011_2014"
   kernels:
-    raw_path: "./data/fal/kernels"
-    path: "./data/fal/kernels_processed_mar_sep_2011_2014"
+    raw_path: "./data/ts/kernels"
+    path: "./data/ts/kernels_processed_mar_sep_2011_2014"
   train_years:
     - 2011
     - 2012
@@ -31,7 +29,7 @@ dataset:
     - 2015
 
 preprocess:
-  params_dir: "preprocess_states/fal/baseline_mar_sep_2011_2014"
+  params_dir: "preprocess_states/ts/2011-2014_3,9"
   ecod:
     enabled: True
     method: "true"
