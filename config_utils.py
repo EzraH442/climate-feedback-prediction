@@ -116,13 +116,17 @@ class VariableConfig:
     def kern_input_order(self):
         return list(dict.fromkeys(self.kernel_vars))
 
-    def inputs(self, ds: xr.Dataset, clear=False) -> xr.Dataset:
-        out = ds[self.input_order()]
-        if clear:
-            out = out.assign(
-                {var: xr.zeros_like(out[var]) for var in self.clear_sky_zero_vars}
-            )
-        return out
+    def clear_sky_input(self, ds: xr.Dataset) -> xr.Dataset:
+        return ds.assign(
+            {
+                var: xr.zeros_like(ds[var])
+                for var in self.clear_sky_zero_vars
+                if var in ds
+            }
+        )
+
+    def inputs(self, ds: xr.Dataset) -> xr.Dataset:
+        return ds[self.input_order()]
     
     def kern_inputs(self, ds: xr.Dataset, clear=False) -> xr.Dataset:
         out = ds[self.kern_input_order()]
@@ -140,8 +144,8 @@ class VariableConfig:
     def outputs_np(self, ds: xr.Dataset, clear=False) -> np.ndarray:
         return self.outputs(ds, clear).to_numpy()
 
-    def inputs_np(self, ds: xr.Dataset, dim_order=None, clear=False) -> np.ndarray:
-        inputs = self.inputs(ds, clear)
+    def inputs_np(self, ds: xr.Dataset, dim_order=None) -> np.ndarray:
+        inputs = self.inputs(ds)
         da = inputs.to_dataarray()
         if dim_order is not None:
             da = da.transpose(*dim_order)

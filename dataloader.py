@@ -5,6 +5,8 @@ import numpy as np
 import torch
 
 from config_utils import load_config, variable_config_from_omegaconf
+from preprocess import load_ecod
+from preprocessing import DianaPreprocessor
 from utils import (
     make_combined_kernel_filename,
     make_era5_filename,
@@ -128,12 +130,36 @@ class ClimateTorchDataset(torch.utils.data.Dataset):
             lambda: self.variable_config.outputs_np(self.dataset_era5),
         )
         if self.clear_sky_enabled:
+
+            def build_x_clear():
+                preprocessor = DianaPreprocessor(conf)
+                preprocessor.load(conf.preprocess.params_dir)
+                raw = load_yearly_and_filter_by_months(
+                    path=conf.dataset.era5.raw_path,
+                    years=years,
+                    months=months,
+                    filename_fn=make_era5_filename,
+                )
+                if conf.preprocess.ecod.enabled:
+                    raw = raw.assign(
+                        ecod=load_ecod(
+                            conf.dataset.era5.raw_path,
+                            years,
+                            months,
+                            conf.preprocess.ecod.method == "fast",
+                        )
+                    )
+                clear = self.variable_config.clear_sky_input(raw)
+                processed = preprocessor.transform(clear)
+                values = self.variable_config.inputs_np(processed, dim_order)
+                raw.close()
+                processed.close()
+                return values
+
             self.x_clear = load_or_create_mmap(
-                mmap_dir / make_mmap_stem(model_name, data_type, "x_clear"),
+                mmap_dir / make_mmap_stem(model_name, data_type, "x_clear_raw_zero"),
                 (*grid_shape, len(input_order)),
-                lambda: self.variable_config.inputs_np(
-                    self.dataset_era5, dim_order, clear=True
-                ),
+                build_x_clear,
             )
             self.y_clear = load_or_create_mmap(
                 mmap_dir / make_mmap_stem(model_name, data_type, "y_clear"),

@@ -335,12 +335,11 @@ def nn_pred(
     preprocessor: DianaPreprocessor,
     config,
     dim_names=["month", "latitude", "longitude"],
-    clear=False,
 ) -> xr.DataArray:
     target_var = config.dataset.target_var
     variable_config = variable_config_from_omegaconf(config)
 
-    inputs_np = variable_config.inputs_np(ds, dim_names + ["variable"], clear)
+    inputs_np = variable_config.inputs_np(ds, dim_names + ["variable"])
     data_torch = torch.from_numpy(inputs_np).float()
     model_outputs = model(data_torch).detach()
 
@@ -366,12 +365,21 @@ def compute_nn_kernel(
     dim_order=["date", "latitude", "longitude"],
     perturbation_var="fal",
 ):
-    ds_p = ds.assign(
-        {perturbation_var: ds[perturbation_var] + kernel_delta(perturbation_var)}
+    vconf = variable_config_from_omegaconf(config)
+    ds_base = vconf.clear_sky_input(ds) if clear else ds
+    ds_p = ds_base.assign(
+        {
+            perturbation_var: ds_base[perturbation_var]
+            + kernel_delta(perturbation_var)
+        }
     )
 
-    pred = nn_pred(preprocessor.transform(ds), model, preprocessor, config, dim_order, clear)
-    pred_perturbed = nn_pred(preprocessor.transform(ds_p), model, preprocessor, config, dim_order, clear)
+    pred = nn_pred(
+        preprocessor.transform(ds_base), model, preprocessor, config, dim_order
+    )
+    pred_perturbed = nn_pred(
+        preprocessor.transform(ds_p), model, preprocessor, config, dim_order
+    )
 
     kernel = ((pred_perturbed - pred) / SECONDS_PER_DAY)
     return kernel.to_numpy().squeeze(axis=0), kernel.longitude, kernel.latitude
@@ -386,17 +394,18 @@ def compute_nn_kernel_autograd(
     clear=False,
     dim_order=["date", "latitude", "longitude", "variable"],
 ):
-    processed_ds = preprocessor.transform(ds)
+    vconf = variable_config_from_omegaconf(config)
+    ds_base = vconf.clear_sky_input(ds) if clear else ds
+    processed_ds = preprocessor.transform(ds_base)
     lon = processed_ds.longitude
     lat = processed_ds.latitude
 
-    vconf = variable_config_from_omegaconf(config)
     target = vconf.target_var
     input_var = var
     feature_names = vconf.input_order()
     input_idx = feature_names.index(input_var)
 
-    inputs_np = vconf.inputs_np(processed_ds, dim_order, clear)
+    inputs_np = vconf.inputs_np(processed_ds, dim_order)
     inputs = torch.from_numpy(inputs_np).float().requires_grad_(True)
 
     outputs = model(inputs)
@@ -465,26 +474,36 @@ def nn_radiative_response(
     variables,
     clear=False
 ) -> list[xr.DataArray]:
+    vconf = variable_config_from_omegaconf(config)
+    clear_input = vconf.clear_sky_input if clear else (lambda data: data)
+    ds_original = clear_input(ds)
     datasets_to_test = []
     for var_list in variables:
         if not isinstance(var_list, list):
             var_list = [var_list]
 
         modified = ds.assign({v: ds[v] + anomaly[v] for v in var_list})
-        datasets_to_test.append(modified)
-    datasets_to_test.append(ds + anomaly)
+        datasets_to_test.append(clear_input(modified))
+    datasets_to_test.append(clear_input(ds + anomaly))
 
-    ds_original = ds
     ds_stacked = xr.concat(datasets_to_test, dim="run")
 
     dim_names_original = ["month", "latitude", "longitude"]
     dim_names = ["run", "year", "month", "latitude", "longitude"]
 
     pred_original = nn_pred(
-        preprocessor.transform(ds_original), model, preprocessor, config, dim_names=dim_names_original, clear=clear
+        preprocessor.transform(ds_original),
+        model,
+        preprocessor,
+        config,
+        dim_names=dim_names_original,
     )
     pred_perturbed = nn_pred(
-        preprocessor.transform(ds_stacked), model, preprocessor, config, dim_names=dim_names, clear=clear
+        preprocessor.transform(ds_stacked),
+        model,
+        preprocessor,
+        config,
+        dim_names=dim_names,
     )
 
     results = (pred_perturbed - pred_original) / SECONDS_PER_DAY
