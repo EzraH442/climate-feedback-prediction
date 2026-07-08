@@ -26,7 +26,7 @@ PLOTS = [
     "all/tsr_test/mbe.png",
     "all/tsr_test/rmse.png",
     "all/tsr_contour_test/fal/2015-09/fal_ecod.png",
-    "all/kernel_contour_test/ecod/2015-09/ecod_fal.png",
+    "all/kernel_contour_test/fal/2015-09/fal_ecod.png",
     *[
         f"{sky}/kernel_date_test/{kernel}/{date}/{plot}.png"
         for kernel in ("fal", "tcwv")

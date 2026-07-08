@@ -162,8 +162,8 @@ def kernel_ecod_fal_contour_test(
     n=100,
 ):
     return kernel_contour_test(
-        "ecod",
         "fal",
+        "ecod",
         processed_ds,
         preprocessor,
         model,
