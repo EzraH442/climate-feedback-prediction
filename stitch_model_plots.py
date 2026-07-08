@@ -42,44 +42,34 @@ PLOTS = [
         for kernel in ("fal", "tcwv")
         for plot in ("nn_grad_np", "rrtm_np", "nn_grad-rrtm_np")
     ],
-    "closure_test/2012_09/delta_fal.png",
-    "closure_test/2012_09/delta_fal_np.png",
-    "closure_test/2012_09/delta_tcwv.png",
-    "closure_test/2012_09/delta_tcwv_np.png",
-    "closure_test/2012_09/delta_ecod.png",
-    "closure_test/2012_09/delta_ecod_np.png",
-    "closure_test/2012_09/delta_tsr.png",
-    "closure_test/2012_09/delta_tsr_np.png",
-    "closure_test/2012_09/all/dR_a.png",
-    "closure_test/2012_09/all/np/dR_a.png",
-    "closure_test/2012_09/all/dR_c.png",
-    "closure_test/2012_09/all/np/dR_c.png",
-    "closure_test/2012_09/all/dR_q.png",
-    "closure_test/2012_09/all/np/dR_q.png",
-    "closure_test/2012_09/all/dR_sum.png",
-    "closure_test/2012_09/all/np/dR_sum.png",
-    "closure_test/2012_09/all/dR_res.png",
-    "closure_test/2012_09/all/np/dR_res.png",
-    "closure_test/2012_09/all/k_dR_sum.png",
-    "closure_test/2012_09/all/np/k_dR_sum.png",
-    "closure_test/2012_09/all/k_dR_res.png",
-    "closure_test/2012_09/all/np/k_dR_res.png",
-    "closure_test/2012_09/all/cross_dR_sum.png",
-    "closure_test/2012_09/all/np/cross_dR_sum.png",
-    "closure_test/2012_09/all/cross_dR_res.png",
-    "closure_test/2012_09/all/np/cross_dR_res.png",
-    "closure_test/2012_09/clr/dR_a,clr.png",
-    "closure_test/2012_09/clr/np/dR_a,clr.png",
-    "closure_test/2012_09/clr/dR_q,clr.png",
-    "closure_test/2012_09/clr/np/dR_q,clr.png",
-    "closure_test/2012_09/clr/dR_sum,clr.png",
-    "closure_test/2012_09/clr/np/dR_sum,clr.png",
-    "closure_test/2012_09/clr/dR_res,clr.png",
-    "closure_test/2012_09/clr/np/dR_res,clr.png",
-    "closure_test/2012_09/clr/k_dR_sum,clr.png",
-    "closure_test/2012_09/clr/np/k_dR_sum,clr.png",
-    "closure_test/2012_09/clr/k_dR_res,clr.png",
-    "closure_test/2012_09/clr/np/k_dR_res,clr.png",
+    *[
+        f"closure_test/2012_09/delta_{var}{suffix}.png"
+        for var in ("fal", "hcc", "mcc", "lcc", "tcwv", "tco3", "tsr", "ecod", "tsrc")
+        for suffix in ("", "_np")
+    ],
+    *[
+        f"closure_test/2012_09/all/{prefix}{name}.png"
+        for prefix in ("", "np/")
+        for name in (
+            "dR_a", "dR_c", "dR_q",
+            "k_dR_a", "k_dR_c", "k_dR_q",
+            "dR_sum", "dR_sum_allcross", "dR_res", "dR_res_allcross",
+            "k_dR_sum", "k_dR_res",
+            "cross_dR_a,q", "cross_dR_a,c", "cross_dR_q,c",
+            "cross_dR_sum", "cross_dR_res",
+        )
+    ],
+    *[
+        f"closure_test/2012_09/clr/{prefix}{name}.png"
+        for prefix in ("", "np/")
+        for name in (
+            "dR_a,clr", "dR_q,clr",
+            "k_dR_a,clr", "k_dR_q,clr",
+            "dR_sum,clr", "dR_sum_allcross,clr",
+            "dR_res,clr", "dR_res_allcross,clr",
+            "k_dR_sum,clr", "k_dR_res,clr",
+        )
+    ],
     "closure_test/all/timeseries_net.png",
     "closure_test/all/np/timeseries_net.png",
     "closure_test/all/timeseries_rmse.png",
@@ -110,7 +100,16 @@ def latest_figures_dir(model_dir: Path) -> Path:
     return max(epochs, key=lambda p: int(p.name))
 
 
-def stitch(plot_path: str, output: Path, cols: int, skip_missing: bool):
+def stitch(
+    plot_path: str,
+    output: Path,
+    cols: int,
+    skip_missing: bool,
+    skip_existing: bool,
+):
+    if skip_existing and output.exists():
+        return
+
     images = []
     for label, model_dir in MODELS:
         try:
@@ -149,17 +148,24 @@ def main():
     parser.add_argument("-o", "--output", default="stitched")
     parser.add_argument("--cols", type=int, default=4)
     parser.add_argument("--skip-missing", action="store_true")
+    parser.add_argument("--skip-existing", action="store_true")
     args = parser.parse_args()
 
     output = Path(args.output)
     if args.plot_path:
-        stitch(args.plot_path, output, args.cols, args.skip_missing)
+        stitch(args.plot_path, output, args.cols, args.skip_missing, args.skip_existing)
         return
 
     output.mkdir(parents=True, exist_ok=True)
     for plot_path in PLOTS:
         output_name = plot_path.replace("/", "__")
-        stitch(plot_path, output / output_name, args.cols, args.skip_missing)
+        stitch(
+            plot_path,
+            output / output_name,
+            args.cols,
+            args.skip_missing,
+            args.skip_existing,
+        )
 
 
 if __name__ == "__main__":
