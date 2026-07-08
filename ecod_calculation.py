@@ -2,8 +2,8 @@ import numpy as np
 import xarray as xr
 
 # Slingo (1989) Table 1 coefficients, liquid water, band 6 (0.44-0.48 um)
-SLINGO_a = 2.698e-2  # m^2 g^-1
-SLINGO_b = 1.315  # um m^2 g^-1
+SLINGO_a = 2.381-2  # m^2 g^-1
+SLINGO_b = 1.317  # um m^2 g^-1
 LIQUID_RE = 10.0  # assumed liquid effective radius (um), per Zelinka et al. (2012)
 
 # Fu (1996) Table 3a coefficients, ice water, band 9 (0.57-0.64 um)
