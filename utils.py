@@ -477,14 +477,17 @@ def nn_radiative_response(
     vconf = variable_config_from_omegaconf(config)
     clear_input = vconf.clear_sky_input if clear else (lambda data: data)
     ds_original = clear_input(ds)
+    anomaly = clear_input(anomaly)
     datasets_to_test = []
     for var_list in variables:
         if not isinstance(var_list, list):
             var_list = [var_list]
 
-        modified = ds.assign({v: ds[v] + anomaly[v] for v in var_list})
+        modified = ds_original.assign(
+            {v: ds_original[v] + anomaly[v] for v in var_list}
+        )
         datasets_to_test.append(clear_input(modified))
-    datasets_to_test.append(clear_input(ds + anomaly))
+    datasets_to_test.append(ds_original + anomaly)
 
     ds_stacked = xr.concat(datasets_to_test, dim="run")
 
@@ -517,7 +520,12 @@ def nn_radiative_response_cross(
     preprocessor: DianaPreprocessor,
     config,
     variable_pairs,
+    clear=False,
 ) -> list[xr.DataArray]:
+    vconf = variable_config_from_omegaconf(config)
+    clear_input = vconf.clear_sky_input if clear else (lambda data: data)
+    ds_original_raw = clear_input(ds)
+    anomaly = clear_input(anomaly)
     all_var_lists = set()
     for vi, vj in variable_pairs:
         if not isinstance(vi, list):
@@ -528,7 +536,7 @@ def nn_radiative_response_cross(
         all_var_lists.add(tuple(vj))
         all_var_lists.add(tuple(vi + vj))
 
-    ds_original = preprocessor.transform(ds)
+    ds_original = preprocessor.transform(ds_original_raw)
 
     dim_names_original = ["month", "latitude", "longitude"]
     dim_names = ["year", "month", "latitude", "longitude"]
@@ -540,7 +548,9 @@ def nn_radiative_response_cross(
     preds = {}
     for var_list in all_var_lists:
         ds_perturbed = preprocessor.transform(
-            ds.assign({v: ds[v] + anomaly[v] for v in var_list})
+            ds_original_raw.assign(
+                {v: ds_original_raw[v] + anomaly[v] for v in var_list}
+            )
         )
         preds[var_list] = nn_pred(
             ds_perturbed, model, preprocessor, config, dim_names=dim_names
