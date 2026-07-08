@@ -7,7 +7,9 @@ import pandas as pd
 import xarray as xr
 
 from config_utils import load_config
-from preprocess import load_ecod
+from ecod_calculation import ecod_from_profiles
+from preprocess import load_cloud_profiles, load_ecod
+from preprocessing import fast_compute_cloud_optical_depth
 from utils import (
     SECONDS_PER_DAY,
     global_date_series,
@@ -81,6 +83,41 @@ def load_qt(years, months, kernel_grid) -> xr.Dataset:
     ds_qt = ds_qt.sel(date=ds_qt.date.dt.year.isin(years))
     ds_qt = ds_qt.sel(date=ds_qt.date.dt.month.isin(months))
     return ds_qt.interp(**kernel_grid)
+
+
+def assign_mean_ecod(
+    ds_monthly_means: xr.Dataset,
+    config,
+    data_path: str,
+    years,
+    months,
+    kernel_grid,
+) -> xr.Dataset:
+    if not config.preprocess.ecod.enabled:
+        return ds_monthly_means
+
+    if config.preprocess.ecod.method == "fast":
+        ecod = fast_compute_cloud_optical_depth(
+            ds_monthly_means["tclw"],
+            ds_monthly_means["tciw"],
+            ds_monthly_means["tcc"],
+        )
+    else:
+        profiles = load_cloud_profiles(
+            data_path,
+            years,
+            months,
+            xr.Dataset(coords=kernel_grid),
+        )
+        profiles = to_monthly(profiles).mean("year")
+        ecod = ecod_from_profiles(
+            profiles["ciwc"],
+            profiles["clwc"],
+            profiles["level"] * 100.0,
+        ).compute()
+        profiles.close()
+
+    return ds_monthly_means.assign(ecod=ecod)
 
 
 def plot_field_pair(
@@ -1067,6 +1104,14 @@ def main():
 
     ds_monthly = to_monthly(ds.copy(deep=True))
     ds_monthly_means = ds_monthly.mean("year")
+    ds_monthly_means = assign_mean_ecod(
+        ds_monthly_means,
+        config,
+        args.data_path,
+        data_years,
+        sorted(int(month) for month in ds_monthly.month.values),
+        kernel_grid,
+    )
     anomaly = ds_monthly - ds_monthly_means
     # print(ds_monthly_means)
 
