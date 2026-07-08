@@ -117,10 +117,16 @@ class VariableConfig:
         return list(dict.fromkeys(self.kernel_vars))
 
     def clear_sky_input(self, ds: xr.Dataset) -> xr.Dataset:
+        zero_vars = [
+            *self.clear_sky_zero_vars,
+            "tcc",
+            "ecod",
+            "ecod_fal",
+        ]
         return ds.assign(
             {
                 var: xr.zeros_like(ds[var])
-                for var in self.clear_sky_zero_vars
+                for var in zero_vars
                 if var in ds
             }
         )
