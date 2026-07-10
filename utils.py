@@ -12,7 +12,7 @@ from model import SimpleModel
 import glob
 
 import torch
-
+we
 SECONDS_PER_DAY = 3600 * 24
 
 
@@ -135,11 +135,11 @@ def plot_contours_on_map(m, lon, lat, data, cmap, vmin, vmax) -> None:
         step = data_range / 12
     true_min = np.min(data).values
     true_max = np.max(data).values
-    print(true_min, true_max)
+    #print(true_min, true_max)
     levels_up = np.arange(0, true_max - 1 + step, step)
     levels_down = -np.arange(step, -true_min - 1 + step, step)
     levels = list(reversed(list(levels_down))) + list(levels_up)
-    print(levels)
+    #print(levels)
 
     cs_halo = m.contour(x, y, data_sub, colors="white", linewidths=3.0, levels=levels)
     contours = m.contour(
@@ -417,8 +417,8 @@ def compute_nn_kernel_autograd(
     vmin, vmax = scaler.get_data_min(), scaler.get_data_max()
     target_range = float(vmax[target] - vmin[target])
     input_range = float(vmax[input_var] - vmin[input_var])
-    print(f"{target.upper()} range", target_range)
-    print(f"{input_var} range", input_range)
+    #print(f"{target.upper()} range", target_range)
+    #print(f"{input_var} range", input_range)
     grad_physical_per_unit = (
         grads.detach().cpu().numpy().squeeze(axis=0)
         * (target_range / input_range)
@@ -464,112 +464,6 @@ def to_dates(ds: xr.Dataset | xr.DataArray) -> xr.Dataset | xr.DataArray:
         .sortby("date")
     )
 
-
-def nn_radiative_response(
-    ds: xr.Dataset,
-    anomaly: xr.Dataset,
-    model: SimpleModel,
-    preprocessor: DianaPreprocessor,
-    config,
-    variables,
-    clear=False
-) -> list[xr.DataArray]:
-    vconf = variable_config_from_omegaconf(config)
-    clear_input = vconf.clear_sky_input if clear else (lambda data: data)
-    ds_original = clear_input(ds)
-    anomaly = clear_input(anomaly)
-    datasets_to_test = []
-    for var_list in variables:
-        if not isinstance(var_list, list):
-            var_list = [var_list]
-
-        modified = ds_original.assign(
-            {v: ds_original[v] + anomaly[v] for v in var_list}
-        )
-        datasets_to_test.append(clear_input(modified))
-    datasets_to_test.append(ds_original + anomaly)
-
-    ds_stacked = xr.concat(datasets_to_test, dim="run")
-
-    dim_names_original = ["month", "latitude", "longitude"]
-    dim_names = ["run", "year", "month", "latitude", "longitude"]
-
-    pred_original = nn_pred(
-        preprocessor.transform(ds_original),
-        model,
-        preprocessor,
-        config,
-        dim_names=dim_names_original,
-    )
-    pred_perturbed = nn_pred(
-        preprocessor.transform(ds_stacked),
-        model,
-        preprocessor,
-        config,
-        dim_names=dim_names,
-    )
-
-    results = (pred_perturbed - pred_original) / SECONDS_PER_DAY
-    return [results.isel(run=i) for i in range(0, len(variables) + 1)]
-
-
-def nn_radiative_response_cross(
-    ds: xr.Dataset,
-    anomaly: xr.Dataset,
-    model: SimpleModel,
-    preprocessor: DianaPreprocessor,
-    config,
-    variable_pairs,
-    clear=False,
-) -> list[xr.DataArray]:
-    vconf = variable_config_from_omegaconf(config)
-    clear_input = vconf.clear_sky_input if clear else (lambda data: data)
-    ds_original_raw = clear_input(ds)
-    anomaly = clear_input(anomaly)
-    all_var_lists = set()
-    for vi, vj in variable_pairs:
-        if not isinstance(vi, list):
-            vi = [vi]
-        if not isinstance(vj, list):
-            vj = [vj]
-        all_var_lists.add(tuple(vi))
-        all_var_lists.add(tuple(vj))
-        all_var_lists.add(tuple(vi + vj))
-
-    ds_original = preprocessor.transform(ds_original_raw)
-
-    dim_names_original = ["month", "latitude", "longitude"]
-    dim_names = ["year", "month", "latitude", "longitude"]
-
-    pred_original = nn_pred(
-        ds_original, model, preprocessor, config, dim_names=dim_names_original
-    )
-
-    preds = {}
-    for var_list in all_var_lists:
-        ds_perturbed = preprocessor.transform(
-            ds_original_raw.assign(
-                {v: ds_original_raw[v] + anomaly[v] for v in var_list}
-            )
-        )
-        preds[var_list] = nn_pred(
-            ds_perturbed, model, preprocessor, config, dim_names=dim_names
-        )
-
-    results = []
-    for vi, vj in variable_pairs:
-        if not isinstance(vi, list):
-            vi = [vi]
-        if not isinstance(vj, list):
-            vj = [vj]
-        ki, kj, kij = tuple(vi), tuple(vj), tuple(vi + vj)
-        results.append(
-            (preds[kij] - preds[ki] - preds[kj] + pred_original) / SECONDS_PER_DAY
-        )
-
-    return results
-
-
 def global_mean(da: xr.DataArray) -> xr.DataArray:
     weights = np.cos(np.deg2rad(da.latitude))
     weights.name = "weights"
@@ -590,66 +484,52 @@ def integrate_over_pressure_levels(
 
 def weighted_residuals_by_month(
     da: xr.DataArray,
-    n_samples: int = 2000,
+    n_samples: int = 400,
     rng: np.random.Generator | None = None,
 ) -> list[np.ndarray]:
     rng = rng or np.random.default_rng()
+    da = da.transpose("year", "month", "latitude", "longitude").compute()
+
+    lat_vals = da.latitude.values
+    lat_weights = np.clip(np.cos(np.deg2rad(lat_vals)), 0, None)
+    lat_p = lat_weights / lat_weights.sum()
+
+    n_year = da.sizes["year"]
+    n_lat = da.sizes["latitude"]
+    n_lon = da.sizes["longitude"]
+
     result = []
     for month in range(1, 13):
-        field = (
-            da.sel(month=month)
-            .transpose("year", "latitude", "longitude")
-            .compute()
-            .values
-        )
-        n_year, n_lat, n_lon = field.shape
-
-        lat_vals = da.latitude.values
-        weights = np.clip(np.cos(np.deg2rad(lat_vals)), 0, None)
-        weights_3d = weights[None, :, None] * np.ones((n_year, n_lat, n_lon))
-
-        flat_res = field.ravel()
-        p = weights_3d.ravel().copy()
-        p = p / p.sum()
-
-        indices = rng.choice(len(flat_res), size=n_samples, p=p)
-        result.append(flat_res[indices])
+        field = da.sel(month=month).values
+        year_idx = rng.integers(0, n_year, size=n_samples)
+        lat_idx = rng.choice(n_lat, size=n_samples, p=lat_p)
+        lon_idx = rng.integers(0, n_lon, size=n_samples)
+        result.append(field[year_idx, lat_idx, lon_idx])
     return result
 
 
 def weighted_residuals_by_year_month(
     da: xr.DataArray,
-    n_samples: int = 2000,
+    n_samples: int = 400,
     rng: np.random.Generator | None = None,
 ) -> tuple[list[str], list[np.ndarray]]:
     rng = rng or np.random.default_rng()
-    da = da.transpose("year", "month", "latitude", "longitude")
+    da = da.transpose("year", "month", "latitude", "longitude").compute()
+
     lat_vals = da.latitude.values
-    # print(lat_vals)
-    weights = np.clip(np.cos(np.deg2rad(lat_vals)), 0, None)
+    lat_weights = np.clip(np.cos(np.deg2rad(lat_vals)), 0, None)
+    lat_p = lat_weights / lat_weights.sum()
+
+    n_lat = da.sizes["latitude"]
+    n_lon = da.sizes["longitude"]
+
     labels = []
     result = []
-
     for year in da.year.values:
         for month in da.month.values:
-            field = da.sel(year=year, month=month).compute().values
-            n_lat, n_lon = field.shape
-            weights_2d = weights[:, None] * np.ones((n_lat, n_lon))
-            # print(weights_2d)
-
-            flat_res = field.ravel()
-            p = weights_2d.ravel().copy()
-            p = p / p.sum()
-            # print(p)
-            indices = rng.choice(len(flat_res), size=n_samples, p=p)
+            field = da.sel(year=year, month=month).values
+            lat_idx = rng.choice(n_lat, size=n_samples, p=lat_p)
+            lon_idx = rng.integers(0, n_lon, size=n_samples)
             labels.append(f"{int(year)}-{int(month):02d}")
-            result.append(flat_res[indices])
-
+            result.append(field[lat_idx, lon_idx])
     return labels, result
-
-
-def empirical_copula_values(values: np.ndarray) -> np.ndarray:
-    from scipy.stats import rankdata
-
-    ranks = rankdata(values, method="average")
-    return (ranks - 0.5) / len(values)
