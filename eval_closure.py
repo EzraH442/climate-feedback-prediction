@@ -8,15 +8,14 @@ import xarray as xr
 
 from config_utils import load_config
 from ecod_calculation import ecod_from_profiles
-from preprocess import load_cloud_profiles, load_ecod
+from preprocess import load_cloud_profiles
 from preprocessing import fast_compute_cloud_optical_depth
 from utils import (
     SECONDS_PER_DAY,
     global_date_series,
     global_mean,
     integrate_over_pressure_levels,
-    nn_radiative_response,
-    nn_radiative_response_cross,
+    nn_pred,
     plot_global_field,
     plot_north_pole_field,
     setup_timeseries_plot,
@@ -44,10 +43,7 @@ MONTH_NAMES = [
 ]
 
 
-def albedo_kernel_components(
-    anomaly, albedo_kernel
-) -> tuple[xr.DataArray, xr.DataArray]:
-    da = anomaly.fal.compute()
+def albedo_kernel_components(da, albedo_kernel) -> tuple[xr.DataArray, xr.DataArray]:
     dR_a_k = albedo_kernel.TOA_all * da * 100
     dR_a_k_clr = albedo_kernel.TOA_clr * da * 100
     return dR_a_k, dR_a_k_clr
@@ -118,6 +114,84 @@ def assign_mean_ecod(
         profiles.close()
 
     return ds_monthly_means.assign(ecod=ecod)
+
+
+def ecod_on_grid(config, ds, data_path, years, months, kernel_grid):
+    if not config.preprocess.ecod.enabled:
+        return None
+    if config.preprocess.ecod.method == "fast":
+        return fast_compute_cloud_optical_depth(ds["tclw"], ds["tciw"], ds["tcc"])
+
+    profiles = load_cloud_profiles(
+        data_path,
+        years,
+        months,
+        xr.Dataset(coords=kernel_grid),
+    )
+    ecod = ecod_from_profiles(
+        profiles["ciwc"],
+        profiles["clwc"],
+        profiles["level"] * 100.0,
+    ).compute()
+    profiles.close()
+    return ecod
+
+
+def generated_perturbed_dataset(mean_ds, full_ds, var_groups):
+    perturbed = []
+    for var_group in var_groups:
+        perturbed.append(mean_ds.assign({var: full_ds[var] for var in var_group}))
+    perturbed.append(full_ds)
+    return xr.concat(perturbed, dim="perturbation")
+
+
+def clear_sky_input(config, ds):
+    clear_vars = set(config.dataset.clear_sky_zero_vars)
+    return ds.assign(
+        {
+            var: xr.zeros_like(ds[var])
+            for var in clear_vars.intersection(ds.data_vars)
+        }
+    )
+
+
+def perturbation_responses(
+    mean_ds,
+    full_ds,
+    model,
+    preprocessor,
+    config,
+    var_groups,
+    clear=False,
+):
+    if clear:
+        perturbed = []
+        for var_group in var_groups:
+            ds_p = mean_ds.assign({var: full_ds[var] for var in var_group})
+            perturbed.append(clear_sky_input(config, ds_p))
+        perturbed.append(clear_sky_input(config, full_ds))
+        perturbed = xr.concat(perturbed, dim="perturbation")
+        original = clear_sky_input(config, mean_ds)
+    else:
+        perturbed = generated_perturbed_dataset(mean_ds, full_ds, var_groups)
+        original = mean_ds
+
+    pred_perturbed = nn_pred(
+        preprocessor.transform(perturbed),
+        model,
+        preprocessor,
+        config,
+        ["perturbation", "year", "month", "latitude", "longitude"],
+    )
+    pred_original = nn_pred(
+        preprocessor.transform(original),
+        model,
+        preprocessor,
+        config,
+        ["month", "latitude", "longitude"],
+    )
+    diff = (pred_perturbed - pred_original) / SECONDS_PER_DAY
+    return [diff.sel(perturbation=i) for i in range(len(diff.perturbation))]
 
 
 def plot_field_pair(
@@ -919,76 +993,47 @@ def feedback_test(
 def compute_responses(
     ds_monthly,
     ds_monthly_means,
-    anomaly,
     model,
     preprocessor,
     config,
     cloud_vars,
-    cross=True,
 ):
+    print(ds_monthly)
     K_a = xr.open_dataset(ALBEDO_KERNEL_PATH)
     K_q = xr.open_dataset(WATER_VAPOR_KERNEL_PATH)
 
     kernel_grid = {"latitude": K_a.latitude, "longitude": K_a.longitude}
 
-    dR_a_nn, dR_c_nn, dR_q_nn, dR_nn_all = nn_radiative_response(
+    dR_a_nn, dR_q_nn, dR_c_nn, dR_nn_all = perturbation_responses(
         ds_monthly_means,
-        anomaly,
+        ds_monthly,
         model,
         preprocessor,
         config,
-        ["fal", cloud_vars, "tcwv"],
+        [["fal"], ["tcwv"], cloud_vars],
     )
-    dR_a_nn_clr, dR_q_nn_clr, dR_nn_clr = nn_radiative_response(
+    dR_a_nn_clr, dR_q_nn_clr, dR_nn_clr = perturbation_responses(
         ds_monthly_means,
-        anomaly,
+        ds_monthly,
         model,
         preprocessor,
         config,
-        ["fal", "tcwv"],
-        clear=True
+        [["fal"], ["tcwv"]],
+        clear=True,
     )
     
-    dR_clr = ds_monthly.tsrc - ds_monthly.tsrc.mean("year")
-    dR = anomaly.tsr.interp(**kernel_grid).compute()
+    anomaly = ds_monthly - ds_monthly_means
+    dR_clr = anomaly.tsrc.compute()
+    dR = anomaly.tsr.compute()
 
     ds_qt = load_qt(
         sorted(int(year) for year in ds_monthly.year.values),
         sorted(int(month) for month in ds_monthly.month.values),
         kernel_grid,
     )
-    dR_a_k, dR_a_k_clr = albedo_kernel_components(anomaly, K_a)
+    dR_a_k, dR_a_k_clr = albedo_kernel_components(anomaly.fal, K_a)
     dR_q_k, dR_q_k_clr = water_vapor_kernel_components(ds_monthly, ds_qt, K_q)
     dR_c_k = (dR - dR_clr) - (dR_a_k - dR_a_k_clr) - (dR_q_k - dR_q_k_clr)
-    
-    cross_data_vars = xr.Dataset()
-    if cross:
-        variable_pairs = [
-            ("fal", "tcwv"),
-            ("fal", ["hcc", "mcc", "lcc", "tcc", "tciw", "tclw"]),
-            ("tcwv", ["hcc", "mcc", "lcc", "tcc", "tciw", "tclw"]),
-        ]
-        dR_aq_nn, dR_ac_nn, dR_qc_nn = nn_radiative_response_cross(
-            ds_monthly_means,
-            anomaly,
-            model,
-            preprocessor,
-            config,
-            variable_pairs,
-        )
-        cross_data_vars = xr.Dataset(
-            {
-                "dR_aq_nn_all": dR_aq_nn.assign_attrs(
-                    plot_label="a,q", filename="cross_dR_a,q.png"
-                ),
-                "dR_ac_nn_all": dR_ac_nn.assign_attrs(
-                    plot_label="a,c", filename="cross_dR_a,c.png"
-                ),
-                "dR_qc_nn_all": dR_qc_nn.assign_attrs(
-                    plot_label="q,c", filename="cross_dR_q,c.png"
-                ),
-            }
-        )
     
     response_attrs = {
         "dR_era5_all": {"plot_label": "ERA5 all",   "filename": "dR_era5_all.png"},
@@ -1028,8 +1073,7 @@ def compute_responses(
             }.items()
         }
     )
-    responses = xr.merge([base_responses, cross_data_vars])
-    return responses
+    return base_responses
 
 def main():
     global NORTH_BOUNDARY, NORTH_MASK
@@ -1053,6 +1097,7 @@ def main():
     parser.add_argument("--residual_samples", type=int, default=2000)
     parser.add_argument("--skip_cross", action="store_true")
     parser.add_argument("--skip_input_anomaly_plots", action="store_true")
+    parser.add_argument("--overwrite_responses", action="store_true")
     args = parser.parse_args()
 
     #  --- setup global vars ---
@@ -1090,15 +1135,16 @@ def main():
         concat_dim="date",
     )
     ds = ds.sel(date=slice(args.start_date, args.end_date)).interp(**kernel_grid)
-    if config.preprocess.ecod.enabled:
-        ds = ds.assign(
-            ecod=load_ecod(
-                args.data_path,
-                data_years,
-                range(1, 13),
-                config.preprocess.ecod.method == "fast",
-            ).interp(**kernel_grid)
-        )
+    ecod = ecod_on_grid(
+        config,
+        ds,
+        args.data_path,
+        data_years,
+        range(1, 13),
+        kernel_grid,
+    )
+    if ecod is not None:
+        ds = ds.assign(ecod=ecod)
     ds["tsr"] = ds.tsr / SECONDS_PER_DAY
     ds["tsrc"] = ds.tsrc / SECONDS_PER_DAY
 
@@ -1113,31 +1159,38 @@ def main():
         kernel_grid,
     )
     anomaly = ds_monthly - ds_monthly_means
-    # print(ds_monthly_means)
 
-    cloud_vars = ["tcc", "hcc", "mcc", "lcc", "tciw", "tclw"]
-    if config.preprocess.ecod.enabled:
+    cloud_vars = ["hcc", "mcc", "lcc", "tciw", "tclw"]
+    if config.preprocess.ecod.enabled and "ecod" in ds_monthly:
         cloud_vars.append("ecod")
-    cloud_vars = [v for v in cloud_vars if v in ds_monthly]
 
-    if response_save_path.exists():
+    if response_save_path.exists() and not args.overwrite_responses:
+        print('='*20 + ' loaded cached responses ' + '='*20)
         responses = xr.load_dataset(response_save_path)
+        
+        
     else:
         responses = compute_responses(
             ds_monthly,
             ds_monthly_means,
-            anomaly,
             model,
             preprocessor,
             config,
             cloud_vars,
-            cross=not args.skip_cross,
         )
         # print(responses)
         # print(list(responses.data_vars))
         # print(responses.attrs)
         responses.to_netcdf(response_save_path)
     
+    mask = anomaly.latitude >= 75
+    field = responses['dR_era5_clr'].sel(year=2012, month=month)
+    v = float(np.max(np.abs(field)))
+    vnp = float(np.max(np.abs(field[mask])))
+    m = float(np.mean(field))
+    mnp = float(np.mean(field[mask]))
+    plot_global_field(field, field.longitude, field.latitude, '', Path('test11.png'), vmin=-v, vmax=v, label='', annotation=m)
+    plot_north_pole_field(field, field.longitude, field.latitude, '', Path('test12.png'), vmin=-24, vmax=24, label='', boundary=75, contours=True, annotation=mnp)
     
     date_closure_test(
         anomaly,
@@ -1150,13 +1203,12 @@ def main():
         month,
         skip_input_anomaly_plots=args.skip_input_anomaly_plots,
     )
-    """
     timeseries_test(
         responses,
         output_root,
         args.residual_samples,
     )
-
+    """
     dt2m = ds_monthly.t2m - ds_monthly.t2m.mean("year")
     feedback_test(
         dt2m,
