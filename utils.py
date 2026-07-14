@@ -12,7 +12,7 @@ from model import SimpleModel
 import glob
 
 import torch
-we
+
 SECONDS_PER_DAY = 3600 * 24
 
 
