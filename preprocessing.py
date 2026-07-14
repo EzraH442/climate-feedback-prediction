@@ -42,7 +42,7 @@ class ECOD_Calculator(Preprocessor):
                 "Dataset must contain cached 'ecod'. Run preprocess.py first."
             )
         if self.log:
-            ds = ds.assign(ecod=np.log(ds['ecod']))
+            ds = ds.assign(ecod=np.log1p(ds['ecod']))
         ds["ecod_fal"] = ds["ecod"] * ds["fal"]
         ds = ds.drop_vars([var for var in ("ciwc", "clwc", "tcc") if var in ds])
         return ds
