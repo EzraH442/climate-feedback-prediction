@@ -1,4 +1,5 @@
 import os
+import numpy as np
 import xarray as xr
 from pathlib import Path
 import pickle
@@ -31,14 +32,17 @@ class Preprocessor:
 
 
 class ECOD_Calculator(Preprocessor):
-    def __init__(self):
+    def __init__(self, log=False):
         super().__init__()
+        self.log = log
 
     def transform(self, ds):
         if "ecod" not in ds:
             raise ValueError(
                 "Dataset must contain cached 'ecod'. Run preprocess.py first."
             )
+        if self.log:
+            ds = ds.assign(ecod=np.log(ds['ecod']))
         ds["ecod_fal"] = ds["ecod"] * ds["fal"]
         ds = ds.drop_vars([var for var in ("ciwc", "clwc", "tcc") if var in ds])
         return ds
@@ -277,7 +281,7 @@ class DianaPreprocessor(SequentialPreprocessor):
 
         self.scalar = XarrayMinMaxScaler(dim=("date", "latitude", "longitude"))
         preprocessors = [
-            (ECOD_Calculator() if config.preprocess.ecod else Identity()),
+            (ECOD_Calculator(log=config.preprocess.ecod.log) if config.preprocess.ecod.enabled else Identity()),
             VariableSelector(vars),
             (
                 Downscaler(factor=[("latitude", 4), ("longitude", 4)])

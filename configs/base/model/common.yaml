@@ -61,6 +61,7 @@ preprocess:
   ecod:
     enabled: True
     method: "true"
+    log: False
 
 train:
   max_epochs_without_improvement: 10
