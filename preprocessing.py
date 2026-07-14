@@ -48,6 +48,9 @@ class ECOD_Calculator(Preprocessor):
         return ds
 
     def inverse_transform(self, ds):
+        if self.log:
+            ds = ds.assign(ecod=(np.exp(ds['ecod'])-1))
+
         """ECOD is derived, so we can't reverse it. Just return the dataset."""
         return ds
 
