@@ -642,8 +642,8 @@ def kernel_date_test(
         f"NN finite difference-RRTM {title} Kernel (all)\n{date}",
         all_dir / "nn-rrtm.png",
         cmap="RdBu_r",
-        vmin=-0.3,
-        vmax=0.3,
+        vmin=-1,
+        vmax=1,
         label=label,
         annotation=f"{np.mean(diff_cld):.2f}; {np.mean(np.abs(diff_cld)):.2f}",
     )
@@ -654,8 +654,8 @@ def kernel_date_test(
         f"NN finite difference-RRTM {title} Kernel (clear)\n{date}",
         clr_dir / "nn-rrtm.png",
         cmap="RdBu_r",
-        vmin=-0.3,
-        vmax=0.3,
+        vmin=-1,
+        vmax=1,
         label=label,
         annotation=f"{np.mean(diff_clr):.2f}; {np.mean(np.abs(diff_clr)):.2f}",
     )
@@ -666,8 +666,8 @@ def kernel_date_test(
         f"NN autograd-RRTM {title} Kernel (all)\n{date}",
         all_dir / "nn_grad-rrtm.png",
         cmap="RdBu_r",
-        vmin=-0.3,
-        vmax=0.3,
+        vmin=-1,
+        vmax=1,
         label=label,
         annotation=f"{np.mean(diff_grad_cld):.2f}; {np.mean(np.abs(diff_grad_cld)):.2f}",
     )
@@ -678,8 +678,8 @@ def kernel_date_test(
         f"NN autograd-RRTM {title} Kernel (clear)\n{date}",
         clr_dir / "nn_grad-rrtm.png",
         cmap="RdBu_r",
-        vmin=-0.3,
-        vmax=0.3,
+        vmin=-1,
+        vmax=1,
         label=label,
         annotation=f"{np.mean(diff_grad_clr):.2f}; {np.mean(np.abs(diff_grad_clr)):.2f}",
     )
@@ -916,15 +916,15 @@ def main():
     preprocessor.load(config.preprocess.params_dir)
 
     # --- run tests ---
-    global_tsr_test(
-        ds=processed_dataset,
-        preprocessor=preprocessor,
-        model=model,
-        config=config,
-        figures_path=output_dir,
-    )
+    #global_tsr_test(
+    #    ds=processed_dataset,
+    #    preprocessor=preprocessor,
+    #    model=model,
+    #    config=config,
+    #    figures_path=output_dir,
+    #)#
 
-    for kernel_name in eval_kernel_vars(config):
+    for kernel_name in ['tcwv']:##eval_kernel_vars(config):
         kernel_paths = generate_paths_yearly(
             config.dataset.kernels.raw_path,
             eval_years,
@@ -933,68 +933,68 @@ def main():
         kernels_dataset = xr.open_mfdataset(
             kernel_paths, combine="nested", concat_dim="date"
         )
-        kernel_date_test(
-            ds=raw_dataset.sel(date="2013-09"),
-            preprocessor=preprocessor,
-            model=model,
-            config=config,
-            figures_path=output_dir,
-            true_kernel=kernels_dataset.sel(date="2013-09"),
-            date="2013-09",
-            kernel_name=kernel_name,
-        )
+        #kernel_date_test(
+        #    ds=raw_dataset.sel(date="2013-09"),
+        #    preprocessor=preprocessor,
+        #    model=model,
+        #    config=config,
+        #    figures_path=output_dir,
+        #    true_kernel=kernels_dataset.sel(date="2013-09"),
+        #    date="2013-09",
+        #    kernel_name=kernel_name,
+        #)
         kernel_date_test(
             ds=raw_dataset.sel(date="2015-09"),
             preprocessor=preprocessor,
-            model=model,
+            model=model,#
             config=config,
             figures_path=output_dir,
             true_kernel=kernels_dataset.sel(date="2015-09"),
             date="2015-09",
             kernel_name=kernel_name,
         )
-        second_order_test(
-            ds=raw_dataset,
-            preprocessor=preprocessor,
-            model=model,
-            config=config,
-            true_kernel=kernels_dataset,
-            dates=["2012-09", "2013-09"],
-            figures_path=output_dir,
-            kernel_name=kernel_name,
-        )
-        kernel_date_test(
-            ds=raw_dataset.sel(date="2015-12"),
-            preprocessor=preprocessor,
-            model=model,
-            config=config,
-            figures_path=output_dir,
-            true_kernel=kernels_dataset.sel(date="2015-12"),
-            date="2015-12",
-            kernel_name=kernel_name,
-        )
+        #second_order_test(
+        #    ds=raw_dataset,
+        #    preprocessor=preprocessor,
+        #    model=model,
+        #    config=config,
+        #    true_kernel=kernels_dataset,
+        #    dates=["2012-09", "2013-09"],
+        #    figures_path=output_dir,
+        #    kernel_name=kernel_name,
+        #)
+        #kernel_date_test(
+        #    ds=raw_dataset.sel(date="2015-12"),
+        #    preprocessor=preprocessor,
+        #    model=model,
+        #    config=config,
+        #    figures_path=output_dir,
+        #    true_kernel=kernels_dataset.sel(date="2015-12"),
+        #    date="2015-12",
+        #    kernel_name=kernel_name,
+        #)
         kernels_dataset.close()
 
-    kernel_ecod_fal_contour_test(
-        processed_ds=processed_dataset,
-        preprocessor=preprocessor,
-        model=model,
-        config=config,
-        figures_path=output_dir,
-        scatter=False,
-        extrapolate=False,
-        date="2015-09",
-    )
-    tsr_ecod_fal_contour_test(
-        processed_ds=processed_dataset,
-        preprocessor=preprocessor,
-        model=model,
-        config=config,
-        figures_path=output_dir,
-        scatter=False,
-        extrapolate=False,
-        date="2015-09",
-    )
+    #kernel_ecod_fal_contour_test(
+    #    processed_ds=processed_dataset,
+    #    preprocessor=preprocessor,
+    #    model=model,
+    #    config=config,
+    #    figures_path=output_dir,
+    #    scatter=False,
+    #    extrapolate=False,
+    #    date="2015-09",
+    #)
+    #tsr_ecod_fal_contour_test(
+    #    processed_ds=processed_dataset,
+    #    preprocessor=preprocessor,
+    #    model=model,
+    #    config=config,
+    #    figures_path=output_dir,
+    #    scatter=False,
+    #    extrapolate=False,
+    #    date="2015-09",
+    #)
 
 
 if __name__ == "__main__":

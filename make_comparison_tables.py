@@ -64,7 +64,12 @@ COMPARISONS = {
 
 def metric(diff):
     mbe = float(np.mean(global_mean(diff)))
-    return {"mbe": mbe, "abs_mbe": abs(mbe), "rmse": float(np.sqrt(np.mean(global_mean(diff**2))))}
+    results = {
+        "mbe": mbe, 
+        "abs_mbe": abs(mbe), 
+        "rmse": float(np.sqrt(np.mean(global_mean(diff**2))))
+    }
+    return results
 
 
 def task_slug(name):
