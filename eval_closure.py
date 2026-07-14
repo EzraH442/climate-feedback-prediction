@@ -81,60 +81,10 @@ def load_qt(years, months, kernel_grid) -> xr.Dataset:
     return ds_qt.interp(**kernel_grid)
 
 
-def assign_mean_ecod(
-    ds_monthly_means: xr.Dataset,
-    config,
-    data_path: str,
-    years,
-    months,
-    kernel_grid,
-) -> xr.Dataset:
-    if not config.preprocess.ecod.enabled:
-        return ds_monthly_means
-
-    if config.preprocess.ecod.method == "fast":
-        ecod = fast_compute_cloud_optical_depth(
-            ds_monthly_means["tclw"],
-            ds_monthly_means["tciw"],
-            ds_monthly_means["tcc"],
-        )
-    else:
-        profiles = load_cloud_profiles(
-            data_path,
-            years,
-            months,
-            xr.Dataset(coords=kernel_grid),
-        )
-        profiles = to_monthly(profiles).mean("year")
-        ecod = ecod_from_profiles(
-            profiles["ciwc"],
-            profiles["clwc"],
-            profiles["level"] * 100.0,
-        ).compute()
-        profiles.close()
-
-    return ds_monthly_means.assign(ecod=ecod)
 
 
-def ecod_on_grid(config, ds, data_path, years, months, kernel_grid):
-    if not config.preprocess.ecod.enabled:
-        return None
-    if config.preprocess.ecod.method == "fast":
-        return fast_compute_cloud_optical_depth(ds["tclw"], ds["tciw"], ds["tcc"])
 
-    profiles = load_cloud_profiles(
-        data_path,
-        years,
-        months,
-        xr.Dataset(coords=kernel_grid),
-    )
-    ecod = ecod_from_profiles(
-        profiles["ciwc"],
-        profiles["clwc"],
-        profiles["level"] * 100.0,
-    ).compute()
-    profiles.close()
-    return ecod
+
 
 
 def generated_perturbed_dataset(mean_ds, full_ds, var_groups):
@@ -263,9 +213,13 @@ def plot_input_anomalies(
         ("tcwv", "kg/m^2", None),
         ("tco3", "kg/m^2", None),
         ("tsr", "W/m^2", 24),
+        ("tciw", "W/m^2", None),
+        ("tclw", "W/m^2", None),
+
     ]
+    anomaly_slice = anomaly.sel(month=month, year=year).compute()
     for var, label, fixed_vmax in specs:
-        field = anomaly.sel(month=month, year=year)[var].compute()
+        field = anomaly_slice[var]
         vmax = float(fixed_vmax if fixed_vmax is not None else np.max(np.abs(field)))
         print(var, np.max(np.abs(field)).values)
         plot_field_pair(
@@ -341,6 +295,37 @@ def plot_component_timeseries(series, output_dir: Path, clear_sky: bool) -> None
         plt.close(fig)
 
 
+
+
+
+
+RESIDUAL_SOURCES = ["nn", "k", "nn_allcross"]
+ 
+ 
+def _residual_key(source: str, clear_sky: bool) -> str:
+    return f"dR_res_{source}" + ("_clr" if clear_sky else "")
+
+def build_residual_series(residual_fields: dict, north_pole: bool = False) -> dict:
+    """
+    build the {dR_res_<source>[_clr]: timeseries} dict
+    residual_fields keys are expected to look like "nn", "k", "nn_allcross",
+    "nn_clr", "k_clr", "nn_allcross_clr".
+    """
+    series = {}
+    for name, field in residual_fields.items():
+        if north_pole:
+            field = field.isel(latitude=NORTH_MASK)
+        series[f"dR_res_{name}"] = global_date_series(field)
+    return series
+    
+def build_rmse_residual_series(residual_fields: dict, north_pole: bool = False) -> dict:
+    series = {}
+    for name, field in residual_fields.items():
+        if north_pole:
+            field = field.isel(latitude=NORTH_MASK)
+        series[f"dR_res_{name}"] = np.sqrt(global_date_series(field * field))
+    return series
+
 def plot_residual_rmse_timeseries(series, output_dir: Path, clear_sky: bool) -> None:
     fig, ax = setup_timeseries_plot()
     ylabel = (
@@ -348,10 +333,10 @@ def plot_residual_rmse_timeseries(series, output_dir: Path, clear_sky: bool) -> 
         if clear_sky
         else rf"RMSE $\Delta R_{{net}}$ ($W m^{{-2}}$)"
     )
-    for source in ["nn", "k"]:
+    for source in ["nn", "k", "nn_allcross"]:
         name = f"dR_res_{source}" + ("_clr" if clear_sky else "")
         ax.scatter(x=series[name]["date"], y=series[name], s=1, label=source)
-    ax.set_yticks(np.arange(0, 11, 2))
+    ax.set_yticks(np.arange(0, 7, 2))
     ax.set_ylabel(ylabel)
     ax.legend()
     ax.grid(alpha=0.5)
@@ -366,7 +351,7 @@ def plot_residual_mbe_timeseries(series, output_dir: Path, clear_sky: bool) -> N
         if clear_sky
         else rf"MBE $\Delta R_{{net}}$ ($W m^{{-2}}$)"
     )
-    for source in ["nn", "k"]:
+    for source in ["nn", "k", "nn_allcross"]:
         name = f"dR_res_{source}" + ("_clr" if clear_sky else "")
         ax.scatter(x=series[name]["date"], y=series[name], s=1, label=source)
     ax.set_yticks(np.arange(-2, 3, 1))
@@ -525,24 +510,32 @@ def timeseries_test(
     dR_q_k_clr = responses["dR_q_k_clr"]
 
     dR_sum_nn = dR_a_nn + dR_c_nn + dR_q_nn
+    dR_sum_nn_allcross = responses['dR_nn_all']
     dR_sum_k = dR_a_k + dR_c_k + dR_q_k
     dR_sum_nn_clr = dR_a_nn_clr + dR_q_nn_clr
+    dR_sum_nn_allcross_clr = responses['dR_nn_clr']
     dR_sum_k_clr = dR_a_k_clr + dR_q_k_clr
 
     dR_res_nn = dR - dR_sum_nn
+    dR_res_nn_allcross = dR - dR_sum_nn_allcross
     dR_res_k = dR - dR_sum_k
     dR_res_nn_clr = dR_clr - dR_sum_nn_clr
+    dR_res_nn_allcross_clr = dR_clr - dR_sum_nn_allcross_clr
     dR_res_k_clr = dR_clr - dR_sum_k_clr
     fields = {
         "dR": dR,
         "dR_clr": dR_clr,
         "dR_sum_nn": dR_sum_nn,
+        "dR_sum_nn_allcross": dR_sum_nn_allcross,
         "dR_sum_k": dR_sum_k,
         "dR_sum_nn_clr": dR_sum_nn_clr,
+        "dR_sum_nn_allcross_clr": dR_sum_nn_allcross_clr,
         "dR_sum_k_clr": dR_sum_k_clr,
         "dR_res_nn": dR_res_nn,
+        "dR_res_nn_allcross": dR_res_nn_allcross,
         "dR_res_k": dR_res_k,
         "dR_res_nn_clr": dR_res_nn_clr,
+        "dR_res_nn_allcross_clr": dR_res_nn_allcross_clr,
         "dR_res_k_clr": dR_res_k_clr,
     }
     field_series = {key: global_date_series(value) for key, value in fields.items()}
@@ -654,63 +647,53 @@ def timeseries_test(
         fig.savefig(timeseries_all / "timeseries_sum_cross.png", dpi=200)
         plt.close(fig)
 
-    residual_series = {
-        "dR_res_nn": field_series["dR_res_nn"],
-        "dR_res_k": field_series["dR_res_k"],
-        "dR_res_nn_clr": field_series["dR_res_nn_clr"],
-        "dR_res_k_clr": field_series["dR_res_k_clr"],
+    mbe_fields_all = {
+        "nn": dR_res_nn,
+        "k": dR_res_k,
+        "nn_allcross": dR_res_nn_allcross,
     }
-    residual_series_np = {
-        "dR_res_nn": field_series_np["dR_res_nn"],
-        "dR_res_k": field_series_np["dR_res_k"],
-        "dR_res_nn_clr": field_series_np["dR_res_nn_clr"],
-        "dR_res_k_clr": field_series_np["dR_res_k_clr"],
+    mbe_fields_clr = {
+        "nn_clr": dR_res_nn_clr,
+        "k_clr": dR_res_k_clr,
+        "nn_allcross_clr": dR_res_nn_allcross_clr,
     }
+    mbe_series_all = build_residual_series(mbe_fields_all, north_pole=False)
+    mbe_series_clr = build_residual_series(mbe_fields_clr, north_pole=False)
+    mbe_series_all_np = build_residual_series(mbe_fields_all, north_pole=True)
+    mbe_series_clr_np = build_residual_series(mbe_fields_clr, north_pole=True)
+ 
     plot_residual_mbe_timeseries(
-        residual_series, timeseries_all, clear_sky=False
+        {**mbe_series_all, **mbe_series_clr}, timeseries_all, clear_sky=False
     )
     plot_residual_mbe_timeseries(
-        residual_series, timeseries_clear, clear_sky=True
+        {**mbe_series_all, **mbe_series_clr}, timeseries_clear, clear_sky=True
     )
     plot_residual_mbe_timeseries(
-        residual_series_np, timeseries_all / "np", clear_sky=False
+        {**mbe_series_all_np, **mbe_series_clr_np}, timeseries_all / "np", clear_sky=False
     )
     plot_residual_mbe_timeseries(
-        residual_series_np, timeseries_clear / "np", clear_sky=True
+        {**mbe_series_all_np, **mbe_series_clr_np}, timeseries_clear / "np", clear_sky=True
     )
 
-    residual_series = {
-        "dR_res_nn": np.sqrt(global_date_series(np.power(dR_res_nn, 2))),
-        "dR_res_k": np.sqrt(global_date_series(np.power(dR_res_k, 2))),
-        "dR_res_nn_clr": np.sqrt(global_date_series(np.power(dR_res_nn_clr, 2))),
-        "dR_res_k_clr": np.sqrt(global_date_series(np.power(dR_res_k_clr, 2))),
-    }
-    residual_series_np = {
-        "dR_res_nn": np.sqrt(
-            global_date_series(np.power(dR_res_nn.isel(latitude=NORTH_MASK), 2))
-        ),
-        "dR_res_k": np.sqrt(
-            global_date_series(np.power(dR_res_k.isel(latitude=NORTH_MASK), 2))
-        ),
-        "dR_res_nn_clr": np.sqrt(
-            global_date_series(np.power(dR_res_nn_clr.isel(latitude=NORTH_MASK), 2))
-        ),
-        "dR_res_k_clr": np.sqrt(
-            global_date_series(np.power(dR_res_k_clr.isel(latitude=NORTH_MASK), 2))
-        ),
-    }
+
+    rmse_series_all = build_rmse_residual_series(mbe_fields_all, north_pole=False)
+    rmse_series_clr = build_rmse_residual_series(mbe_fields_clr, north_pole=False)
+    rmse_series_all_np = build_rmse_residual_series(mbe_fields_all, north_pole=True)
+    rmse_series_clr_np = build_rmse_residual_series(mbe_fields_clr, north_pole=True)
+ 
     plot_residual_rmse_timeseries(
-        residual_series, timeseries_all, clear_sky=False
+        {**rmse_series_all, **rmse_series_clr}, timeseries_all, clear_sky=False
     )
     plot_residual_rmse_timeseries(
-        residual_series, timeseries_clear, clear_sky=True
+        {**rmse_series_all, **rmse_series_clr}, timeseries_clear, clear_sky=True
     )
     plot_residual_rmse_timeseries(
-        residual_series_np, timeseries_all / "np", clear_sky=False
+        {**rmse_series_all_np, **rmse_series_clr_np}, timeseries_all / "np", clear_sky=False
     )
     plot_residual_rmse_timeseries(
-        residual_series_np, timeseries_clear / "np", clear_sky=True
+        {**rmse_series_all_np, **rmse_series_clr_np}, timeseries_clear / "np", clear_sky=True
     )
+
 
     plot_residual_year_month_boxplots(
         dR_res_nn,
@@ -740,7 +723,6 @@ def timeseries_test(
         timeseries_clear / "np" / "boxplot_residuals_by_year_month_np.png",
         residual_samples,
     )
-
     rng = np.random.default_rng(0)
     residuals_clear = {
         "nn": weighted_residuals_by_month(dR_res_nn_clr, residual_samples, rng),
@@ -756,27 +738,27 @@ def timeseries_test(
     }
     plot_residual_boxplots(residuals_clear, residuals_clear_np, timeseries_clear)
 
-    if not has_cross:
-        return
+    #if not has_cross:
+    #    return
 
-    rng = np.random.default_rng(0)
-    residuals = {
-        "nn": weighted_residuals_by_month(dR_res_nn, residual_samples, rng),
-        "nn_cross": weighted_residuals_by_month(dR_res_nn_cross, residual_samples, rng),
-        "kernel": weighted_residuals_by_month(dR_res_k, residual_samples, rng),
-    }
-    residuals_np = {
-        "nn": weighted_residuals_by_month(
-            dR_res_nn.isel(latitude=NORTH_MASK), residual_samples, rng
-        ),
-        "nn_cross": weighted_residuals_by_month(
-            dR_res_nn_cross.isel(latitude=NORTH_MASK), residual_samples, rng
-        ),
-        "kernel": weighted_residuals_by_month(
-            dR_res_k.isel(latitude=NORTH_MASK), residual_samples, rng
-        ),
-    }
-    plot_residual_boxplots(residuals, residuals_np, timeseries_all)
+    #rng = np.random.default_rng(0)
+    #residuals = {
+    #    "nn": weighted_residuals_by_month(dR_res_nn, residual_samples, rng),
+    #    "nn_cross": weighted_residuals_by_month(dR_res_nn_cross, residual_samples, rng),
+    #    "kernel": weighted_residuals_by_month(dR_res_k, residual_samples, rng),
+    #}
+    #residuals_np = {
+    #    "nn": weighted_residuals_by_month(
+    #        dR_res_nn.isel(latitude=NORTH_MASK), residual_samples, rng
+    #    ),
+    #    "nn_cross": weighted_residuals_by_month(
+    #        dR_res_nn_cross.isel(latitude=NORTH_MASK), residual_samples, rng
+    #    ),
+    #    "kernel": weighted_residuals_by_month(
+    #        dR_res_k.isel(latitude=NORTH_MASK), residual_samples, rng
+    #    ),
+    #}
+    #plot_residual_boxplots(residuals, residuals_np, timeseries_all)
 
 
 def date_closure_test(
@@ -885,11 +867,11 @@ def date_closure_test(
     dR_sum_nn_allcross_clr = responses["dR_nn_clr"]
     dR_sum_k_clr           = responses["dR_a_k_clr"]  + responses["dR_q_k_clr"]
 
-    dR_res_nn_allcross     = dR     - responses['dR_nn_all']
+    dR_res_nn_allcross     = dR     - dR_sum_nn_allcross
     dR_res_nn              = dR     - dR_sum_nn
     dR_res_k               = dR     - dR_sum_k
     dR_res_nn_clr          = dR_clr - dR_sum_nn_clr
-    dR_res_nn_allcross_clr = dR_clr - responses['dR_nn_clr']
+    dR_res_nn_allcross_clr = dR_clr - dR_sum_nn_allcross_clr
     dR_res_k_clr           = dR_clr - dR_sum_k_clr
 
     nn_all_closure = xr.Dataset({
@@ -1075,6 +1057,50 @@ def compute_responses(
     )
     return base_responses
 
+def assign_mean_ecod(ds_monthly_means: xr.Dataset, config, profiles) -> xr.Dataset:
+    if not config.preprocess.ecod.enabled:
+        return ds_monthly_means
+
+    if config.preprocess.ecod.method == "fast":
+        ecod = fast_compute_cloud_optical_depth(
+            ds_monthly_means["tclw"],
+            ds_monthly_means["tciw"],
+            ds_monthly_means["tcc"],
+        )
+    else:
+        profiles = to_monthly(profiles.copy(deep=True)).mean("year")
+        ecod = ecod_from_profiles(
+            profiles["ciwc"],
+            profiles["clwc"],
+            profiles["level"] * 100.0,
+        ).compute()
+
+    return ds_monthly_means.assign(ecod=ecod)
+
+def ecod_on_grid(config, ds, profiles):
+    if not config.preprocess.ecod.enabled:
+        return None
+    if config.preprocess.ecod.method == "fast":
+        return fast_compute_cloud_optical_depth(ds["tclw"], ds["tciw"], ds["tcc"])
+
+    ecod = ecod_from_profiles(
+        profiles["ciwc"],
+        profiles["clwc"],
+        profiles["level"] * 100.0,
+    ).compute()
+    
+    return ecod
+
+def load_cloud_profiles_cached(path, years, months, target_grid, cache_dir=Path("cache/profiles")):
+    key = f"{min(years)}-{max(years)}_{'-'.join(map(str, sorted(months)))}"
+    cache_path = cache_dir / f"profiles_{key}.nc"
+    if cache_path.exists():
+        return xr.load_dataset(cache_path)
+    profiles = load_cloud_profiles(path, years, months, target_grid)
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    profiles.compute().to_netcdf(cache_path)
+    return xr.load_dataset(cache_path)
+
 def main():
     global NORTH_BOUNDARY, NORTH_MASK
     K_a = xr.open_dataset(ALBEDO_KERNEL_PATH)
@@ -1123,7 +1149,7 @@ def main():
     output_root.mkdir(parents=True, exist_ok=True)
     response_save_path = output_root / "saved_responses_closure_test.nc"
 
-
+    # -- load necessary data
     data_path = Path(args.data_path)
     data_years = range(
         pd.Timestamp(args.start_date).year,
@@ -1135,29 +1161,16 @@ def main():
         concat_dim="date",
     )
     ds = ds.sel(date=slice(args.start_date, args.end_date)).interp(**kernel_grid)
-    ecod = ecod_on_grid(
-        config,
-        ds,
-        args.data_path,
-        data_years,
-        range(1, 13),
-        kernel_grid,
-    )
-    if ecod is not None:
-        ds = ds.assign(ecod=ecod)
     ds["tsr"] = ds.tsr / SECONDS_PER_DAY
     ds["tsrc"] = ds.tsrc / SECONDS_PER_DAY
-
+    
+    profiles = load_cloud_profiles(data_path, data_years, range(1, 13), K_a)
+    ecod = ecod_on_grid(config, ds, profiles)
+    ds = ds.assign(ecod=ecod)
+    
     ds_monthly = to_monthly(ds.copy(deep=True))
     ds_monthly_means = ds_monthly.mean("year")
-    ds_monthly_means = assign_mean_ecod(
-        ds_monthly_means,
-        config,
-        args.data_path,
-        data_years,
-        sorted(int(month) for month in ds_monthly.month.values),
-        kernel_grid,
-    )
+    ds_monthly_means = assign_mean_ecod(ds_monthly_means, config, profiles)
     anomaly = ds_monthly - ds_monthly_means
 
     cloud_vars = ["hcc", "mcc", "lcc", "tciw", "tclw"]
@@ -1182,16 +1195,7 @@ def main():
         # print(list(responses.data_vars))
         # print(responses.attrs)
         responses.to_netcdf(response_save_path)
-    
-    mask = anomaly.latitude >= 75
-    field = responses['dR_era5_clr'].sel(year=2012, month=month)
-    v = float(np.max(np.abs(field)))
-    vnp = float(np.max(np.abs(field[mask])))
-    m = float(np.mean(field))
-    mnp = float(np.mean(field[mask]))
-    plot_global_field(field, field.longitude, field.latitude, '', Path('test11.png'), vmin=-v, vmax=v, label='', annotation=m)
-    plot_north_pole_field(field, field.longitude, field.latitude, '', Path('test12.png'), vmin=-24, vmax=24, label='', boundary=75, contours=True, annotation=mnp)
-    
+    """
     date_closure_test(
         anomaly,
         ds_monthly,
@@ -1203,19 +1207,19 @@ def main():
         month,
         skip_input_anomaly_plots=args.skip_input_anomaly_plots,
     )
+    """
     timeseries_test(
         responses,
         output_root,
         args.residual_samples,
     )
-    """
     dt2m = ds_monthly.t2m - ds_monthly.t2m.mean("year")
     feedback_test(
         dt2m,
         responses,
         output_root,
     )
-    """
+    
 
 if __name__ == "__main__":
     main()
