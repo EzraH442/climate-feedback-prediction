@@ -14,7 +14,7 @@
 set -euo pipefail
 
 CONFIG_FILE="${1:-}"
-
+SEED="${2:-}"
 if [[ -z "${CONFIG_FILE}" ]]; then
     echo "Usage: $0 <config-file>"
     exit 1
@@ -41,4 +41,8 @@ source $SLURM_TMPDIR/env/bin/activate
 pip install --no-index --upgrade pip
 pip install --no-index -r requirements.txt
 
-python train.py --config_file "${CONFIG_FILE}" --no-resume
+if [[ -n "${SEED}" ]]; then
+    python train.py --config_file "${CONFIG_FILE}" --no-resume --seed "${SEED}"
+else
+    python train.py --config_file "${CONFIG_FILE}" --no-resume
+fi
