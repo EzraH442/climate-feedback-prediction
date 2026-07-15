@@ -68,7 +68,7 @@ def cache_ecod(path: str, years, fast_ecod=False) -> None:
                 profiles["ciwc"],
                 profiles["clwc"],
                 profiles["level"] * 100.0,
-            )
+            ) * raw["tcc"]
             profiles.close()
         print(f"Saving cached ECOD for {year} to {output_path}...")
         ecod.to_dataset(name="ecod").to_netcdf(output_path)
