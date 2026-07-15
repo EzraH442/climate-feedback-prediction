@@ -48,6 +48,8 @@ def load_point(config, date, latitude, longitude, data_path):
                 profiles.clwc,
                 profiles.level * 100.0,
             ).sel(date=date, method="nearest")
+            if config.preprocess.ecod.method == "true_tcc":
+                ecod = ecod * ds.tcc
         ds = ds.assign(ecod=ecod)
 
     return ds

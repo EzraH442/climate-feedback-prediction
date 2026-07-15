@@ -38,8 +38,14 @@ def make_qt_filename(year):
     return f"era5_plev_qt_monthly_{year}.nc"
 
 
-def make_ecod_filename(year, fast_ecod=False):
-    prefix = "era5_fast_ecod" if fast_ecod else "era5_ecod"
+def make_ecod_filename(year, method=False):
+    if isinstance(method, bool):
+        method = "fast" if method else "true"
+    prefix = {
+        "true": "era5_ecod",
+        "true_tcc": "era5_true_tcc_ecod",
+        "fast": "era5_fast_ecod",
+    }[method]
     return f"{prefix}_monthly_{year}.nc"
 
 
@@ -86,6 +92,17 @@ def setup_north_pole_map(boundary: float = 60) -> Basemap:
     return m
 
 
+def coordinate_edges(values: np.ndarray) -> np.ndarray:
+    midpoints = (values[:-1] + values[1:]) / 2
+    return np.concatenate(
+        [
+            [values[0] - (midpoints[0] - values[0])],
+            midpoints,
+            [values[-1] + (values[-1] - midpoints[-1])],
+        ]
+    )
+
+
 def plot_colormesh_on_map(m, lon, lat, data, cmap, vmin, vmax) -> None:
     lon_arr = np.asarray(lon)
     lat_arr = np.asarray(lat)
@@ -100,10 +117,12 @@ def plot_colormesh_on_map(m, lon, lat, data, cmap, vmin, vmax) -> None:
     lat_sub = lat_arr[i_min : i_max + 1]
     data_sub = data_arr[i_min : i_max + 1, :]
 
-    lon_grid, lat_grid = np.meshgrid(lon_arr, lat_sub)
+    lon_grid, lat_grid = np.meshgrid(
+        coordinate_edges(lon_arr), coordinate_edges(lat_sub)
+    )
     x, y = m(lon_grid, lat_grid)
     return m.pcolormesh(
-        x, y, data_sub, shading="nearest", cmap=cmap, vmin=vmin, vmax=vmax
+        x, y, data_sub, shading="auto", cmap=cmap, vmin=vmin, vmax=vmax
     )
 
 
@@ -463,6 +482,7 @@ def to_dates(ds: xr.Dataset | xr.DataArray) -> xr.Dataset | xr.DataArray:
         .assign_coords(date=datetime_index)
         .sortby("date")
     )
+
 
 def global_mean(da: xr.DataArray) -> xr.DataArray:
     weights = np.cos(np.deg2rad(da.latitude))

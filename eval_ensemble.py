@@ -947,7 +947,7 @@ def main():
                 config.dataset.era5.raw_path,
                 eval_years,
                 range(1, 13),
-                config.preprocess.ecod.method == "fast",
+                config.preprocess.ecod.method,
             )
         )
     processed_dataset = xr.open_mfdataset(

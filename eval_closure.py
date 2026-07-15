@@ -1074,6 +1074,8 @@ def assign_mean_ecod(ds_monthly_means: xr.Dataset, config, profiles) -> xr.Datas
             profiles["clwc"],
             profiles["level"] * 100.0,
         ).compute()
+        if config.preprocess.ecod.method == "true_tcc":
+            ecod = ecod * ds_monthly_means["tcc"]
 
     return ds_monthly_means.assign(ecod=ecod)
 
@@ -1088,6 +1090,8 @@ def ecod_on_grid(config, ds, profiles):
         profiles["clwc"],
         profiles["level"] * 100.0,
     ).compute()
+    if config.preprocess.ecod.method == "true_tcc":
+        ecod = ecod * ds["tcc"]
     
     return ecod
 

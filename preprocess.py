@@ -24,9 +24,15 @@ from utils import (
 #    )
 
 
+def ecod_method_name(method=False):
+    if isinstance(method, bool):
+        return "fast" if method else "true"
+    return method
 
-def load_ecod(path: str, years, months, fast_ecod=False) -> xr.DataArray:
-    ecod_filename_fn = lambda year: make_ecod_filename(year, fast_ecod)
+
+def load_ecod(path: str, years, months, method=False) -> xr.DataArray:
+    method = ecod_method_name(method)
+    ecod_filename_fn = lambda year: make_ecod_filename(year, method)
     ds = load_yearly_and_filter_by_months(path, years, months, ecod_filename_fn)
 
     return ds.ecod
@@ -51,14 +57,15 @@ def load_cloud_profiles(
     )
 
 
-def cache_ecod(path: str, years, fast_ecod=False) -> None:
+def cache_ecod(path: str, years, method=False) -> None:
+    method = ecod_method_name(method)
     root = Path(path)
     for year in years:
-        output_path = root / make_ecod_filename(year, fast_ecod)
+        output_path = root / make_ecod_filename(year, method)
         if output_path.exists():
             continue
         raw = xr.open_dataset(root / make_era5_filename(year))
-        if fast_ecod:
+        if method == "fast":
             ecod = fast_compute_cloud_optical_depth(
                 raw["tclw"], raw["tciw"], raw["tcc"]
             )
@@ -68,7 +75,9 @@ def cache_ecod(path: str, years, fast_ecod=False) -> None:
                 profiles["ciwc"],
                 profiles["clwc"],
                 profiles["level"] * 100.0,
-            ) * raw["tcc"]
+            )
+            if method == "true_tcc":
+                ecod = ecod * raw["tcc"]
             profiles.close()
         print(f"Saving cached ECOD for {year} to {output_path}...")
         ecod.to_dataset(name="ecod").to_netcdf(output_path)
@@ -103,12 +112,12 @@ def preprocess(config_path):
 
     ### precompute ecod
     ecod_enabled = config.preprocess.ecod.enabled
-    ecod_fast = config.preprocess.ecod.method == "fast"
+    ecod_method = config.preprocess.ecod.method
     if ecod_enabled:
         cache_ecod(
             config.dataset.era5.raw_path,
             range(1990, 2021),
-            ecod_fast,
+            ecod_method,
         )
 
     ### load raw data
@@ -127,7 +136,7 @@ def preprocess(config_path):
     if ecod_enabled:
         train_ecod, val_ecod = [
             load_ecod(
-                config.dataset.era5.raw_path, years, config.dataset.months, ecod_fast
+                config.dataset.era5.raw_path, years, config.dataset.months, ecod_method
             )
             for years in train_val_years
         ]

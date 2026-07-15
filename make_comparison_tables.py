@@ -372,7 +372,7 @@ def load_raw_test_dataset(config):
                 config.dataset.era5.raw_path,
                 config.dataset.test_years,
                 range(1, 13),
-                config.preprocess.ecod.method == "fast",
+                config.preprocess.ecod.method,
             )
         )
     return ds
@@ -458,7 +458,7 @@ def kernel_metrics(config, model, preprocessor, years, dates, predictions):
                 config.dataset.era5.raw_path,
                 years,
                 range(1, 13),
-                config.preprocess.ecod.method == "fast",
+                config.preprocess.ecod.method,
             )
         )
         available_dates = {str(value)[:7] for value in raw.date.values}

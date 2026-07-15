@@ -29,7 +29,7 @@ def load_year(config, date, data_path):
             data_path,
             [year],
             None,
-            config.preprocess.ecod.method == "fast",
+            config.preprocess.ecod.method,
         )
         ds = ds.assign(ecod=ecod)
 

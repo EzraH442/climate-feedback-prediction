@@ -146,7 +146,7 @@ class ClimateTorchDataset(torch.utils.data.Dataset):
                             conf.dataset.era5.raw_path,
                             years,
                             months,
-                            conf.preprocess.ecod.method == "fast",
+                            conf.preprocess.ecod.method,
                         )
                     )
                 clear = self.variable_config.clear_sky_input(raw)
