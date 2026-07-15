@@ -21,7 +21,7 @@ def comet_experiment_key_path(checkpoint_dir: str) -> Path:
     return Path(checkpoint_dir) / "comet_experiment_key.txt"
 
 
-def stage_training_data(config_path: str) -> str:
+def stage_training_data(config_path: str, seed=None) -> str:
     config = load_config(config_path)
     slurm_tmpdir = Path(
         os.environ.get("SLURM_TMPDIR", Path(config.dataset.era5.path).resolve())
@@ -46,6 +46,8 @@ def stage_training_data(config_path: str) -> str:
             shutil.copy2(source, destination)
 
     config.dataset.era5.path = str(staged_data_dir)
+    if seed is not None:
+        config.seed = seed
     runtime_config_path = slurm_tmpdir / "train_runtime_config.yaml"
     OmegaConf.save(config, runtime_config_path)
     return str(runtime_config_path)
@@ -89,8 +91,8 @@ def create_comet_experiment(
     return experiment
 
 
-def train(config_path: str, resume: bool = True):
-    staged_config_path = stage_training_data(config_path)
+def train(config_path: str, resume: bool = True, seed=None):
+    staged_config_path = stage_training_data(config_path, seed)
     config = load_config(staged_config_path)
     assert isinstance(config, omegaconf.DictConfig), ""
 
@@ -196,6 +198,12 @@ def main():
         default="configs/model/fal/1990-2020_1-12_baseline.yaml",
     )
     parser.add_argument(
+        "--seed",
+        type=int,
+        help="Manual seed for training ensembles",
+        default=None,
+    )
+    parser.add_argument(
         "--resume",
         action="store_true",
         help="Whether to resume training from checkpoint if available",
@@ -209,7 +217,7 @@ def main():
     parser.set_defaults(resume=True)
     args = parser.parse_args()
 
-    train(args.config_file, args.resume)
+    train(args.config_file, args.resume, seed=args.seed)
 
 
 if __name__ == "__main__":
