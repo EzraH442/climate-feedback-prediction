@@ -48,6 +48,8 @@ def stage_training_data(config_path: str, seed=None) -> str:
     config.dataset.era5.path = str(staged_data_dir)
     if seed is not None:
         config.seed = seed
+        config.train.name = config.train.name + f"_seed_{seed}"
+        config.train.checkpoint_dir = config.train.checkpoint_dir + f"_seed_{seed}"
     runtime_config_path = slurm_tmpdir / "train_runtime_config.yaml"
     OmegaConf.save(config, runtime_config_path)
     return str(runtime_config_path)
