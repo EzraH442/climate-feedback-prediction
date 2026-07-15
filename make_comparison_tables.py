@@ -31,7 +31,7 @@ MODELS = {
     "sob_fal_clear": "configs/model/fal/2011-2014_3,6,9,12_sob_fal_clearsky.yaml",
     "sob_fal_clear_noozone": "configs/model/fal/2011-2014_3,6,9,12_sob_fal_clearsky_noozone.yaml",
     "sob_fal_fast_ecod": "configs/model/fal/2011-2014_3,6,9,12_sob_fal_fast-ecod.yaml",
-    "sob_fal_fast_ecod_noozone": "configs/model/fal/2011-2014_3,6,9,12_sob_fal_fast-ecod_noozone_legacy.yaml",
+    "sob_fal_fast_ecod_noozone": "configs/model/fal/2011-2014_3,6,9,12_sob_fal_fast-ecod_noozone.yaml",
     "sob_fal_clear_fast_ecod": "configs/model/fal/2011-2014_3,6,9,12_sob_fal_clearsky_fast-ecod.yaml",
     "sob_fal_tcwv": "configs/model/fal/2011-2014_3,6,9,12_sob_fal_tcwv.yaml",
     "sob_fal_tcwv_noozone": "configs/model/fal/2011-2014_3,6,9,12_sob_fal_tcwv_noozone.yaml",
@@ -205,6 +205,19 @@ def plot_scatter(x, y, save_path, title, x_label, y_label, max_points):
         y_flat = y_flat[idx]
     fig, ax = plt.subplots(figsize=(4, 4), dpi=200)
     ax.scatter(x_flat, y_flat, s=1, alpha=0.15, linewidths=0)
+    if x_flat.size >= 2 and np.ptp(x_flat) > 0 and np.ptp(y_flat) > 0:
+        slope, intercept = np.polyfit(x_flat, y_flat, 1)
+        x_line = np.array([float(np.min(x_flat)), float(np.max(x_flat))])
+        ax.plot(x_line, slope * x_line + intercept, color="black", linewidth=1)
+        r = float(np.corrcoef(x_flat, y_flat)[0, 1])
+        ax.text(
+            0.05,
+            0.95,
+            f"R = {r:.3f}",
+            transform=ax.transAxes,
+            va="top",
+            bbox={"facecolor": "white", "alpha": 0.75, "edgecolor": "none", "pad": 2},
+        )
     ax.set_xlabel(x_label)
     ax.set_ylabel(y_label)
     ax.set_title(title, fontsize=9)
