@@ -7,7 +7,7 @@ import numpy as np
 import xarray as xr
 import matplotlib.pyplot as plt
 
-from config_utils import load_config
+from config_utils import load_config, variable_config_from_omegaconf
 from eval import compute_nn_kernel_autograd, nn_pred
 from preprocess import load_ecod
 from utils import (
@@ -72,6 +72,19 @@ def metric(diff):
     return results
 
 
+def correlation(a, b):
+    a_values, b_values = xr.align(a, b, join="inner")
+    a_flat = np.asarray(a_values).ravel()
+    b_flat = np.asarray(b_values).ravel()
+    mask = np.isfinite(a_flat) & np.isfinite(b_flat)
+    if mask.sum() < 2:
+        return {"corr": float("nan"), "n": int(mask.sum())}
+    return {
+        "corr": float(np.corrcoef(a_flat[mask], b_flat[mask])[0, 1]),
+        "n": int(mask.sum()),
+    }
+
+
 def task_slug(name):
     return name.replace("/", "_").replace(" ", "_").replace(",", "").lower()
 
@@ -97,6 +110,107 @@ def write_tables(cache, output_dir):
                     for key in ("mbe", "abs_mbe", "rmse"):
                         row.append(new[key] - old[key] if key in new and key in old else "")
                     writer.writerow(row)
+
+
+def write_tsr_field_correlations(cache, output_dir):
+    path = output_dir / "tsr_field_correlations.csv"
+    with path.open("w", newline="", encoding="ascii") as f:
+        writer = csv.writer(f)
+        writer.writerow([
+            "model",
+            "field",
+            "tsr_residual_field_corr",
+            "tsr_residual_field_corr_n",
+            "tsr_field_corr",
+            "tsr_field_corr_n",
+            "tsrc_residual_field_corr",
+            "tsrc_residual_field_corr_n",
+            "tsrc_field_corr",
+            "tsrc_field_corr_n",
+        ])
+        for model_name in sorted(cache):
+            values = cache[model_name].get("tsr", {})
+            for field in ("tco3", "tcwv"):
+                if (
+                    f"tsr_residual_{field}_corr" not in values
+                    and f"tsr_{field}_corr" not in values
+                    and f"tsrc_residual_{field}_corr" not in values
+                    and f"tsrc_{field}_corr" not in values
+                ):
+                    continue
+                writer.writerow([
+                    model_name,
+                    field,
+                    values.get(f"tsr_residual_{field}_corr", ""),
+                    values.get(f"tsr_residual_{field}_corr_n", ""),
+                    values.get(f"tsr_{field}_corr", ""),
+                    values.get(f"tsr_{field}_corr_n", ""),
+                    values.get(f"tsrc_residual_{field}_corr", ""),
+                    values.get(f"tsrc_residual_{field}_corr_n", ""),
+                    values.get(f"tsrc_{field}_corr", ""),
+                    values.get(f"tsrc_{field}_corr_n", ""),
+                ])
+
+
+def write_tsr_field_scatter_plots(output_dir, manifest_path, max_points=200000):
+    if not manifest_path.exists():
+        return
+    manifest = json.loads(manifest_path.read_text(encoding="ascii"))
+    plot_dir = output_dir / "field_scatter_plots"
+    plot_dir.mkdir(parents=True, exist_ok=True)
+    field_labels = {"tco3": "ozone", "tcwv": "tcwv"}
+    y_labels = {
+        "tsr_true": "tsr",
+        "tsr_diff": "tsr_residual",
+        "tsrc_true": "tsrc",
+        "tsrc_diff": "tsrc_residual",
+    }
+    for model_name, path in manifest.items():
+        if not Path(path).exists():
+            continue
+        ds = xr.load_dataset(path)
+        try:
+            for field in ("tco3", "tcwv"):
+                field_var = f"{field}_field"
+                if field_var not in ds:
+                    continue
+                for y_name in ("tsr_true", "tsr_diff", "tsrc_true", "tsrc_diff"):
+                    if y_name not in ds:
+                        continue
+                    field_label = field_labels[field]
+                    y_label = y_labels[y_name]
+                    plot_scatter(
+                        ds[field_var],
+                        ds[y_name],
+                        plot_dir / f"{model_name}__{field_label}_vs_{y_label}.png",
+                        f"{model_name}: {field_label} vs {y_label}",
+                        field_label,
+                        y_label,
+                        max_points,
+                    )
+        finally:
+            ds.close()
+
+
+def plot_scatter(x, y, save_path, title, x_label, y_label, max_points):
+    x_values, y_values = xr.align(x, y, join="inner")
+    x_flat = np.asarray(x_values).ravel()
+    y_flat = np.asarray(y_values).ravel()
+    mask = np.isfinite(x_flat) & np.isfinite(y_flat)
+    x_flat = x_flat[mask]
+    y_flat = y_flat[mask]
+    if x_flat.size > max_points:
+        idx = np.linspace(0, x_flat.size - 1, max_points, dtype=int)
+        x_flat = x_flat[idx]
+        y_flat = y_flat[idx]
+    fig, ax = plt.subplots(figsize=(4, 4), dpi=200)
+    ax.scatter(x_flat, y_flat, s=1, alpha=0.15, linewidths=0)
+    ax.set_xlabel(x_label)
+    ax.set_ylabel(y_label)
+    ax.set_title(title, fontsize=9)
+    fig.tight_layout()
+    fig.savefig(save_path)
+    plt.close(fig)
 
 
 def metric_tasks(cache):
@@ -249,8 +363,29 @@ def load_processed_dataset(config):
     return xr.open_mfdataset(paths, combine="nested", concat_dim="date")
 
 
+def load_raw_test_dataset(config):
+    paths = generate_paths_yearly(config.dataset.era5.raw_path, config.dataset.test_years, make_era5_filename)
+    ds = xr.open_mfdataset(paths, combine="nested", concat_dim="date")
+    if config.preprocess.ecod.enabled:
+        ds = ds.assign(
+            ecod=load_ecod(
+                config.dataset.era5.raw_path,
+                config.dataset.test_years,
+                range(1, 13),
+                config.preprocess.ecod.method == "fast",
+            )
+        )
+    return ds
+
+
+def raw_field_on_grid(raw, field, target):
+    da = raw[field].sel(date=target.date)
+    return da.interp(latitude=target.latitude, longitude=target.longitude)
+
+
 def tsr_metric(config, model, preprocessor, predictions):
     ds = load_processed_dataset(config)
+    raw = None
     try:
         pred = nn_pred(ds, model, preprocessor, config, ["date", "latitude", "longitude"])
         true = preprocessor.preprocessors[-1].inverse_transform(ds)[config.dataset.target_var]
@@ -260,8 +395,56 @@ def tsr_metric(config, model, preprocessor, predictions):
         store_prediction(predictions, "tsr_pred", pred)
         store_prediction(predictions, "tsr_true", true)
         store_prediction(predictions, "tsr_diff", diff)
-        return metric(diff)
+        results = metric(diff)
+        physical_ds = preprocessor.preprocessors[-1].inverse_transform(ds)
+        clear_true = None
+        clear_diff = None
+        clear_var = config.dataset.clear_sky.var
+        if clear_var in physical_ds:
+            clear_true = physical_ds[clear_var] / SECONDS_PER_DAY
+            if config.dataset.clear_sky.enabled:
+                raw = load_raw_test_dataset(config)
+                vconf = variable_config_from_omegaconf(config)
+                clear_processed = preprocessor.transform(vconf.clear_sky_input(raw))
+                clear_pred = nn_pred(
+                    clear_processed,
+                    model,
+                    preprocessor,
+                    config,
+                    ["date", "latitude", "longitude"],
+                ) / SECONDS_PER_DAY
+                clear_diff = clear_pred - clear_true
+                store_prediction(predictions, "tsrc_pred", clear_pred)
+                store_prediction(predictions, "tsrc_true", clear_true)
+                store_prediction(predictions, "tsrc_diff", clear_diff)
+        for field in ("tco3", "tcwv"):
+            if field in physical_ds:
+                field_da = physical_ds[field]
+            else:
+                if raw is None:
+                    raw = load_raw_test_dataset(config)
+                if field not in raw:
+                    continue
+                field_da = raw_field_on_grid(raw, field, diff)
+            store_prediction(predictions, f"{field}_field", field_da)
+            corr = correlation(field_da, diff)
+            results[f"tsr_residual_{field}_corr"] = corr["corr"]
+            results[f"tsr_residual_{field}_corr_n"] = corr["n"]
+            corr = correlation(field_da, true)
+            results[f"tsr_{field}_corr"] = corr["corr"]
+            results[f"tsr_{field}_corr_n"] = corr["n"]
+            if clear_true is not None:
+                corr = correlation(field_da, clear_true)
+                results[f"tsrc_{field}_corr"] = corr["corr"]
+                results[f"tsrc_{field}_corr_n"] = corr["n"]
+            if clear_diff is not None:
+                corr = correlation(field_da, clear_diff)
+                results[f"tsrc_residual_{field}_corr"] = corr["corr"]
+                results[f"tsrc_residual_{field}_corr_n"] = corr["n"]
+        return results
     finally:
+        if raw is not None:
+            raw.close()
         ds.close()
 
 
@@ -401,9 +584,10 @@ def main():
     if north_cache:
         write_tables(north_cache, args.output_dir / "north_pole")
     write_residual_plots(cache, args.output_dir, args.output_dir / "prediction_cache_manifest.json")
+    write_tsr_field_correlations(cache, args.output_dir)
+    write_tsr_field_scatter_plots(args.output_dir, args.output_dir / "prediction_cache_manifest.json")
     print(f"wrote tables and cache under {args.output_dir}")
 
 
 if __name__ == "__main__":
     main()
-
