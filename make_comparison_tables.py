@@ -188,6 +188,27 @@ def write_tsr_field_scatter_plots(output_dir, manifest_path, max_points=200000):
                         y_label,
                         max_points,
                     )
+                if field == "tco3":
+                    date_dim = next(
+                        (dim for dim in ds[field_var].dims if dim.endswith("date")),
+                        None,
+                    )
+                    if date_dim is None:
+                        continue
+                    delta_ozone = ds[field_var] - ds[field_var].mean(date_dim)
+                    for y_name in ("tsr_diff", "tsrc_diff"):
+                        if y_name not in ds:
+                            continue
+                        y_label = y_labels[y_name]
+                        plot_scatter(
+                            delta_ozone,
+                            ds[y_name],
+                            plot_dir / f"{model_name}__delta_ozone_vs_{y_label}.png",
+                            f"{model_name}: delta ozone vs {y_label}",
+                            "delta ozone",
+                            y_label,
+                            max_points,
+                        )
         finally:
             ds.close()
 
@@ -213,7 +234,7 @@ def plot_scatter(x, y, save_path, title, x_label, y_label, max_points):
         ax.text(
             0.05,
             0.95,
-            f"R = {r:.3f}",
+            f"y = {slope:.3g}x {intercept:+.3g}\nR = {r:.3f}",
             transform=ax.transAxes,
             va="top",
             bbox={"facecolor": "white", "alpha": 0.75, "edgecolor": "none", "pad": 2},
