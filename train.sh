@@ -1,11 +1,11 @@
 #!/bin/bash
 #SBATCH --job-name=baseline
 #SBATCH --account=rrg-yihuang-ad
-#SBATCH --time=6:00:0
+#SBATCH --time=3:00:0
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=1
-#SBATCH --mem=6G
+#SBATCH --mem=3G
 #SBATCH --output=%x-%j.out
 #SBATCH --error=%x-%j.err
 #SBATCH --mail-type=ALL
