@@ -54,7 +54,7 @@ sentry_sdk==2.59.0+computecanada
 simplejson==3.20.2+computecanada
 smmap==5.0.3+computecanada
 toolz==1.1.0+computecanada
-torch==2.11.0+computecanada
+torch==2.13.0
 tqdm==4.67.3+computecanada
 typing_inspection==0.4.2+computecanada
 urllib3==2.6.3+computecanada
