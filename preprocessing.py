@@ -39,11 +39,6 @@ class ECOD_Calculator(Preprocessor):
         self.log = log
 
     def transform(self, ds):
-        if "ecod" not in ds:
-            raise ValueError(
-                "Dataset must contain cached 'ecod'. Run preprocess.py first."
-            )
-
         ds["ecod"] = ds.tcc * cod_from_water_path(ds.tclw * 1000, ds.tciw * 1000)
         if self.log:
             ds = ds.assign(ecod=np.log1p(ds["ecod"]))
@@ -287,7 +282,11 @@ class DianaPreprocessor(SequentialPreprocessor):
 
         self.scalar = XarrayMinMaxScaler(dim=("date", "latitude", "longitude"))
         preprocessors = [
-            (ECOD_Calculator(log=config.preprocess.ecod.log) if config.preprocess.ecod.enabled else Identity()),
+            (
+                ECOD_Calculator(log=config.preprocess.ecod.log)
+                if config.preprocess.ecod.enabled
+                else Identity()
+            ),
             VariableSelector(vars),
             (
                 Downscaler(factor=[("latitude", 4), ("longitude", 4)])
@@ -302,7 +301,7 @@ class DianaPreprocessor(SequentialPreprocessor):
     def fit(self, ds):
         super().fit(ds)
 
-        if self.config.dataset.clear_sky.enabled:
+        if ("all" in self.config.dataset.sky) and ("clear" in self.config.dataset.sky):
             self.scalar.update_shared_range(
                 var1=self.variable_config.target_var,
                 var2=self.variable_config.clear_sky_target,
