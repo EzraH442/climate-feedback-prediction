@@ -186,7 +186,7 @@ class ClimateTorchDataset(torch.utils.data.Dataset):
         x = self.x[date_idx, lat_idx, lon_idx]
         y = self.y[date_idx, lat_idx, lon_idx]
         if not self.sobolev:
-            return x, y, np.array(0)
+            return x, y, np.array([0])
         k = self.k[date_idx, lat_idx, lon_idx]
 
         return x, y, k
@@ -200,7 +200,7 @@ class ClimateTorchDataset(torch.utils.data.Dataset):
         x = self.x_clear[date_idx, lat_idx, lon_idx]
         y = self.y_clear[date_idx, lat_idx, lon_idx]
         if not self.sobolev:
-            return x, y, np.array(0)
+            return x, y, np.array([0])
         k = self.k_clear[date_idx, lat_idx, lon_idx]
 
         return x, y, k
