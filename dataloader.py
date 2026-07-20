@@ -161,7 +161,7 @@ class ClimateTorchDataset(torch.utils.data.Dataset):
                     self.dataset_kernels, dim_order
                 ),
             )
-            if "sky" in self.sky:
+            if "clear" in self.sky:
                 self.k_clear = load_or_create_mmap(
                     mmap_dir / make_mmap_stem(model_name, data_type, "k_clear"),
                     (*grid_shape, len(kernel_order)),
