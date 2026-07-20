@@ -70,8 +70,8 @@ def preprocess(config_path):
     ]
 
     # ensure tsrc is present if clear sky training is enabled
-    if config.dataset.clear_sky.enabled:
-        assert config.dataset.clear_sky.var in train_data.data_vars
+    if "clear" in config.dataset.sky:
+        assert config.dataset.clear_sky_var in train_data.data_vars
 
     ### load kernels data
     kernel_vars = config.dataset.kernel_vars
