@@ -91,18 +91,20 @@ def setup_north_pole_map(boundary: float = 60) -> Basemap:
     m.drawmeridians(np.arange(0.0, 360.0, 60.0))
     return m
 
-
-def coordinate_edges(values: np.ndarray) -> np.ndarray:
-    midpoints = (values[:-1] + values[1:]) / 2
-    return np.concatenate(
-        [
-            [values[0] - (midpoints[0] - values[0])],
-            midpoints,
-            [values[-1] + (values[-1] - midpoints[-1])],
-        ]
+def setup_south_pole_map(boundary: float = -60) -> Basemap:
+    m = Basemap(
+        projection="spstere",
+        boundinglat=boundary,
+        lon_0=0,
+        resolution="l",
     )
-
-
+    m.drawcoastlines()
+    m.drawcountries()
+    m.drawmapboundary(fill_color="white")
+    m.drawparallels(np.arange(-90.0, boundary + 1, 30.0))
+    m.drawmeridians(np.arange(0.0, 360.0, 60.0))
+    return m
+    
 def plot_colormesh_on_map(m, lon, lat, data, cmap, vmin, vmax) -> None:
     lon_arr = np.asarray(lon)
     lat_arr = np.asarray(lat)
@@ -117,13 +119,12 @@ def plot_colormesh_on_map(m, lon, lat, data, cmap, vmin, vmax) -> None:
     lat_sub = lat_arr[i_min : i_max + 1]
     data_sub = data_arr[i_min : i_max + 1, :]
 
-    lon_grid, lat_grid = np.meshgrid(
-        coordinate_edges(lon_arr), coordinate_edges(lat_sub)
-    )
+    lon_grid, lat_grid = np.meshgrid(lon_arr, lat_sub)
     x, y = m(lon_grid, lat_grid)
     return m.pcolormesh(
-        x, y, data_sub, shading="auto", cmap=cmap, vmin=vmin, vmax=vmax
+        x, y, data_sub, shading="nearest", cmap=cmap, vmin=vmin, vmax=vmax
     )
+
 
 
 def plot_contours_on_map(m, lon, lat, data, cmap, vmin, vmax) -> None:
@@ -221,6 +222,31 @@ def plot_north_pole_field(
     plt.savefig(save_path)
     plt.close(fig)
 
+def plot_south_pole_field(
+    field: np.ndarray,
+    lon: np.ndarray,
+    lat: np.ndarray,
+    title: str,
+    save_path: Path,
+    cmap: str = "RdBu_r",
+    vmin: float = -5,
+    vmax: float = 5,
+    label: str = r"$W/m^2 1\%$",
+    annotation: str | None = None,
+    boundary: float = -60,
+    contours=False,
+) -> None:
+    fig = plt.figure(figsize=(8, 8), dpi=300)
+    m = setup_south_pole_map(boundary=boundary)
+    artist = plot_colormesh_on_map(m, lon, lat, field, cmap=cmap, vmin=vmin, vmax=vmax)
+    if contours:
+        plot_contours_on_map(m, lon, lat, field, cmap=cmap, vmin=vmin, vmax=vmax)
+    if annotation is not None:
+        plt.text(x=300, y=np.max(lat) + 5, s=annotation, fontsize=20)
+    plt.title(title)
+    plt.colorbar(artist, orientation="horizontal", fraction=0.05, pad=0.07, label=label)
+    plt.savefig(save_path)
+    plt.close(fig)
 
 def setup_timeseries_plot():
     fig, ax = plt.subplots(figsize=(10, 3))
