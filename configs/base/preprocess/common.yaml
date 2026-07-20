@@ -5,6 +5,13 @@ dataset:
   clear_sky_var: 'tsrc'
   sky: ['all']
   input_vars: []
+  clear_sky_zero_vars:
+    - tcc
+    - hcc
+    - mcc
+    - lcc
+    - tciw
+    - tclw
   era5:
     raw_path: './data/era5'
   kernels:
