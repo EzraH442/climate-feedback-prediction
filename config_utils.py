@@ -28,22 +28,6 @@ def validate_config(config: DictConfig) -> None:
                 f"model.input_dim={config.model.input_dim} but dataset.input_vars has {len(input_vars)} fields."
             )
 
-    if "clear_sky_zero_vars" in config.dataset and "input_vars" in config.dataset:
-        input_vars = config.dataset.input_vars
-        missing = [
-            var for var in config.dataset.clear_sky_zero_vars
-            if var not in input_vars
-        ]
-        if missing:
-            raise ValueError(f"clear_sky_zero_vars not in dataset.input_vars: {missing}")
-
-    if (
-        "clear_sky_training" in config.dataset
-        and config.dataset.clear_sky.enabled
-        and not config.dataset.clear_sky_zero_vars
-    ):
-        raise ValueError("clear_sky_training requires dataset.clear_sky_zero_vars.")
-
     if "train" in config and "sobolev" in config.train:
         sobolev_vars = config.train.sobolev_vars
         input_vars = config.dataset.input_vars
@@ -162,6 +146,6 @@ def variable_config_from_omegaconf(config: DictConfig) -> VariableConfig:
         input_vars=config.dataset.input_vars,
         target_var=config.dataset.target_var,
         clear_sky_zero_vars=config.dataset.clear_sky_zero_vars,
-        clear_sky_target=config.dataset.clear_sky.var,
+        clear_sky_target=config.dataset.clear_sky_var,
         kernel_vars=config.dataset.kernel_vars,
     )
