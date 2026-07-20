@@ -15,33 +15,26 @@ dataset:
     - ecod
     - ecod_fal
   era5:
-    path: "./data/fal/era5_processed"
+    path: './data/fal/era5_processed'
   kernels:
-    raw_path: "./data/fal/kernels"
-    path: "./data/fal/kernels_processed"
-  train_years:
-    - 2011
-    - 2012
-    - 2013
-    - 2014
-  val_years:
-    - 2015
-  test_years:
-    - 2015
+    raw_path: './data/fal/kernels'
+    path: './data/fal/kernels_processed'
+  train_years: [2011, 2012, 2013, 2014]
+  val_years: [2015]
+  test_years: [2015]
 
 preprocess:
-  params_dir: "preprocess_states/fal/2011-2014_1-12"
+  params_dir: 'preprocess_states/fal/2011-2014_1-12'
   ecod:
     enabled: True
-    method: "true"
+    method: 'true'
 
 model:
   input_dim: 12
-  hidden_dim_sizes:
-    - 11
+  hidden_dim_sizes: [11]
 
 train:
-  name: "2011-2014_1-12_baseline"
-  checkpoint_dir: "./checkpoints/fal/2011-2014_1-12_baseline"
+  name: '2011-2014_1-12_baseline'
+  checkpoint_dir: './checkpoints/fal/2011-2014_1-12_baseline'
   sobolev: False
   sobolev_vars: []

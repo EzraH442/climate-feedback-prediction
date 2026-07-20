@@ -4,6 +4,8 @@ dataset:
   target_var: "tsr"
   input_vars: []
   kernel_vars: []
+  sky: ['all']
+  clear_sky_var: 'tsrc'
   clear_sky_zero_vars:
     - tcc
     - hcc
@@ -15,9 +17,6 @@ dataset:
     raw_path: './data/era5'
   kernels:
     raw_path: './data/kernels'
-  clear_sky:
-    enabled: False
-    var: "tsrc"
   train_years:
     - 1990
     - 1992

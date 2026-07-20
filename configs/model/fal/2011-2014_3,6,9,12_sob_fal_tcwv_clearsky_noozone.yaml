@@ -13,49 +13,32 @@ dataset:
     - tisr
     - ecod
     - ecod_fal
-  clear_sky:
-    enabled: True
-    var: "tsrc"
-  kernel_vars:
-    - fal
-    - tcwv
-  months:
-    - 3
-    - 6
-    - 9
-    - 12
+  sky: ['all', 'clear']
+  kernel_vars: ['fal', 'tcwv']
+  months: [3, 6, 9, 12]
   era5:
-    path: "./data/fal/era5_processed_mar_june_sep_dec_2011_2014_clearsky"
-    raw_path: "./data/era5"
+    path: './data/fal/era5_processed_mar_june_sep_dec_2011_2014_clearsky'
+    raw_path: './data/era5'
   kernels:
-    raw_path: "./data/fal/kernels"
-    path: "./data/fal/kernels_processed_mar_june_sep_dec_2011_2014_clearsky"
-  train_years:
-    - 2011
-    - 2012
-    - 2013
-    - 2014
-  val_years:
-    - 2015
-  test_years:
-    - 2015
+    raw_path: './data/fal/kernels'
+    path: './data/fal/kernels_processed_mar_june_sep_dec_2011_2014_clearsky'
+  train_years: [2011, 2012, 2013, 2014]
+  val_years: [2015]
+  test_years: [2015]
 
 preprocess:
-  params_dir: "preprocess_states/fal/2011-2014_3,6,9,12_clearsky"
+  params_dir: 'preprocess_states/fal/2011-2014_3,6,9,12_clearsky'
   ecod:
     enabled: True
-    method: "true"
+    method: 'true'
 
 model:
   input_dim: 11
-  hidden_dim_sizes:
-    - 11
+  hidden_dim_sizes: [11]
 
 train:
-  name: "2011-2014_3,6,9,12_sob_fal_tcwv_clearsky_noozone"
-  checkpoint_dir: "./checkpoints/fal/2011-2014_3,6,9,12_sob_fal_tcwv_clearsky_noozone"
+  name: '2011-2014_3,6,9,12_sob_fal_tcwv_clearsky_noozone'
+  checkpoint_dir: './checkpoints/fal/2011-2014_3,6,9,12_sob_fal_tcwv_clearsky_noozone'
   sobolev: True
-  sobolev_vars:
-    - fal
-    - tcwv
+  sobolev_vars: ['fal', 'tcwv']
   sobolev_alpha: 0.5

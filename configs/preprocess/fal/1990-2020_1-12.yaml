@@ -17,11 +17,11 @@ dataset:
   era5:
     path: './data/fal/era5_processed'
   kernels:
-    raw_path: "./data/fal/kernels"
+    raw_path: './data/fal/kernels'
     path: './data/fal/kernels_processed'
 
 preprocess:
   params_dir: 'preprocess_states/fal/1990-2020_1-12'
   ecod:
     enabled: True
-    method: "true"
+    method: 'true'

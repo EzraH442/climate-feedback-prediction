@@ -28,8 +28,7 @@ preprocess:
 
 model:
   input_dim: 12
-  hidden_dim_sizes:
-    - 11
+  hidden_dim_sizes: [11]
 
 train:
   name: "1990-2020_1-12_baseline"
