@@ -7,7 +7,6 @@ import torch
 import xarray as xr
 
 from config_utils import load_config, variable_config_from_omegaconf
-from preprocess import load_ecod
 from utils import (
     generate_paths_yearly,
     load_model_and_preprocessor,
@@ -23,15 +22,6 @@ def load_year(config, date, data_path):
         combine="nested",
         concat_dim="date",
     )
-
-    if config.preprocess.ecod.enabled:
-        ecod = load_ecod(
-            data_path,
-            [year],
-            None,
-            config.preprocess.ecod.method,
-        )
-        ds = ds.assign(ecod=ecod)
 
     return ds
 

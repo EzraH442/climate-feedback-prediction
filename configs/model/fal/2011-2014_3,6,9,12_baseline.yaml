@@ -14,14 +14,6 @@ dataset:
     - tisr
     - ecod
     - ecod_fal
-  clear_sky_zero_vars:
-    - hcc
-    - mcc
-    - lcc
-    - tciw
-    - tclw
-    - ecod
-    - ecod_fal
   months:
     - 3
     - 6

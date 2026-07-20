@@ -4,7 +4,13 @@ dataset:
   target_var: "tsr"
   input_vars: []
   kernel_vars: []
-  clear_sky_zero_vars: []
+  clear_sky_zero_vars:
+    - tcc
+    - hcc
+    - mcc
+    - lcc
+    - tciw
+    - tclw
   era5:
     raw_path: './data/era5'
   kernels:

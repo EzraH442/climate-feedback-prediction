@@ -7,10 +7,7 @@ import pandas as pd
 import torch
 import xarray as xr
 
-from config_utils import load_config
-from ecod_calculation import ecod_from_profiles
-from preprocess import load_cloud_profiles
-from preprocessing import fast_compute_cloud_optical_depth
+from config_utils import load_config, variable_config_from_omegaconf
 from utils import (
     SECONDS_PER_DAY,
     global_date_series,
@@ -102,28 +99,12 @@ def load_qt(years, months, kernel_grid) -> xr.Dataset:
     return ds_qt.interp(**kernel_grid)
 
 
-
-
-
-
-
-
 def generated_perturbed_dataset(mean_ds, full_ds, var_groups):
     perturbed = []
     for var_group in var_groups:
         perturbed.append(mean_ds.assign({var: full_ds[var] for var in var_group}))
     perturbed.append(full_ds)
     return xr.concat(perturbed, dim="perturbation")
-
-
-def clear_sky_input(config, ds):
-    clear_vars = set(config.dataset.clear_sky_zero_vars)
-    return ds.assign(
-        {
-            var: xr.zeros_like(ds[var])
-            for var in clear_vars.intersection(ds.data_vars)
-        }
-    )
 
 
 def perturbation_responses(
@@ -135,14 +116,15 @@ def perturbation_responses(
     var_groups,
     clear=False,
 ):
+    vc = variable_config_from_omegaconf(config)
     if clear:
         perturbed = []
         for var_group in var_groups:
             ds_p = mean_ds.assign({var: full_ds[var] for var in var_group})
-            perturbed.append(clear_sky_input(config, ds_p))
-        perturbed.append(clear_sky_input(config, full_ds))
+            perturbed.append(vc.clear_sky_input(ds_p))
+        perturbed.append(vc.clear_sky_input(full_ds))
         perturbed = xr.concat(perturbed, dim="perturbation")
-        original = clear_sky_input(config, mean_ds)
+        original = vc.clear_sky_input(mean_ds)
     else:
         perturbed = generated_perturbed_dataset(mean_ds, full_ds, var_groups)
         original = mean_ds
@@ -1078,54 +1060,6 @@ def compute_responses(
     )
     return base_responses
 
-def assign_mean_ecod(ds_monthly_means: xr.Dataset, config, profiles) -> xr.Dataset:
-    if not config.preprocess.ecod.enabled:
-        return ds_monthly_means
-
-    if config.preprocess.ecod.method == "fast":
-        ecod = fast_compute_cloud_optical_depth(
-            ds_monthly_means["tclw"],
-            ds_monthly_means["tciw"],
-            ds_monthly_means["tcc"],
-        )
-    else:
-        profiles = to_monthly(profiles.copy(deep=True)).mean("year")
-        ecod = ecod_from_profiles(
-            profiles["ciwc"],
-            profiles["clwc"],
-            profiles["level"] * 100.0,
-        ).compute()
-        if config.preprocess.ecod.method == "true_tcc":
-            ecod = ecod * ds_monthly_means["tcc"]
-
-    return ds_monthly_means.assign(ecod=ecod)
-
-def ecod_on_grid(config, ds, profiles):
-    if not config.preprocess.ecod.enabled:
-        return None
-    if config.preprocess.ecod.method == "fast":
-        return fast_compute_cloud_optical_depth(ds["tclw"], ds["tciw"], ds["tcc"])
-
-    ecod = ecod_from_profiles(
-        profiles["ciwc"],
-        profiles["clwc"],
-        profiles["level"] * 100.0,
-    ).compute()
-    if config.preprocess.ecod.method == "true_tcc":
-        ecod = ecod * ds["tcc"]
-    
-    return ecod
-
-def load_cloud_profiles_cached(path, years, months, target_grid, cache_dir=Path("cache/profiles")):
-    key = f"{min(years)}-{max(years)}_{'-'.join(map(str, sorted(months)))}"
-    cache_path = cache_dir / f"profiles_{key}.nc"
-    if cache_path.exists():
-        return xr.load_dataset(cache_path)
-    profiles = load_cloud_profiles(path, years, months, target_grid)
-    cache_dir.mkdir(parents=True, exist_ok=True)
-    profiles.compute().to_netcdf(cache_path)
-    return xr.load_dataset(cache_path)
-
 def main():
     global NORTH_BOUNDARY, NORTH_MASK
     K_a = xr.open_dataset(ALBEDO_KERNEL_PATH)
@@ -1213,14 +1147,8 @@ def main():
     ds["tsr"] = ds.tsr / SECONDS_PER_DAY
     ds["tsrc"] = ds.tsrc / SECONDS_PER_DAY
     
-    profiles = load_cloud_profiles(data_path, data_years, range(1, 13), K_a)
-    ecod = ecod_on_grid(config, ds, profiles)
-    ds = ds.assign(ecod=ecod)
-    
     ds_monthly = to_monthly(ds.copy(deep=True))
     ds_monthly_means = ds_monthly.mean("year")
-    ds_monthly_means = assign_mean_ecod(ds_monthly_means, config, profiles)
-    anomaly = ds_monthly - ds_monthly_means
 
     cloud_vars = ["hcc", "mcc", "lcc", "tciw", "tclw"]
     if config.preprocess.ecod.enabled and "ecod" in ds_monthly:

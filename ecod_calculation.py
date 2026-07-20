@@ -22,7 +22,7 @@ def Dge_from_ice_re(r_e_um=ICE_RE):
     return 8.0 * r_e_um / (3 ** 1.5) # 46.1880215352 x 10^-6
 
 
-def ecod_from_water_path(
+def cod_from_water_path(
     liquid_water_path, ice_water_path, liquid_re=LIQUID_RE, ice_re=ICE_RE
 ):
     """
@@ -115,5 +115,5 @@ def ecod_from_profiles(ciwc, clwc, level, liquid_re=LIQUID_RE, ice_re=ICE_RE):
     lwp = water_path_from_water_content(clwc, level)
     iwp = water_path_from_water_content(ciwc, level)
 
-    ecod = ecod_from_water_path(lwp, iwp, liquid_re=liquid_re, ice_re=ice_re)
+    ecod = cod_from_water_path(lwp, iwp, liquid_re=liquid_re, ice_re=ice_re)
     return ecod

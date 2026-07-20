@@ -38,17 +38,6 @@ def make_qt_filename(year):
     return f"era5_plev_qt_monthly_{year}.nc"
 
 
-def make_ecod_filename(year, method=False):
-    if isinstance(method, bool):
-        method = "fast" if method else "true"
-    prefix = {
-        "true": "era5_ecod",
-        "true_tcc": "era5_true_tcc_ecod",
-        "fast": "era5_fast_ecod",
-    }[method]
-    return f"{prefix}_monthly_{year}.nc"
-
-
 def generate_paths_yearly(base, years, filename_fn):
     return [Path(base) / filename_fn(year) for year in years]
 

@@ -11,13 +11,6 @@ dataset:
     - tclw
     - tcwv
     - ecod
-  clear_sky_zero_vars:
-    - hcc
-    - mcc
-    - lcc
-    - tciw
-    - tclw
-    - ecod
   target_var: "ttr"
   era5:
     path: './data/ts/era5_processed'

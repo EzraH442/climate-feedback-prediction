@@ -7,9 +7,6 @@ import torch
 import xarray as xr
 
 from config_utils import load_config, variable_config_from_omegaconf
-from preprocess import load_cloud_profiles
-from ecod_calculation import ecod_from_profiles
-from preprocessing import fast_compute_cloud_optical_depth
 from utils import (
     SECONDS_PER_DAY,
     generate_paths_yearly,
@@ -29,28 +26,6 @@ def load_point(config, date, latitude, longitude, data_path):
         combine="nested",
         concat_dim="date",
     ).sel(date=date, latitude=latitude, longitude=longitude, method="nearest")
-
-    if config.preprocess.ecod.enabled:
-        if config.preprocess.ecod.method == "fast":
-            ecod = fast_compute_cloud_optical_depth(ds.tclw, ds.tciw, ds.tcc)
-        else:
-            point_grid = xr.Dataset(
-                coords={
-                    "latitude": [float(ds.latitude)],
-                    "longitude": [float(ds.longitude)],
-                }
-            )
-            profiles = load_cloud_profiles(
-                data_path, [year], [int(date[5:7])], point_grid
-            )
-            ecod = ecod_from_profiles(
-                profiles.ciwc,
-                profiles.clwc,
-                profiles.level * 100.0,
-            ).sel(date=date, method="nearest")
-            if config.preprocess.ecod.method == "true_tcc":
-                ecod = ecod * ds.tcc
-        ds = ds.assign(ecod=ecod)
 
     return ds
 

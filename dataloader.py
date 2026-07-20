@@ -5,7 +5,6 @@ import numpy as np
 import torch
 
 from config_utils import load_config, variable_config_from_omegaconf
-from preprocess import load_ecod
 from preprocessing import DianaPreprocessor
 from utils import (
     make_combined_kernel_filename,
@@ -140,15 +139,6 @@ class ClimateTorchDataset(torch.utils.data.Dataset):
                     months=months,
                     filename_fn=make_era5_filename,
                 )
-                if conf.preprocess.ecod.enabled:
-                    raw = raw.assign(
-                        ecod=load_ecod(
-                            conf.dataset.era5.raw_path,
-                            years,
-                            months,
-                            conf.preprocess.ecod.method,
-                        )
-                    )
                 clear = self.variable_config.clear_sky_input(raw)
                 processed = preprocessor.transform(clear)
                 values = self.variable_config.inputs_np(processed, dim_order)

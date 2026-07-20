@@ -7,7 +7,6 @@ import torch
 import xarray as xr
 
 from config_utils import load_config, variable_config_from_omegaconf
-from preprocess import load_ecod
 from preprocessing import DianaPreprocessor
 
 from utils import (
@@ -898,15 +897,6 @@ def main():
     )
 
     raw_dataset = xr.open_mfdataset(raw_era5_paths, combine="nested", concat_dim="date")
-    if config.preprocess.ecod.enabled:
-        raw_dataset = raw_dataset.assign(
-            ecod=load_ecod(
-                config.dataset.era5.raw_path,
-                eval_years,
-                range(1, 13),
-                config.preprocess.ecod.method,
-            )
-        )
     processed_dataset = xr.open_mfdataset(
         test_era5_paths, combine="nested", concat_dim="date"
     )

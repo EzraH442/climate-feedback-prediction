@@ -16,14 +16,6 @@ dataset:
     - ecod_fal
   kernel_vars:
     - fal
-  clear_sky_zero_vars:
-    - hcc
-    - mcc
-    - lcc
-    - tciw
-    - tclw
-    - ecod
-    - ecod_fal
   clear_sky:
     enabled: True
     var: "tsrc"

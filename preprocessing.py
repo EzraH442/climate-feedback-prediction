@@ -6,6 +6,8 @@ import pickle
 
 
 from config_utils import variable_config_from_omegaconf
+from ecod_calculation import cod_from_water_path
+
 
 class Preprocessor:
     def __init__(self):
@@ -41,15 +43,16 @@ class ECOD_Calculator(Preprocessor):
             raise ValueError(
                 "Dataset must contain cached 'ecod'. Run preprocess.py first."
             )
+
+        ds["ecod"] = ds.tcc * cod_from_water_path(ds.tclw * 1000, ds.tciw * 1000)
         if self.log:
-            ds = ds.assign(ecod=np.log1p(ds['ecod']))
+            ds = ds.assign(ecod=np.log1p(ds["ecod"]))
         ds["ecod_fal"] = ds["ecod"] * ds["fal"]
-        ds = ds.drop_vars([var for var in ("ciwc", "clwc", "tcc") if var in ds])
         return ds
 
     def inverse_transform(self, ds):
         if self.log:
-            ds = ds.assign(ecod=(np.exp(ds['ecod'])-1))
+            ds = ds.assign(ecod=(np.exp(ds["ecod"]) - 1))
 
         """ECOD is derived, so we can't reverse it. Just return the dataset."""
         return ds

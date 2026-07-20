@@ -1,42 +1,17 @@
 from pathlib import Path
 
-from preprocessing import fast_compute_cloud_optical_depth, DianaPreprocessor
+from preprocessing import DianaPreprocessor
 import xarray as xr
 import argparse
 
 from config_utils import load_config
-from ecod_calculation import ecod_from_profiles
 from utils import (
     load_yearly_and_filter_by_months,
     make_era5_filename,
     make_combined_kernel_filename,
-    make_ecod_filename,
     make_cloud_profile_filename,
     make_kernel_filename,
 )
-
-# def load_yearly_monthly_data(path: str, years, months, filename_fn):
-#    paths = [Path(path) / filename_fn(year) for year in years]
-#    print(f"Loading data from: {paths}")
-#    return filter_by_months(
-#        xr.open_mfdataset(paths, combine="nested", concat_dim="date"),
-#        months,
-#    )
-
-
-def ecod_method_name(method=False):
-    if isinstance(method, bool):
-        return "fast" if method else "true"
-    return method
-
-
-def load_ecod(path: str, years, months, method=False) -> xr.DataArray:
-    method = ecod_method_name(method)
-    ecod_filename_fn = lambda year: make_ecod_filename(year, method)
-    ds = load_yearly_and_filter_by_months(path, years, months, ecod_filename_fn)
-
-    return ds.ecod
-
 
 def load_cloud_profiles(
     path: str, years, months, target_grid: xr.Dataset
@@ -55,33 +30,6 @@ def load_cloud_profiles(
         method="linear",
         kwargs={"fill_value": "extrapolate"},
     )
-
-
-def cache_ecod(path: str, years, method=False) -> None:
-    method = ecod_method_name(method)
-    root = Path(path)
-    for year in years:
-        output_path = root / make_ecod_filename(year, method)
-        if output_path.exists():
-            continue
-        raw = xr.open_dataset(root / make_era5_filename(year))
-        if method == "fast":
-            ecod = fast_compute_cloud_optical_depth(
-                raw["tclw"], raw["tciw"], raw["tcc"]
-            )
-        else:
-            profiles = load_cloud_profiles(path, [year], None, raw)
-            ecod = ecod_from_profiles(
-                profiles["ciwc"],
-                profiles["clwc"],
-                profiles["level"] * 100.0,
-            )
-            if method == "true_tcc":
-                ecod = ecod * raw["tcc"]
-            profiles.close()
-        print(f"Saving cached ECOD for {year} to {output_path}...")
-        ecod.to_dataset(name="ecod").to_netcdf(output_path)
-        raw.close()
 
 
 def interpolate_kernel_dataset(
@@ -110,17 +58,6 @@ def preprocess(config_path):
     input_vars = config.dataset.input_vars
     target_var = config.dataset.target_var
 
-    ### precompute ecod
-    ecod_enabled = config.preprocess.ecod.enabled
-    ecod_method = config.preprocess.ecod.method
-    if ecod_enabled:
-        cache_ecod(
-            config.dataset.era5.raw_path,
-            range(1990, 2021),
-            ecod_method,
-        )
-
-    ### load raw data
     train_val_years = [config.dataset.train_years, config.dataset.val_years]
     train_data, val_data = [
         load_yearly_and_filter_by_months(
@@ -131,17 +68,6 @@ def preprocess(config_path):
         )
         for years in train_val_years
     ]
-
-    # add ecod if enabled
-    if ecod_enabled:
-        train_ecod, val_ecod = [
-            load_ecod(
-                config.dataset.era5.raw_path, years, config.dataset.months, ecod_method
-            )
-            for years in train_val_years
-        ]
-        train_data = train_data.assign(ecod=train_ecod)
-        val_data = val_data.assign(ecod=val_ecod)
 
     # ensure tsrc is present if clear sky training is enabled
     if config.dataset.clear_sky.enabled:
