@@ -1,5 +1,5 @@
 from pathlib import Path
-from config_utils import variable_config_from_omegaconf
+from config_utils import variable_config_from_omegaconf, VariableConfig
 
 import numpy as np
 import pandas as pd
@@ -80,6 +80,7 @@ def setup_north_pole_map(boundary: float = 60) -> Basemap:
     m.drawmeridians(np.arange(0.0, 360.0, 60.0))
     return m
 
+
 def setup_south_pole_map(boundary: float = -60) -> Basemap:
     m = Basemap(
         projection="spstere",
@@ -93,7 +94,8 @@ def setup_south_pole_map(boundary: float = -60) -> Basemap:
     m.drawparallels(np.arange(-90.0, boundary + 1, 30.0))
     m.drawmeridians(np.arange(0.0, 360.0, 60.0))
     return m
-    
+
+
 def plot_colormesh_on_map(m, lon, lat, data, cmap, vmin, vmax) -> None:
     lon_arr = np.asarray(lon)
     lat_arr = np.asarray(lat)
@@ -113,7 +115,6 @@ def plot_colormesh_on_map(m, lon, lat, data, cmap, vmin, vmax) -> None:
     return m.pcolormesh(
         x, y, data_sub, shading="nearest", cmap=cmap, vmin=vmin, vmax=vmax
     )
-
 
 
 def plot_contours_on_map(m, lon, lat, data, cmap, vmin, vmax) -> None:
@@ -144,11 +145,11 @@ def plot_contours_on_map(m, lon, lat, data, cmap, vmin, vmax) -> None:
         step = data_range / 12
     true_min = np.min(data).values
     true_max = np.max(data).values
-    #print(true_min, true_max)
+    # print(true_min, true_max)
     levels_up = np.arange(0, true_max - 1 + step, step)
     levels_down = -np.arange(step, -true_min - 1 + step, step)
     levels = list(reversed(list(levels_down))) + list(levels_up)
-    #print(levels)
+    # print(levels)
 
     cs_halo = m.contour(x, y, data_sub, colors="white", linewidths=3.0, levels=levels)
     contours = m.contour(
@@ -211,6 +212,7 @@ def plot_north_pole_field(
     plt.savefig(save_path)
     plt.close(fig)
 
+
 def plot_south_pole_field(
     field: np.ndarray,
     lon: np.ndarray,
@@ -236,6 +238,7 @@ def plot_south_pole_field(
     plt.colorbar(artist, orientation="horizontal", fraction=0.05, pad=0.07, label=label)
     plt.savefig(save_path)
     plt.close(fig)
+
 
 def setup_timeseries_plot():
     fig, ax = plt.subplots(figsize=(10, 3))
@@ -307,9 +310,12 @@ def interpolate_spatial_field(
         data_vars={"field": (("latitude", "longitude"), data)},
         coords={"longitude": src_lon, "latitude": src_lat},
     )
-    return dataset.interp(longitude=dst_lon, latitude=dst_lat, method="linear", kwargs={"fill_value": "extrapolate"})[
-        "field"
-    ].to_numpy()
+    return dataset.interp(
+        longitude=dst_lon,
+        latitude=dst_lat,
+        method="linear",
+        kwargs={"fill_value": "extrapolate"},
+    )["field"].to_numpy()
 
 
 # ── Dataset construction & ordering ──────────────────────────────────────────
@@ -325,7 +331,7 @@ def kernel_title(var: str) -> str:
         "tcwv": "Water Vapor",
         "skt": "Surface Temperature",
         "ts": "Surface Temperature",
-        'ecod': "Effective Cloud Optical Depth",
+        "ecod": "Effective Cloud Optical Depth",
     }[var]
 
 
@@ -335,7 +341,7 @@ def kernel_label(var: str) -> str:
         "tcwv": r"$W/m^2 kg^{-1} m^2$",
         "skt": r"$W/m^2 K^{-1}$",
         "ts": r"$W/m^2 K^{-1}$",
-        'ecod': r"$W/m^2$",
+        "ecod": r"$W/m^2$",
     }[var]
 
 
@@ -347,7 +353,9 @@ def scale_minmax_value(scaler: XarrayMinMaxScaler, name: str, values):
     ) + scaler.min_val
 
 
-def load_model_and_preprocessor(config, checkpoint_path: Path, downscaling=True, override=None):
+def load_model_and_preprocessor(
+    config, checkpoint_path: Path, downscaling=True, override=None
+):
     checkpoint_data = torch.load(
         checkpoint_path, map_location="cpu", weights_only=False
     )
@@ -367,12 +375,9 @@ def nn_pred(
     ds: xr.Dataset,
     model: SimpleModel,
     preprocessor: DianaPreprocessor,
-    config,
+    variable_config: VariableConfig,
     dim_names=["month", "latitude", "longitude"],
 ) -> xr.DataArray:
-    target_var = config.dataset.target_var
-    variable_config = variable_config_from_omegaconf(config)
-
     inputs_np = variable_config.inputs_np(ds, dim_names + ["variable"])
     data_torch = torch.from_numpy(inputs_np).float()
     model_outputs = model(data_torch).detach()
@@ -380,7 +385,9 @@ def nn_pred(
     pred = (
         preprocessor.scalar.inverse_transform(
             xr.Dataset(
-                data_vars={target_var: (dim_names, model_outputs.numpy())},
+                data_vars={
+                    variable_config.target_var: (dim_names, model_outputs.numpy())
+                },
                 coords=ds.coords,
             )
         )
@@ -402,10 +409,7 @@ def compute_nn_kernel(
     vconf = variable_config_from_omegaconf(config)
     ds_base = vconf.clear_sky_input(ds) if clear else ds
     ds_p = ds_base.assign(
-        {
-            perturbation_var: ds_base[perturbation_var]
-            + kernel_delta(perturbation_var)
-        }
+        {perturbation_var: ds_base[perturbation_var] + kernel_delta(perturbation_var)}
     )
 
     pred = nn_pred(
@@ -415,7 +419,7 @@ def compute_nn_kernel(
         preprocessor.transform(ds_p), model, preprocessor, config, dim_order
     )
 
-    kernel = ((pred_perturbed - pred) / SECONDS_PER_DAY)
+    kernel = (pred_perturbed - pred) / SECONDS_PER_DAY
     return kernel.to_numpy().squeeze(axis=0), kernel.longitude, kernel.latitude
 
 
@@ -423,23 +427,22 @@ def compute_nn_kernel_autograd(
     ds: xr.Dataset,
     preprocessor: DianaPreprocessor,
     model: SimpleModel,
-    config,
+    variable_config,
     var="fal",
     clear=False,
     dim_order=["date", "latitude", "longitude", "variable"],
 ):
-    vconf = variable_config_from_omegaconf(config)
-    ds_base = vconf.clear_sky_input(ds) if clear else ds
+    ds_base = variable_config.clear_sky_input(ds) if clear else ds
     processed_ds = preprocessor.transform(ds_base)
     lon = processed_ds.longitude
     lat = processed_ds.latitude
 
-    target = vconf.target_var
+    target = variable_config.target_var
     input_var = var
-    feature_names = vconf.input_order()
+    feature_names = variable_config.input_order()
     input_idx = feature_names.index(input_var)
 
-    inputs_np = vconf.inputs_np(processed_ds, dim_order)
+    inputs_np = variable_config.inputs_np(processed_ds, dim_order)
     inputs = torch.from_numpy(inputs_np).float().requires_grad_(True)
 
     outputs = model(inputs)
@@ -451,14 +454,15 @@ def compute_nn_kernel_autograd(
     vmin, vmax = scaler.get_data_min(), scaler.get_data_max()
     target_range = float(vmax[target] - vmin[target])
     input_range = float(vmax[input_var] - vmin[input_var])
-    #print(f"{target.upper()} range", target_range)
-    #print(f"{input_var} range", input_range)
+    # print(f"{target.upper()} range", target_range)
+    # print(f"{input_var} range", input_range)
     grad_physical_per_unit = (
         grads.detach().cpu().numpy().squeeze(axis=0)
         * (target_range / input_range)
         / SECONDS_PER_DAY
     )
     return grad_physical_per_unit * kernel_delta(input_var), lon, lat
+
 
 def filter_by_years(ds: xr.Dataset, years, time_coord: str = "date") -> xr.Dataset:
     return ds.sel({time_coord: ds[time_coord].dt.year.isin(years)})

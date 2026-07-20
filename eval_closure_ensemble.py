@@ -133,14 +133,14 @@ def perturbation_responses(
         preprocessor.transform(perturbed),
         model,
         preprocessor,
-        config,
+        vc,
         ["perturbation", "year", "month", "latitude", "longitude"],
     )
     pred_original = nn_pred(
         preprocessor.transform(original),
         model,
         preprocessor,
-        config,
+        vc,
         ["month", "latitude", "longitude"],
     )
     diff = (pred_perturbed - pred_original) / SECONDS_PER_DAY

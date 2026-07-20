@@ -6,7 +6,7 @@ import numpy as np
 import torch
 import xarray as xr
 
-from config_utils import load_config, variable_config_from_omegaconf
+from config_utils import load_config, variable_config_from_omegaconf, VariableConfig
 from preprocessing import DianaPreprocessor
 
 from utils import (
@@ -39,17 +39,17 @@ def global_tsr_test(
     ds: xr.Dataset,
     preprocessor: DianaPreprocessor,
     model: SimpleModel,
-    config,
+    vc: VariableConfig,
     figures_path: Path = Path("."),
 ):
     lat = ds.latitude.values
     lon = ds.longitude.values
 
-    target = config.dataset.target_var
+    target = vc.target_var
     target_label = target.upper()
     output_dir = figure_dir(figures_path, "all", "tsr_test")
 
-    pred = nn_pred(ds, model, preprocessor, config, ["date", "latitude", "longitude"])
+    pred = nn_pred(ds, model, preprocessor, vc, ["date", "latitude", "longitude"])
     true = preprocessor.preprocessors[-1].inverse_transform(ds)[target]
 
     tsr_true = true.to_numpy() / SECONDS_PER_DAY
