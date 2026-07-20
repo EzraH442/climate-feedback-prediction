@@ -76,11 +76,6 @@ class ClimateTorchDataset(torch.utils.data.Dataset):
         self.sky = conf.dataset.sky
 
         self.clear_sky_target_var = self.variable_config.clear_sky_target
-        zero_vars = self.variable_config.clear_sky_zero_vars
-        self.clear_sky_zero_indices = [
-            self.variable_config.input_vars.index(var) for var in zero_vars
-        ]
-
         self.dataset_era5 = load_yearly_and_filter_by_months(
             path=conf.dataset.era5.path,
             years=years,
