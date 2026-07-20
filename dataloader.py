@@ -53,7 +53,6 @@ class ClimateTorchDataset(torch.utils.data.Dataset):
         self,
         config_path="configs/model/fal/1990-2020_1-12_baseline.yaml",
         data_type="train",
-        target_var=None,
     ):
         """
         Args:
@@ -65,7 +64,6 @@ class ClimateTorchDataset(torch.utils.data.Dataset):
         model_name = conf.train.name
 
         ### input setup
-        input_vars = conf.dataset.input_vars
 
         ### years and months to load
         years = (
@@ -74,11 +72,14 @@ class ClimateTorchDataset(torch.utils.data.Dataset):
         months = conf.dataset.months
         self.sobolev = bool(conf.train.sobolev)
 
-        ### optional clear sky training setup
-        self.clear_sky_enabled = bool(conf.dataset.clear_sky.enabled)
-        self.clear_sky_target_var = conf.dataset.clear_sky.var
-        zero_vars = conf.dataset.clear_sky_zero_vars
-        self.clear_sky_zero_indices = [input_vars.index(var) for var in zero_vars]
+        ### sky setup
+        self.sky = conf.dataset.sky
+
+        self.clear_sky_target_var = self.variable_config.clear_sky_target
+        zero_vars = self.variable_config.clear_sky_zero_vars
+        self.clear_sky_zero_indices = [
+            self.variable_config.input_vars.index(var) for var in zero_vars
+        ]
 
         self.dataset_era5 = load_yearly_and_filter_by_months(
             path=conf.dataset.era5.path,
@@ -107,8 +108,7 @@ class ClimateTorchDataset(torch.utils.data.Dataset):
             n_dates=self.n_dates,
             n_lon=self.n_lon,
         )
-        if self.clear_sky_enabled:
-            self.sample_weights = torch.cat([self.sample_weights, self.sample_weights])
+        self.sample_weights = torch.cat([self.sample_weights] * len(self.sky))
 
         slurm_tmpdir = os.getenv("SLURM_TMPDIR")
         if not slurm_tmpdir:
@@ -118,17 +118,19 @@ class ClimateTorchDataset(torch.utils.data.Dataset):
 
         grid_shape = (self.n_dates, self.n_lat, self.n_lon)
         dim_order = ["date", "latitude", "longitude", "variable"]
-        self.x = load_or_create_mmap(
-            mmap_dir / make_mmap_stem(model_name, data_type, "x"),
-            (*grid_shape, len(input_order)),
-            lambda: self.variable_config.inputs_np(self.dataset_era5, dim_order),
-        )
-        self.y = load_or_create_mmap(
-            mmap_dir / make_mmap_stem(model_name, data_type, "y"),
-            (*grid_shape,),
-            lambda: self.variable_config.outputs_np(self.dataset_era5),
-        )
-        if self.clear_sky_enabled:
+
+        if "all" in self.sky:
+            self.x = load_or_create_mmap(
+                mmap_dir / make_mmap_stem(model_name, data_type, "x"),
+                (*grid_shape, len(input_order)),
+                lambda: self.variable_config.inputs_np(self.dataset_era5, dim_order),
+            )
+            self.y = load_or_create_mmap(
+                mmap_dir / make_mmap_stem(model_name, data_type, "y"),
+                (*grid_shape,),
+                lambda: self.variable_config.outputs_np(self.dataset_era5),
+            )
+        if "clear" in self.sky:
 
             def build_x_clear():
                 preprocessor = DianaPreprocessor(conf)
@@ -164,7 +166,7 @@ class ClimateTorchDataset(torch.utils.data.Dataset):
                     self.dataset_kernels, dim_order
                 ),
             )
-            if self.clear_sky_enabled:
+            if "sky" in self.sky:
                 self.k_clear = load_or_create_mmap(
                     mmap_dir / make_mmap_stem(model_name, data_type, "k_clear"),
                     (*grid_shape, len(kernel_order)),
@@ -178,37 +180,54 @@ class ClimateTorchDataset(torch.utils.data.Dataset):
             self.dataset_kernels.close()
 
     def __len__(self):
-        return self.base_len * (2 if self.clear_sky_enabled else 1)
+        return self.base_len * len(self.sky)
 
-    def __getitem__(self, idx):
-        clear_sky_sample = self.clear_sky_enabled and idx >= self.base_len
-        if clear_sky_sample:
-            idx -= self.base_len
-
-        # Convert flat index to 4D indices
+    def _get_all(self, idx):
         date_idx = idx // (self.n_lat * self.n_lon)
         rem = idx % (self.n_lat * self.n_lon)
         lat_idx = rem // self.n_lon
         lon_idx = rem % self.n_lon
 
-        x_data = self.x_clear if clear_sky_sample else self.x
-        y_data = self.y_clear if clear_sky_sample else self.y
+        x = self.x[date_idx, lat_idx, lon_idx]
+        y = self.y[date_idx, lat_idx, lon_idx]
+        if not self.sobolev:
+            return x, y, np.array(0)
+        k = self.k[date_idx, lat_idx, lon_idx]
 
-        x = x_data[date_idx, lat_idx, lon_idx]
-        y = y_data[date_idx, lat_idx, lon_idx]
+        return x, y, k
 
-        if self.sobolev:
-            k_data = self.k_clear if clear_sky_sample else self.k
-            dy_dx = k_data[date_idx, lat_idx, lon_idx]
-            return (
-                torch.from_numpy(np.array(x, copy=True)).float(),
-                torch.as_tensor(y).float(),
-                torch.from_numpy(np.array(dy_dx, copy=True)).float(),
-            )
+    def _get_clear(self, idx):
+        date_idx = idx // (self.n_lat * self.n_lon)
+        rem = idx % (self.n_lat * self.n_lon)
+        lat_idx = rem // self.n_lon
+        lon_idx = rem % self.n_lon
 
+        x = self.x_clear[date_idx, lat_idx, lon_idx]
+        y = self.y_clear[date_idx, lat_idx, lon_idx]
+        if not self.sobolev:
+            return x, y, np.array(0)
+        k = self.k_clear[date_idx, lat_idx, lon_idx]
+
+        return x, y, k
+
+    def __getitem__(self, idx):
+        if len(self.sky) == 2:
+            clear_sky_sample = idx >= self.base_len
+            if clear_sky_sample:
+                idx -= self.base_len
+                x, y, k = self._get_clear(idx)
+            else:
+                x, y, k = self._get_all(idx)
+            pass
+        elif self.sky[0] == "all":
+            x, y, k = self._get_all(idx)
+        elif self.sky[0] == "clear":
+            x, y, k = self._get_clear(idx)
         else:
-            return (
-                torch.from_numpy(np.array(x, copy=True)).float(),
-                torch.as_tensor(y).float(),
-                torch.tensor(0),
-            )
+            raise NotImplementedError('path not implemented')
+
+        return (
+            torch.from_numpy(x).float(),
+            torch.from_numpy(y).float(),
+            torch.from_numpy(k).float(),
+        )
