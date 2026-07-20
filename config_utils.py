@@ -76,7 +76,7 @@ from dataclasses import dataclass
 
 @dataclass
 class VariableConfig:
-    input_vars: str
+    input_vars: list[str]
     target_var: str
     clear_sky_zero_vars: list[str]
     clear_sky_target: str
@@ -143,9 +143,9 @@ class VariableConfig:
 
 def variable_config_from_omegaconf(config: DictConfig) -> VariableConfig:
     return VariableConfig(
-        input_vars=config.dataset.input_vars,
+        input_vars=list(config.dataset.input_vars),
         target_var=config.dataset.target_var,
-        clear_sky_zero_vars=config.dataset.clear_sky_zero_vars,
+        clear_sky_zero_vars=list(config.dataset.clear_sky_zero_vars),
         clear_sky_target=config.dataset.clear_sky_var,
-        kernel_vars=config.dataset.kernel_vars,
+        kernel_vars=list(config.dataset.kernel_vars),
     )
