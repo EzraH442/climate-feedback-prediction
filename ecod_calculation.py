@@ -1,7 +1,7 @@
 import numpy as np
 import xarray as xr
 
-# Slingo (1989) Table 1 coefficients, liquid water, band 6 (0.44-0.48 um)
+# Slingo (1989) Table 1 coefficients, liquid water, band 9 (0.57-0.64 um)
 SLINGO_a = 2.381-2  # m^2 g^-1
 SLINGO_b = 1.317  # um m^2 g^-1
 LIQUID_RE = 10.0  # assumed liquid effective radius (um), per Zelinka et al. (2012)
@@ -19,7 +19,7 @@ def Dge_from_ice_re(r_e_um=ICE_RE):
         r_e = (3*sqrt(3)/8) * D_ge
 
     """
-    return (8.0 / (3.0 * np.sqrt(3.0))) * r_e_um
+    return (8.0 / (3.0 * np.sqrt(3.0))) * r_e_um # 46.1880215352 x 10^-6
 
 
 def ecod_from_water_path(
@@ -47,6 +47,7 @@ def ecod_from_water_path(
 
     """
     tau_liq = liquid_water_path * (SLINGO_a + SLINGO_b / liquid_re)
+    #print("c1:", (SLINGO_a + SLINGO_b / liquid_re))
 
     """
     Fu (1996) Eq. 3.9a:
@@ -55,6 +56,8 @@ def ecod_from_water_path(
 
     """
     tau_ice = ice_water_path * (FU_A0 + FU_A1 / Dge_from_ice_re(ice_re))
+    #print("c2:", (FU_A0 + FU_A1 / Dge_from_ice_re(ice_re)))
+
     return tau_liq + tau_ice
 
 
