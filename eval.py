@@ -148,21 +148,22 @@ def global_tsr_test(
 
 
 def global_tsrc_test(
-    ds: xr.Dataset,
+    raw_ds: xr.Dataset,
     preprocessor: DianaPreprocessor,
     model: SimpleModel,
     vc: VariableConfig,
     figures_path: Path = Path("."),
 ):
-    lat = ds.latitude.values
-    lon = ds.longitude.values
+    clear_processed = preprocessor.transform(vc.clear_sky_input(raw_ds))
+    lat = clear_processed.latitude.values
+    lon = clear_processed.longitude.values
 
     target = vc.clear_sky_target
     target_label = target.upper()
     output_dir = figure_dir(figures_path, "clr", "tsrc_test")
 
-    pred = nn_pred(vc.clear_sky_input(ds), model, preprocessor, vc, ["date", "latitude", "longitude"], clear=True)
-    true = preprocessor.preprocessors[-1].inverse_transform(ds)[target]
+    pred = nn_pred(clear_processed, model, preprocessor, vc, ["date", "latitude", "longitude"], clear=True)
+    true = preprocessor.preprocessors[-1].inverse_transform(clear_processed)[target]
 
     tsrc_true = true.to_numpy() / SECONDS_PER_DAY
     tsrc_pred = pred.to_numpy() / SECONDS_PER_DAY
@@ -986,6 +987,7 @@ def main():
     )
 
     raw_dataset = xr.open_mfdataset(raw_era5_paths, combine="nested", concat_dim="date")
+    raw_test_dataset = raw_dataset.sel(date=raw_dataset.date.dt.year.isin(config.dataset.test_years))
     processed_dataset = xr.open_mfdataset(
         test_era5_paths, combine="nested", concat_dim="date"
     )
@@ -1003,7 +1005,7 @@ def main():
         figures_path=output_dir,
     )
     global_tsrc_test(
-        ds=processed_dataset,
+        raw_ds=raw_test_dataset,
         preprocessor=preprocessor,
         model=model,
         vc=variable_config,
