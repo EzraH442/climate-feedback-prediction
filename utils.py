@@ -377,17 +377,17 @@ def nn_pred(
     preprocessor: DianaPreprocessor,
     variable_config: VariableConfig,
     dim_names=["month", "latitude", "longitude"],
+    clear=False,
 ) -> xr.DataArray:
     inputs_np = variable_config.inputs_np(ds, dim_names + ["variable"])
     data_torch = torch.from_numpy(inputs_np).float()
     model_outputs = model(data_torch).detach()
+    var = variable_config.clear_sky_target if clear else variable_config.target_var
 
     pred = (
         preprocessor.scalar.inverse_transform(
             xr.Dataset(
-                data_vars={
-                    variable_config.target_var: (dim_names, model_outputs.numpy())
-                },
+                data_vars={var: (dim_names, model_outputs.numpy())},
                 coords=ds.coords,
             )
         )
