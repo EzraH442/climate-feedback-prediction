@@ -91,19 +91,18 @@ def perturbation_responses(
     full_ds,
     model,
     preprocessor,
-    config,
+    variable_config,
     var_groups,
     clear=False,
 ):
-    vc = variable_config_from_omegaconf(config)
     if clear:
         perturbed = []
         for var_group in var_groups:
             ds_p = mean_ds.assign({var: full_ds[var] for var in var_group})
-            perturbed.append(vc.clear_sky_input(ds_p))
-        perturbed.append(vc.clear_sky_input(full_ds))
+            perturbed.append(variable_config.clear_sky_input(ds_p))
+        perturbed.append(variable_config.clear_sky_input(full_ds))
         perturbed = xr.concat(perturbed, dim="perturbation")
-        original = vc.clear_sky_input(mean_ds)
+        original = variable_config.clear_sky_input(mean_ds)
     else:
         perturbed = generated_perturbed_dataset(mean_ds, full_ds, var_groups)
         original = mean_ds
@@ -112,14 +111,14 @@ def perturbation_responses(
         preprocessor.transform(perturbed),
         model,
         preprocessor,
-        vc,
+        variable_config,
         ["perturbation", "year", "month", "latitude", "longitude"],
     )
     pred_original = nn_pred(
         preprocessor.transform(original),
         model,
         preprocessor,
-        vc,
+        variable_config,
         ["month", "latitude", "longitude"],
     )
     diff = (pred_perturbed - pred_original) / SECONDS_PER_DAY
@@ -959,7 +958,7 @@ def compute_responses(
     ds_monthly_means,
     model,
     preprocessor,
-    config,
+    variable_config,
     cloud_vars,
 ):
     print(ds_monthly)
@@ -973,7 +972,7 @@ def compute_responses(
         ds_monthly,
         model,
         preprocessor,
-        config,
+        variable_config,
         [["fal"], ["tcwv"], cloud_vars],
     )
     dR_a_nn_clr, dR_q_nn_clr, dR_nn_clr = perturbation_responses(
@@ -981,7 +980,7 @@ def compute_responses(
         ds_monthly,
         model,
         preprocessor,
-        config,
+        variable_config,
         [["fal"], ["tcwv"]],
         clear=True,
     )
@@ -1070,6 +1069,7 @@ def main():
 
     #  --- load model ---
     config = load_config(args.config_file)
+    variable_config = variable_config_from_omegaconf(config)
     checkpoint_path = (
         Path(args.checkpoint_path)
         if args.checkpoint_path
@@ -1106,14 +1106,10 @@ def main():
     ds_monthly_means = ds_monthly.mean("year")
     anomaly = ds_monthly - ds_monthly_means
 
-    cloud_vars = ["hcc", "mcc", "lcc", "tciw", "tclw"]
-    if config.preprocess.ecod.enabled and "ecod" in ds_monthly:
-        cloud_vars.append("ecod")
-
+    cloud_vars = variable_config.clear_sky_zero_vars
     if response_save_path.exists() and not args.overwrite_responses:
         print('='*20 + ' loaded cached responses ' + '='*20)
         responses = xr.load_dataset(response_save_path)
-        
         
     else:
         responses = compute_responses(
@@ -1121,7 +1117,7 @@ def main():
             ds_monthly_means,
             model,
             preprocessor,
-            config,
+            variable_config,
             cloud_vars,
         )
         # print(responses)
