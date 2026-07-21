@@ -151,7 +151,7 @@ def kernel_ecod_fal_contour_test(
     processed_ds: xr.Dataset,
     preprocessor: DianaPreprocessor,
     model: SimpleModel,
-    config,
+    config: VariableConfig,
     figures_path: Path = Path("."),
     date="2015-09",
     latitude=83.625,
@@ -183,7 +183,7 @@ def kernel_contour_test(
     processed_ds: xr.Dataset,
     preprocessor: DianaPreprocessor,
     model: SimpleModel,
-    config,
+    config: VariableConfig,
     figures_path: Path = Path("."),
     date="2015-09",
     latitude=83.625,
@@ -193,10 +193,9 @@ def kernel_contour_test(
     n=100,
 ):
     scaler = preprocessor.scalar
-    vconf = variable_config_from_omegaconf(config)
-    feature_names = vconf.input_order()
+    feature_names = config.input_order()
 
-    ordered = vconf.inputs(processed_ds)
+    ordered = config.inputs(processed_ds)
 
     base_point = ordered.sel(date=date, latitude=latitude, longitude=longitude)
     observed_base_point = scaler.inverse_transform(base_point)
@@ -235,7 +234,7 @@ def kernel_contour_test(
         :, feature_names.index(kernel_name)
     ]
 
-    target = config.dataset.target_var
+    target = config.target_var
     target_range = float(vmax[target] - vmin[target])
     input_range = float(vmax[kernel_name] - vmin[kernel_name])
     kernel = (
@@ -292,7 +291,7 @@ def tsr_ecod_fal_contour_test(
     processed_ds: xr.Dataset,
     preprocessor: DianaPreprocessor,
     model: SimpleModel,
-    config,
+    config: VariableConfig,
     figures_path: Path = Path("."),
     date="2015-09",
     latitude=83.625,
@@ -325,7 +324,7 @@ def tsr_contour_test(
     processed_ds: xr.Dataset,
     preprocessor: DianaPreprocessor,
     model: SimpleModel,
-    config,
+    config: VariableConfig,
     figures_path: Path = Path("."),
     date="2015-09",
     latitude=83.625,
@@ -335,11 +334,10 @@ def tsr_contour_test(
     n=100,
 ):
     scaler = preprocessor.scalar
-    vconf = variable_config_from_omegaconf(config)
-    target_var = vconf.target_var
-    feature_names = vconf.input_order()
+    target_var = config.target_var
+    feature_names = config.input_order()
 
-    ordered = vconf.inputs(processed_ds)
+    ordered = config.inputs(processed_ds)
     observed = scaler.inverse_transform(ordered)
     base_point = ordered.sel(date=date, latitude=latitude, longitude=longitude)
     observed_base_point = scaler.inverse_transform(base_point)
@@ -427,7 +425,7 @@ def kernel_date_test(
     ds: xr.Dataset,
     preprocessor: DianaPreprocessor,
     model: SimpleModel,
-    config,
+    config: VariableConfig,
     date,
     true_kernel: xr.Dataset,
     figures_path: Path = Path("."),
@@ -874,6 +872,7 @@ def main():
 
     # --- load model ---
     config = load_config(args.config_file)
+    variable_config = variable_config_from_omegaconf(config)
     checkpoint_path = (
         Path(args.checkpoint_path)
         if args.checkpoint_path
@@ -906,13 +905,13 @@ def main():
     preprocessor.load(config.preprocess.params_dir)
 
     # --- run tests ---
-    #global_tsr_test(
-    #    ds=processed_dataset,
-    #    preprocessor=preprocessor,
-    #    model=model,
-    #    config=config,
-    #    figures_path=output_dir,
-    #)#
+    global_tsr_test(
+        ds=processed_dataset,
+        preprocessor=preprocessor,
+        model=model,
+        vc=variable_config,
+        figures_path=output_dir,
+    )
 
     for kernel_name in ['tcwv']:##eval_kernel_vars(config):
         kernel_paths = generate_paths_yearly(
@@ -937,7 +936,7 @@ def main():
             ds=raw_dataset.sel(date="2015-09"),
             preprocessor=preprocessor,
             model=model,#
-            config=config,
+            config=variable_config,
             figures_path=output_dir,
             true_kernel=kernels_dataset.sel(date="2015-09"),
             date="2015-09",
@@ -965,26 +964,26 @@ def main():
         #)
         kernels_dataset.close()
 
-    #kernel_ecod_fal_contour_test(
-    #    processed_ds=processed_dataset,
-    #    preprocessor=preprocessor,
-    #    model=model,
-    #    config=config,
-    #    figures_path=output_dir,
-    #    scatter=False,
-    #    extrapolate=False,
-    #    date="2015-09",
-    #)
-    #tsr_ecod_fal_contour_test(
-    #    processed_ds=processed_dataset,
-    #    preprocessor=preprocessor,
-    #    model=model,
-    #    config=config,
-    #    figures_path=output_dir,
-    #    scatter=False,
-    #    extrapolate=False,
-    #    date="2015-09",
-    #)
+    kernel_ecod_fal_contour_test(
+        processed_ds=processed_dataset,
+        preprocessor=preprocessor,
+        model=model,
+        config=variable_config,
+        figures_path=output_dir,
+        scatter=False,
+        extrapolate=False,
+        date="2015-09",
+    )
+    tsr_ecod_fal_contour_test(
+        processed_ds=processed_dataset,
+        preprocessor=preprocessor,
+        model=model,
+        config=variable_config,
+        figures_path=output_dir,
+        scatter=False,
+        extrapolate=False,
+        date="2015-09",
+    )
 
 
 if __name__ == "__main__":
