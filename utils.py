@@ -401,22 +401,21 @@ def compute_nn_kernel(
     ds: xr.Dataset,
     preprocessor: DianaPreprocessor,
     model: SimpleModel,
-    config,
+    variable_config: VariableConfig,
     clear=False,
     dim_order=["date", "latitude", "longitude"],
     perturbation_var="fal",
 ):
-    vconf = variable_config_from_omegaconf(config)
-    ds_base = vconf.clear_sky_input(ds) if clear else ds
+    ds_base = variable_config.clear_sky_input(ds) if clear else ds
     ds_p = ds_base.assign(
         {perturbation_var: ds_base[perturbation_var] + kernel_delta(perturbation_var)}
     )
 
     pred = nn_pred(
-        preprocessor.transform(ds_base), model, preprocessor, config, dim_order
+        preprocessor.transform(ds_base), model, preprocessor, variable_config, dim_order
     )
     pred_perturbed = nn_pred(
-        preprocessor.transform(ds_p), model, preprocessor, config, dim_order
+        preprocessor.transform(ds_p), model, preprocessor, variable_config, dim_order
     )
 
     kernel = (pred_perturbed - pred) / SECONDS_PER_DAY
@@ -427,7 +426,7 @@ def compute_nn_kernel_autograd(
     ds: xr.Dataset,
     preprocessor: DianaPreprocessor,
     model: SimpleModel,
-    variable_config,
+    variable_config: VariableConfig,
     var="fal",
     clear=False,
     dim_order=["date", "latitude", "longitude", "variable"],
