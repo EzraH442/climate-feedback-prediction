@@ -147,6 +147,96 @@ def global_tsr_test(
     # fig.savefig("correlation.png")
 
 
+def global_tsrc_test(
+    ds: xr.Dataset,
+    preprocessor: DianaPreprocessor,
+    model: SimpleModel,
+    vc: VariableConfig,
+    figures_path: Path = Path("."),
+):
+    lat = ds.latitude.values
+    lon = ds.longitude.values
+
+    target = vc.clear_sky_target
+    target_label = target.upper()
+    output_dir = figure_dir(figures_path, "all", "tsr_test")
+
+    pred = nn_pred(vc.clear_sky_input(ds), model, preprocessor, vc, ["date", "latitude", "longitude"])
+    true = preprocessor.preprocessors[-1].inverse_transform(ds)[target]
+
+    tsrc_true = true.to_numpy() / SECONDS_PER_DAY
+    tsrc_pred = pred.to_numpy() / SECONDS_PER_DAY
+    diff_full = tsrc_pred - tsrc_true
+
+    tsrc_mean = np.mean(tsrc_true, axis=0)
+    tsrc_pred_mean = np.mean(tsrc_pred, axis=0)
+    mbe_map = np.mean(diff_full, axis=0)
+    rmse_map = np.sqrt(np.mean(diff_full**2, axis=0))
+
+    min_tsrc = min(np.min(tsrc_mean), np.min(tsrc_pred_mean))
+    max_tsrc = max(np.max(tsrc_mean), np.max(tsrc_pred_mean))
+    max_abs_mbe = np.max(np.abs(mbe_map))
+    max_rmse = np.max(rmse_map)
+
+    global_tsrc_mean = np.mean(tsrc_mean)
+    global_tsrc_pred_mean = np.mean(tsrc_pred_mean)
+    global_mbe = np.mean(mbe_map)
+    global_rmse = np.sqrt(np.mean(rmse_map**2))
+
+    print(f"Global MBE :  {global_mbe:.4f} W/m²")
+    print(f"Max MBE    :  {max_abs_mbe:.4f} W/m²")
+    print(f"Global RMSE:  {global_rmse:.4f} W/m²")
+    print(f"Max RMSE   :  {max_rmse:.4f} W/m²")
+
+    plot_global_field(
+        tsrc_mean,
+        lon,
+        lat,
+        f"{target_label} (ERA5)",
+        output_dir / "era5.png",
+        cmap="Spectral",
+        vmin=min_tsrc,
+        vmax=max_tsrc,
+        label="$W/m^2$",
+        annotation=f"{global_tsrc_mean:.2f}",
+    )
+    plot_global_field(
+        tsrc_pred_mean,
+        lon,
+        lat,
+        f"{target_label} (NN)",
+        output_dir / "nn.png",
+        cmap="Spectral",
+        vmin=min_tsrc,
+        vmax=max_tsrc,
+        label="$W/m^2$",
+        annotation=f"{global_tsrc_pred_mean:.2f}",
+    )
+    plot_global_field(
+        mbe_map,
+        lon,
+        lat,
+        "MBE",
+        output_dir / "mbe.png",
+        cmap="RdBu_r",
+        vmin=-20,
+        vmax=20,
+        label="$W/m^2$",
+        annotation=f"{global_mbe:.2f}",
+    )
+    plot_global_field(
+        rmse_map,
+        lon,
+        lat,
+        "RMSE",
+        output_dir / "rmse.png",
+        cmap="Blues",
+        vmin=0,
+        vmax=20,
+        label="$W/m^2$",
+        annotation=f"{global_rmse:.2f}",
+    )
+
 def kernel_ecod_fal_contour_test(
     processed_ds: xr.Dataset,
     preprocessor: DianaPreprocessor,
@@ -906,6 +996,13 @@ def main():
 
     # --- run tests ---
     global_tsr_test(
+        ds=processed_dataset,
+        preprocessor=preprocessor,
+        model=model,
+        vc=variable_config,
+        figures_path=output_dir,
+    )
+    global_tsrc_test(
         ds=processed_dataset,
         preprocessor=preprocessor,
         model=model,
