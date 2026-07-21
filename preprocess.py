@@ -126,7 +126,10 @@ def preprocess(config_path):
 
     scalar = preprocessor.scalar
     ranges = scalar.get_data_max() - scalar.get_data_min()
+
     target_range = ranges[target_var]
+    if len(config.dataset.sky) == 1 and config.dataset.sky[0] == 'clear':
+        target_range = ranges[config.dataset.clear_sky_var]
 
     processed_kernel = interpolate_kernel_dataset(
         kern_ds_combined,
