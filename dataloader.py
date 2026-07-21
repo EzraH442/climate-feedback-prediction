@@ -186,7 +186,7 @@ class ClimateTorchDataset(torch.utils.data.Dataset):
         x = self.x[date_idx, lat_idx, lon_idx]
         y = self.y[date_idx, lat_idx, lon_idx]
         if not self.sobolev:
-            return x, y, np.array([0])
+            return x, y, 0
         k = self.k[date_idx, lat_idx, lon_idx]
 
         return x, y, k
@@ -200,7 +200,7 @@ class ClimateTorchDataset(torch.utils.data.Dataset):
         x = self.x_clear[date_idx, lat_idx, lon_idx]
         y = self.y_clear[date_idx, lat_idx, lon_idx]
         if not self.sobolev:
-            return x, y, np.array([0])
+            return x, y, 0
         k = self.k_clear[date_idx, lat_idx, lon_idx]
 
         return x, y, k
@@ -222,7 +222,7 @@ class ClimateTorchDataset(torch.utils.data.Dataset):
             raise NotImplementedError('path not implemented')
 
         return (
-            torch.from_numpy(x).float(),
-            torch.from_numpy(y).float(),
-            torch.from_numpy(k).float(),
+            torch.from_numpy(x.copy()).float(),
+            torch.from_numpy(np.array(y)).float(),
+            torch.from_numpy(np.array(k)).float(),
         )
