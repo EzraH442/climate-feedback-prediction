@@ -913,7 +913,7 @@ def main():
         figures_path=output_dir,
     )
 
-    for kernel_name in ['tcwv']:##eval_kernel_vars(config):
+    for kernel_name in eval_kernel_vars(config):
         kernel_paths = generate_paths_yearly(
             config.dataset.kernels.raw_path,
             eval_years,

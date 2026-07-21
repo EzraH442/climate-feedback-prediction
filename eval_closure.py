@@ -1104,6 +1104,7 @@ def main():
     
     ds_monthly = to_monthly(ds.copy(deep=True))
     ds_monthly_means = ds_monthly.mean("year")
+    anomaly = ds_monthly - ds_monthly_means
 
     cloud_vars = ["hcc", "mcc", "lcc", "tciw", "tclw"]
     if config.preprocess.ecod.enabled and "ecod" in ds_monthly:
@@ -1127,7 +1128,6 @@ def main():
         # print(list(responses.data_vars))
         # print(responses.attrs)
         responses.to_netcdf(response_save_path)
-    """
     date_closure_test(
         anomaly,
         ds_monthly,
@@ -1139,7 +1139,6 @@ def main():
         month,
         skip_input_anomaly_plots=args.skip_input_anomaly_plots,
     )
-    """
     timeseries_test(
         responses,
         output_root,
