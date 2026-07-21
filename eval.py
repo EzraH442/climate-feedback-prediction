@@ -159,7 +159,7 @@ def global_tsrc_test(
 
     target = vc.clear_sky_target
     target_label = target.upper()
-    output_dir = figure_dir(figures_path, "all", "tsr_test")
+    output_dir = figure_dir(figures_path, "clr", "tsrc_test")
 
     pred = nn_pred(vc.clear_sky_input(ds), model, preprocessor, vc, ["date", "latitude", "longitude"])
     true = preprocessor.preprocessors[-1].inverse_transform(ds)[target]
