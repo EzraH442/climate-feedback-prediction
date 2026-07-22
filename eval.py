@@ -730,8 +730,8 @@ def kernel_date_test(
         f"NN finite difference-RRTM {title} Kernel (all)\n{date}",
         all_dir / "nn-rrtm.png",
         cmap="RdBu_r",
-        vmin=-1,
-        vmax=1,
+        vmin=-0.6,
+        vmax=0.6,
         label=label,
         annotation=f"{np.mean(diff_cld):.2f}; {np.mean(np.abs(diff_cld)):.2f}",
     )
@@ -742,8 +742,8 @@ def kernel_date_test(
         f"NN finite difference-RRTM {title} Kernel (clear)\n{date}",
         clr_dir / "nn-rrtm.png",
         cmap="RdBu_r",
-        vmin=-1,
-        vmax=1,
+        vmin=-0.6,
+        vmax=0.6,
         label=label,
         annotation=f"{np.mean(diff_clr):.2f}; {np.mean(np.abs(diff_clr)):.2f}",
     )
@@ -754,8 +754,8 @@ def kernel_date_test(
         f"NN autograd-RRTM {title} Kernel (all)\n{date}",
         all_dir / "nn_grad-rrtm.png",
         cmap="RdBu_r",
-        vmin=-1,
-        vmax=1,
+        vmin=-0.6,
+        vmax=0.6,
         label=label,
         annotation=f"{np.mean(diff_grad_cld):.2f}; {np.mean(np.abs(diff_grad_cld)):.2f}",
     )
@@ -909,8 +909,8 @@ def second_order_test(
         plot_grad_lat,
         "NN autograd kernel difference\n" + f"({dates[1]} minus {dates[0]})",
         output_dir / "nn_grad_np.png",
-        vmin=-1,
-        vmax=1,
+        vmin=-0.6,
+        vmax=0.6,
     )
     plot_north_pole_field(
         delta_k_rrtm,
@@ -918,8 +918,8 @@ def second_order_test(
         plot_lat,
         "ERA5 surface albedo kernel difference\n" + f"({dates[1]} minus {dates[0]})",
         output_dir / "rrtm_np.png",
-        vmin=-1,
-        vmax=1,
+        vmin=-0.6,
+        vmax=0.6,
     )
     # plot_north_pole_field(
     #    delta_k_diff, plot_lon, plot_lat,
@@ -933,8 +933,8 @@ def second_order_test(
         plot_grad_lat,
         r"$K_{NN,\mathrm{grad}} - K_{ERA5}$" + "\n" + f"({dates[1]} minus {dates[0]})",
         output_dir / "nn_grad-rrtm_np.png",
-        vmin=-1,
-        vmax=1,
+        vmin=-0.6,
+        vmax=0.6,
         annotation=f"{np.mean(delta_k_diff_grad[grad_north_mask]):.2f}; {np.mean(np.abs(delta_k_diff_grad[grad_north_mask])):.2f}",
     )
 
@@ -1041,16 +1041,16 @@ def main():
             date="2015-09",
             kernel_name=kernel_name,
         )
-        #second_order_test(
-        #    ds=raw_dataset,
-        #    preprocessor=preprocessor,
-        #    model=model,
-        #    config=config,
-        #    true_kernel=kernels_dataset,
-        #    dates=["2012-09", "2013-09"],
-        #    figures_path=output_dir,
-        #    kernel_name=kernel_name,
-        #)
+        second_order_test(
+            ds=raw_dataset,
+            preprocessor=preprocessor,
+            model=model,
+            config=variable_config,
+            true_kernel=kernels_dataset,
+            dates=["2012-09", "2013-09"],
+            figures_path=output_dir,
+            kernel_name=kernel_name,
+        )
         #kernel_date_test(
         #    ds=raw_dataset.sel(date="2015-12"),
         #    preprocessor=preprocessor,
