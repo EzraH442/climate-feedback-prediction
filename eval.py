@@ -834,7 +834,7 @@ def second_order_test(
 ):
     kernel_name = kernel_name or eval_kernel_vars(config)[0]
     output_dir = figure_dir(
-        figures_path, "clr", "second_order_test", kernel_name, f"{dates[1]}_minus_{dates[0]}"
+        figures_path, "all", "second_order_test", kernel_name, f"{dates[1]}_minus_{dates[0]}"
     )
     nn_kern_cld_1, lon, lat = compute_nn_kernel(
         ds.sel(date=dates[1]), preprocessor, model, config, perturbation_var=kernel_name
@@ -852,10 +852,10 @@ def second_order_test(
     delta_kern_nn_grad = nn_grad_cld_1 - nn_grad_cld_0
 
     rrtm_lat, rrtm_lon = true_kernel.latitude, true_kernel.longitude
-    rrtm_kern_cld_1 = true_kernel[kernel_name].sel(all_clr='clr', date=dates[1]).as_numpy()[
+    rrtm_kern_cld_1 = true_kernel[kernel_name].sel(all_clr='all', date=dates[1]).as_numpy()[
         0
     ] * kernel_delta(kernel_name)
-    rrtm_kern_cld_0 = true_kernel[kernel_name].sel(all_clr='clr', date=dates[0]).as_numpy()[
+    rrtm_kern_cld_0 = true_kernel[kernel_name].sel(all_clr='all', date=dates[0]).as_numpy()[
         0
     ] * kernel_delta(kernel_name)
     delta_kern_rrtm = rrtm_kern_cld_1 - rrtm_kern_cld_0
