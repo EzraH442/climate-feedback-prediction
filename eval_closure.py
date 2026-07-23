@@ -7,7 +7,7 @@ import pandas as pd
 import xarray as xr
 
 from config_utils import load_config, variable_config_from_omegaconf
-from utils import (
+from utils_cartopy import (
     SECONDS_PER_DAY,
     global_date_series,
     global_mean,

@@ -7,17 +7,17 @@ import pandas as pd
 import xarray as xr
 
 from config_utils import load_config, variable_config_from_omegaconf
-from utils import (
+from utils_cartopy import (
     SECONDS_PER_DAY,
     global_mean,
     integrate_over_pressure_levels,
     nn_pred,
     plot_global_field,
     plot_north_pole_field,
-    to_monthly,
     load_model_and_preprocessor,
     generate_paths_yearly,
     make_era5_filename,
+    make_qt_filename,
 )
 
 NORTH_BOUNDARY = 70
@@ -26,7 +26,6 @@ ALBEDO_KERNEL_PATH = Path("data/ERA5_kernels/ERA5_kernel_alb_TOA.nc")
 WATER_VAPOR_KERNEL_PATH = Path(
     "data/ERA5_kernels/layer_specified_ta_wv_kernel/ERA5_kernel_wv_sw_nodp_TOA.nc"
 )
-QT_PATH = Path("data/era5/era5_plev_qt_monthly_downscaled.nc")
 MONTH_NAMES = [
     "Jan",
     "Feb",
@@ -43,50 +42,68 @@ MONTH_NAMES = [
 ]
 
 
+def select_date_state(ds: xr.Dataset, date: str) -> xr.Dataset:
+    selected = ds.sel(date=date)
+    if "date" in selected.dims:
+        selected = selected.squeeze("date", drop=True)
+    return selected
+
+
+def select_kernel_month(ds: xr.Dataset, date: str) -> xr.Dataset:
+    if "month" not in ds.dims:
+        return ds
+    return ds.sel(month=pd.Timestamp(date).month, drop=True)
+
+
 def albedo_kernel_components(da, albedo_kernel) -> tuple[xr.DataArray, xr.DataArray]:
     dR_a_k = albedo_kernel.TOA_all * da * 100
     dR_a_k_clr = albedo_kernel.TOA_clr * da * 100
     return dR_a_k, dR_a_k_clr
 
 
-def water_vapor_kernel_components(
-    ds_monthly,
-    ds_qt,
+def load_qt_pair(
+    path: Path,
+    base_date: str,
+    perturbed_date: str,
+    kernel_grid,
+) -> xr.Dataset:
+    years = sorted({pd.Timestamp(date).year for date in (base_date, perturbed_date)})
+    ds_qt = xr.open_mfdataset(
+        generate_paths_yearly(path, years, make_qt_filename),
+        combine="nested",
+        concat_dim="date",
+    )
+    return ds_qt.sel(date=[base_date, perturbed_date]).interp(**kernel_grid)
+
+
+def water_vapor_kernel_components_pair(
+    base,
+    ds_qt_pair,
+    base_date: str,
+    perturbed_date: str,
     water_vapor_kernel,
 ) -> tuple[xr.DataArray, xr.DataArray]:
-    ds_qt_monthly = to_monthly(ds_qt.copy(deep=True))
-    ds_qt_anomaly = ds_qt_monthly - ds_qt_monthly.mean("year")
+    qt_base = select_date_state(ds_qt_pair, base_date)
+    qt_perturbed = select_date_state(ds_qt_pair, perturbed_date)
 
     Rv = 461.52
     Lv = 2260000
-    q = ds_qt_monthly.q
-    T = ds_qt_monthly.t
-    dq = ds_qt_anomaly.q
-    sp = ds_monthly.sp
+    q = qt_base.q
+    T = qt_base.t
+    dq = qt_perturbed.q - qt_base.q
     dT = (dq / q) * (Rv / Lv) * (T**2)
 
-    dR_q_k = integrate_over_pressure_levels(sp, water_vapor_kernel.TOA_all * dT)
-    dR_q_k_clr = integrate_over_pressure_levels(sp, water_vapor_kernel.TOA_clr * dT)
-
-    dR_q_k = dR_q_k.compute()
-    dR_q_k_clr = dR_q_k_clr.compute()
-
-    return dR_q_k, dR_q_k_clr
-
-
-def load_qt(years, months, kernel_grid) -> xr.Dataset:
-    ds_qt = xr.load_dataset(QT_PATH)
-    ds_qt = ds_qt.sel(date=ds_qt.date.dt.year.isin(years))
-    ds_qt = ds_qt.sel(date=ds_qt.date.dt.month.isin(months))
-    return ds_qt.interp(**kernel_grid)
+    dR_q_k = integrate_over_pressure_levels(base.sp, water_vapor_kernel.TOA_all * dT)
+    dR_q_k_clr = integrate_over_pressure_levels(base.sp, water_vapor_kernel.TOA_clr * dT)
+    return dR_q_k.compute(), dR_q_k_clr.compute()
 
 
 def generated_perturbed_dataset(base, perturbed, var_groups):
-    perturbed = []
+    states = []
     for var_group in var_groups:
-        perturbed.append(base.assign({var: perturbed[var] for var in var_group}))
-    perturbed.append(perturbed)
-    return xr.concat(perturbed, dim="perturbation")
+        states.append(base.assign({var: perturbed[var] for var in var_group}))
+    states.append(perturbed)
+    return xr.concat(states, dim="perturbation")
 
 
 def perturbation_responses(
@@ -99,30 +116,34 @@ def perturbation_responses(
     clear=False,
 ):
     if clear:
-        perturbed = []
+        states = []
         for var_group in var_groups:
             ds_p = base.assign({var: perturbed[var] for var in var_group})
-            perturbed.append(variable_config.clear_sky_input(ds_p))
-        perturbed.append(variable_config.clear_sky_input(perturbed))
-        perturbed = xr.concat(perturbed, dim="perturbation")
+            states.append(variable_config.clear_sky_input(ds_p))
+        states.append(variable_config.clear_sky_input(perturbed))
+        perturbed = xr.concat(states, dim="perturbation")
         original = variable_config.clear_sky_input(base)
     else:
         perturbed = generated_perturbed_dataset(base, perturbed, var_groups)
         original = base
 
+    perturbed_processed = preprocessor.transform(perturbed)
+    original_processed = preprocessor.transform(original)
     pred_perturbed = nn_pred(
-        preprocessor.transform(perturbed),
+        perturbed_processed,
         model,
         preprocessor,
         variable_config,
-        ["perturbation", "date", "latitude", "longitude"],
+        ["perturbation", "latitude", "longitude"],
+        clear=clear,
     )
     pred_original = nn_pred(
-        preprocessor.transform(original),
+        original_processed,
         model,
         preprocessor,
         variable_config,
-        ["date", "latitude", "longitude"],
+        ["latitude", "longitude"],
+        clear=clear,
     )
     diff = (pred_perturbed - pred_original) / SECONDS_PER_DAY
     return [diff.sel(perturbation=i) for i in range(len(diff.perturbation))]
@@ -143,14 +164,15 @@ def plot_field_pair(
     lon, lat = field.longitude, field.latitude
     field_masked = field.isel(latitude=NORTH_MASK)
 
-    mean = global_mean(field).values
-    mean_np = global_mean(field_masked).values
+    print(global_mean(field).values)
+    mean = float(global_mean(field).values)
+    mean_np = float(global_mean(field_masked).values)
     ann = f"{mean:.2f}"
     ann_np = f"{mean_np:.2f}"
 
     if ann_rmse:
-        rmse_val = np.sqrt(global_mean(field * field).values)
-        rmse_val_np = np.sqrt(global_mean(field_masked * field_masked).values)
+        rmse_val = np.sqrt(float(global_mean(field * field).values))
+        rmse_val_np = np.sqrt(float(global_mean(field_masked * field_masked).values))
 
         ann += f"; {rmse_val:.2f}"
         ann_np += f"; {rmse_val_np:.2f}"
@@ -186,8 +208,6 @@ def plot_input_anomalies(
     anomaly_ecod,
     dR_clr,
     output_dir: Path,
-    year: int,
-    month: int,
 ) -> None:
     specs = [
         ("fal", "", 0.5),
@@ -200,7 +220,7 @@ def plot_input_anomalies(
         ("tciw", "W/m^2", None),
         ("tclw", "W/m^2", None),
     ]
-    anomaly_slice = anomaly.sel(month=month, year=year).compute()
+    anomaly_slice = anomaly.compute()
     for var, label, fixed_vmax in specs:
         field = anomaly_slice[var]
         vmax = float(fixed_vmax if fixed_vmax is not None else np.max(np.abs(field)))
@@ -216,7 +236,7 @@ def plot_input_anomalies(
 
     for var, field, label in [
         ("ecod", anomaly_ecod, "ecod"),
-        ("tsrc", dR_clr.sel(month=month, year=year), "tsrc"),
+        ("tsrc", dR_clr, "tsrc"),
     ]:
         vmax = float(np.max(np.abs(field)))
         plot_field_pair(
@@ -232,8 +252,6 @@ def plot_input_anomalies(
 def plot_response_dataset(
     dataset: xr.Dataset,
     output_dir: Path,
-    year: int,
-    month: int,
     source: str,
     ann_rmse=False,
 ) -> None:
@@ -241,7 +259,7 @@ def plot_response_dataset(
         label = response.attrs.get("plot_label", name)
         filename = response.attrs["filename"]
         vmax = response.attrs.get("vmax")
-        field = response.sel(month=month, year=year)
+        field = response
         if vmax is None:
             vmax = float(np.max(np.abs(field)))
         plot_field_pair(
@@ -251,7 +269,7 @@ def plot_response_dataset(
             np_save_path=output_dir / "np" / filename,
             vmax=vmax,
             label="W/m^2",
-            np_vmax=24,
+            np_vmax=8,
             ann_rmse=ann_rmse,
         )
 
@@ -263,8 +281,6 @@ def date_closure_test(
     preprocessor,
     responses: xr.Dataset,
     output_root: Path,
-    year: int,
-    month: int,
     dR_co3_nn=None,
     dR_co3_nn_clr=None,
     skip_input_anomaly_plots=False,
@@ -279,8 +295,8 @@ def date_closure_test(
     (date_all / "np").mkdir(exist_ok=True, parents=True)
     dR = responses["dR_era5_all"]
     dR_clr = responses["dR_era5_clr"]
-    pp = preprocessor.transform(perturbed.sel(month=month, year=year))
-    ppm = preprocessor.transform(base.sel(month=month))
+    pp = preprocessor.transform(perturbed)
+    ppm = preprocessor.transform(base)
     anomaly_ecod = (pp - ppm).ecod.compute()
 
     if not skip_input_anomaly_plots:
@@ -289,8 +305,6 @@ def date_closure_test(
             anomaly_ecod,
             dR_clr,
             output_root,
-            year,
-            month,
         )
     nn_responses_to_print = [
         ("dR_nn", responses["dR_nn_all"]),
@@ -302,7 +316,7 @@ def date_closure_test(
         ("dR_q_nn_clr", responses["dR_q_nn_clr"]),
     ]
     for name, response in nn_responses_to_print:
-        print(name, np.max(np.abs(response.sel(month=month, year=year))).values)
+        print(name, np.max(np.abs(response)).values)
 
     plot_response_dataset(
         responses[["dR_a_nn_all", "dR_c_nn_all", "dR_q_nn_all"]].rename(
@@ -313,8 +327,6 @@ def date_closure_test(
             }
         ),
         date_all,
-        year,
-        month,
         "NN",
     )
     plot_response_dataset(
@@ -322,8 +334,6 @@ def date_closure_test(
             {"dR_a_nn_clr": "a", "dR_q_nn_clr": "q"}
         ),
         date_clear,
-        year,
-        month,
         "NN",
     )
 
@@ -334,15 +344,13 @@ def date_closure_test(
         ("dR_a_k_clr", responses["dR_a_k_clr"]),
         ("dR_q_k_clr", responses["dR_q_k_clr"]),
     ]:
-        print(name, np.max(np.abs(response.sel(month=month, year=year))).values)
+        print(name, np.max(np.abs(response)).values)
 
     plot_response_dataset(
         responses[["dR_a_k_all", "dR_q_k_all", "dR_c_k_all"]].rename(
             {"dR_a_k_all": "a", "dR_q_k_all": "q", "dR_c_k_all": "c"}
         ),
         date_all,
-        year,
-        month,
         "K",
     )
     plot_response_dataset(
@@ -350,8 +358,6 @@ def date_closure_test(
             {"dR_a_k_clr": "a", "dR_q_k_clr": "q"}
         ),
         date_clear,
-        year,
-        month,
         "K",
     )
 
@@ -382,10 +388,10 @@ def date_closure_test(
                 plot_label="sum,allcross", filename="dR_sum_allcross.png", vmax=55
             ),
             "res": dR_res_nn.assign_attrs(
-                plot_label="res", filename="dR_res.png", vmax=24
+                plot_label="res", filename="dR_res.png", vmax=8
             ),
             "res_allcross": dR_res_nn_allcross.assign_attrs(
-                plot_label="res,allcross", filename="dR_res_allcross.png", vmax=24
+                plot_label="res,allcross", filename="dR_res_allcross.png", vmax=8
             ),
         }
     )
@@ -396,7 +402,7 @@ def date_closure_test(
                 plot_label="sum", filename="k_dR_sum.png", vmax=55
             ),
             "res": dR_res_k.assign_attrs(
-                plot_label="res", filename="k_dR_res.png", vmax=24
+                plot_label="res", filename="k_dR_res.png", vmax=8
             ),
         }
     )
@@ -412,12 +418,12 @@ def date_closure_test(
                 vmax=55,
             ),
             "res_clr": dR_res_nn_clr.assign_attrs(
-                plot_label="res,clr", filename="dR_res,clr.png", vmax=24
+                plot_label="res,clr", filename="dR_res,clr.png", vmax=8
             ),
             "res_allcross_clr": dR_res_nn_allcross_clr.assign_attrs(
                 plot_label="res,allcross,clr",
                 filename="dR_res_allcross,clr.png",
-                vmax=24,
+                vmax=8,
             ),
         }
     )
@@ -428,16 +434,16 @@ def date_closure_test(
                 plot_label="sum,clr", filename="k_dR_sum,clr.png", vmax=60
             ),
             "res_clr": dR_res_k_clr.assign_attrs(
-                plot_label="res,clr", filename="k_dR_res,clr.png", vmax=24
+                plot_label="res,clr", filename="k_dR_res,clr.png", vmax=8
             ),
         }
     )
 
-    plot_response_dataset(nn_all_closure, date_all, year, month, "NN", ann_rmse=True)
-    plot_response_dataset(kernel_all_closure, date_all, year, month, "K", ann_rmse=True)
-    plot_response_dataset(nn_clr_closure, date_clear, year, month, "NN", ann_rmse=True)
+    plot_response_dataset(nn_all_closure, date_all, "NN", ann_rmse=True)
+    plot_response_dataset(kernel_all_closure, date_all, "K", ann_rmse=True)
+    plot_response_dataset(nn_clr_closure, date_clear, "NN", ann_rmse=True)
     plot_response_dataset(
-        kernel_clr_closure, date_clear, year, month, "K", ann_rmse=True
+        kernel_clr_closure, date_clear, "K", ann_rmse=True
     )
 
     cross_vars = ["dR_aq_nn_all", "dR_ac_nn_all", "dR_qc_nn_all"]
@@ -453,8 +459,6 @@ def date_closure_test(
             }
         ),
         date_all,
-        year,
-        month,
         "NN",
     )
 
@@ -477,8 +481,6 @@ def date_closure_test(
     plot_response_dataset(
         cross_closure,
         date_all,
-        year,
-        month,
         "NN",
     )
 
@@ -489,9 +491,12 @@ def compute_responses(
     model,
     preprocessor,
     variable_config,
+    base_date: str,
+    perturbed_date: str,
+    data_path: Path,
 ):
-    K_a = xr.open_dataset(ALBEDO_KERNEL_PATH)
-    K_q = xr.open_dataset(WATER_VAPOR_KERNEL_PATH)
+    K_a = select_kernel_month(xr.open_dataset(ALBEDO_KERNEL_PATH), perturbed_date)
+    K_q = select_kernel_month(xr.open_dataset(WATER_VAPOR_KERNEL_PATH), perturbed_date)
 
     kernel_grid = {"latitude": K_a.latitude, "longitude": K_a.longitude}
 
@@ -513,17 +518,15 @@ def compute_responses(
         clear=True,
     )
 
-    anomaly = base - perturbed
+    anomaly = perturbed - base
     dR_clr = anomaly.tsrc.compute()
     dR = anomaly.tsr.compute()
 
-    ds_qt = load_qt(
-        sorted(int(year) for year in base.year.values),
-        sorted(int(month) for month in base.month.values),
-        kernel_grid,
-    )
+    ds_qt = load_qt_pair(data_path, base_date, perturbed_date, kernel_grid)
     dR_a_k, dR_a_k_clr = albedo_kernel_components(anomaly.fal, K_a)
-    dR_q_k, dR_q_k_clr = water_vapor_kernel_components(base, ds_qt, K_q)
+    dR_q_k, dR_q_k_clr = water_vapor_kernel_components_pair(
+        base, ds_qt, base_date, perturbed_date, K_q
+    )
     dR_c_k = (dR - dR_clr) - (dR_a_k - dR_a_k_clr) - (dR_q_k - dR_q_k_clr)
 
     response_attrs = {
@@ -589,7 +592,6 @@ def main():
     args = parser.parse_args()
 
     # --- parse args ---
-    year, month = args.year, args.month
     d1, d2 = args.base_date, args.perturbed_date
 
     #  --- setup global vars ---
@@ -623,21 +625,19 @@ def main():
 
     # -- load necessary data
     data_path = Path(args.data_path)
-    parser.add_argument("--base_date", default="1992-09")
-    parser.add_argument("--perturbed_date", default="2012-09")
-
     dates = [d1, d2]
-    data_years = [pd.Timestamp(d).year for d in dates]
+    data_years = sorted({pd.Timestamp(d).year for d in dates})
     ds = xr.open_mfdataset(
         generate_paths_yearly(data_path, data_years, make_era5_filename),
         combine="nested",
         concat_dim="date",
     )
-    ds = ds.sel(date=dates).interp(**kernel_grid)
     ds["tsr"] = ds.tsr / SECONDS_PER_DAY
     ds["tsrc"] = ds.tsrc / SECONDS_PER_DAY
 
-    anomaly = ds.sel(date=d2) - ds.sel(date=d1)
+    base = select_date_state(ds, d1).interp(**kernel_grid)
+    perturbed = select_date_state(ds, d2).interp(**kernel_grid)
+    anomaly = perturbed - base
 
     if response_save_path.exists() and not args.overwrite_responses:
         print("=" * 20 + " loaded cached responses " + "=" * 20)
@@ -645,22 +645,23 @@ def main():
 
     else:
         responses = compute_responses(
-            d2,
-            d1,
+            perturbed,
+            base,
             model,
             preprocessor,
             variable_config,
+            d1,
+            d2,
+            data_path,
         )
         responses.to_netcdf(response_save_path)
     date_closure_test(
         anomaly,
-        d2,
-        d1,
+        perturbed,
+        base,
         preprocessor,
         responses,
         output_root,
-        year,
-        month,
         skip_input_anomaly_plots=args.skip_input_anomaly_plots,
     )
 
