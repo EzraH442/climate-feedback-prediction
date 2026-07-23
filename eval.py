@@ -9,7 +9,7 @@ import xarray as xr
 from config_utils import load_config, variable_config_from_omegaconf, VariableConfig
 from preprocessing import DianaPreprocessor
 
-from utils import (
+from utils_cartopy import (
     generate_paths_yearly,
     plot_global_field,
     plot_north_pole_field,
@@ -821,6 +821,13 @@ def kernel_date_test(
         annotation=f"{np.mean(diff_grad_clr[grad_north_mask]):.2f}; {np.mean(np.abs(diff_grad_clr[grad_north_mask])):.2f}",
     )
 
+def select_date_state(ds: xr.Dataset, date: str) -> xr.Dataset:
+    selected = ds.sel(date=date)
+    if "date" in selected.dims:
+        selected = selected.squeeze("date", drop=True)
+    return selected
+
+
 
 def second_order_test(
     ds: xr.Dataset,
@@ -828,34 +835,35 @@ def second_order_test(
     model: SimpleModel,
     config,
     true_kernel: xr.Dataset,
-    dates=["2013-09", "2012-09"],
+    dates=["2012-09", "2013-09"],
     figures_path: Path = Path("."),
     kernel_name=None,
 ):
     kernel_name = kernel_name or eval_kernel_vars(config)[0]
+    base_date, perturbed_date = dates
     output_dir = figure_dir(
-        figures_path, "all", "second_order_test", kernel_name, f"{dates[1]}_minus_{dates[0]}"
+        figures_path, "all", "second_order_test", kernel_name, f"{perturbed_date}_minus_{base_date}"
     )
     nn_kern_cld_1, lon, lat = compute_nn_kernel(
-        ds.sel(date=dates[1]), preprocessor, model, config, perturbation_var=kernel_name
+        ds.sel(date=perturbed_date), preprocessor, model, config, perturbation_var=kernel_name
     )
     nn_kern_cld_0, _, _ = compute_nn_kernel(
-        ds.sel(date=dates[0]), preprocessor, model, config, perturbation_var=kernel_name
+        ds.sel(date=base_date), preprocessor, model, config, perturbation_var=kernel_name
     )
     delta_kern_nn = nn_kern_cld_1 - nn_kern_cld_0
     nn_grad_cld_1, grad_lon, grad_lat = compute_nn_kernel_autograd(
-        ds.sel(date=dates[1]), preprocessor, model, config, var=kernel_name
+        ds.sel(date=perturbed_date), preprocessor, model, config, var=kernel_name
     )
     nn_grad_cld_0, _, _ = compute_nn_kernel_autograd(
-        ds.sel(date=dates[0]), preprocessor, model, config, var=kernel_name
+        ds.sel(date=base_date), preprocessor, model, config, var=kernel_name
     )
     delta_kern_nn_grad = nn_grad_cld_1 - nn_grad_cld_0
 
     rrtm_lat, rrtm_lon = true_kernel.latitude, true_kernel.longitude
-    rrtm_kern_cld_1 = true_kernel[kernel_name].sel(all_clr='all', date=dates[1]).as_numpy()[
+    rrtm_kern_cld_1 = true_kernel[kernel_name].sel(all_clr='all', date=perturbed_date).as_numpy()[
         0
     ] * kernel_delta(kernel_name)
-    rrtm_kern_cld_0 = true_kernel[kernel_name].sel(all_clr='all', date=dates[0]).as_numpy()[
+    rrtm_kern_cld_0 = true_kernel[kernel_name].sel(all_clr='all', date=base_date).as_numpy()[
         0
     ] * kernel_delta(kernel_name)
     delta_kern_rrtm = rrtm_kern_cld_1 - rrtm_kern_cld_0
@@ -897,6 +905,95 @@ def second_order_test(
 
     max_abs_diff = np.max(np.abs(delta_k_diff))
 
+    base = select_date_state(ds, base_date)
+    perturbed = select_date_state(ds, perturbed_date)
+    nn_base = nn_grad_cld_0
+    processed_base = preprocessor.transform(base)
+    processed_perturbed = preprocessor.transform(perturbed)
+    delta_fal = perturbed.fal - base.fal
+    delta_ecod = processed_perturbed.ecod - processed_base.ecod
+    fal_base_north = base.fal.where(base.fal.latitude >= 60, drop=True).to_numpy()
+    ecod_base_north = processed_base.ecod.where(processed_base.ecod.latitude >= 60, drop=True).to_numpy()
+    delta_fal_north = delta_fal.where(delta_fal.latitude >= 60, drop=True).to_numpy()
+    delta_ecod_north = delta_ecod.where(delta_ecod.latitude >= 60, drop=True).to_numpy()
+    plot_north_pole_field(
+        base.fal,
+        base.fal.longitude,
+        base.fal.latitude,
+        f"FAL ({base_date})",
+        output_dir / "fal_base_np.png",
+        cmap="Spectral",
+        vmin=0,
+        vmax=1,
+        annotation=f"{np.mean(fal_base_north):.2f}",
+    )
+    plot_north_pole_field(
+        processed_base.ecod,
+        processed_base.ecod.longitude,
+        processed_base.ecod.latitude,
+        f"ECOD ({base_date})",
+        output_dir / "ecod_base_np.png",
+        cmap="Spectral",
+        vmin=-1,
+        vmax=1,
+        annotation=f"{np.mean(ecod_base_north):.2f}",
+    )
+    plot_north_pole_field(
+        delta_fal,
+        delta_fal.longitude,
+        delta_fal.latitude,
+        f"$\\Delta$FAL ({perturbed_date} minus {base_date})",
+        output_dir / "delta_fal_np.png",
+        cmap="RdBu_r",
+        vmin=-0.2,
+        vmax=0.2,
+        annotation=f"{np.mean(delta_fal_north):.2f}; {np.mean(np.abs(delta_fal_north)):.2f}",
+    )
+    plot_north_pole_field(
+        delta_ecod,
+        delta_ecod.longitude,
+        delta_ecod.latitude,
+        f"$\\Delta$ECOD ({perturbed_date} minus {base_date})",
+        output_dir / "delta_ecod_np.png",
+        cmap="RdBu_r",
+        vmin=-1,
+        vmax=1,
+        annotation=f"{np.mean(delta_ecod_north):.2f}; {np.mean(np.abs(delta_ecod_north)):.2f}",
+    )
+    for label_name, fields in (
+        ("albedo_only", ["fal"]),
+        ("cloud_only", [var for var in config.clear_sky_zero_vars if var in ds]),
+    ):
+        hybrid = base.assign(
+            {var: (base[var].dims, perturbed[var].data) for var in fields}
+        )
+        hybrid_kern_nn, hybrid_lon, hybrid_lat = compute_nn_kernel_autograd(
+            hybrid.expand_dims(date=[base_date]),
+            preprocessor,
+            model,
+            config,
+            var=kernel_name,
+        )
+        if hybrid_kern_nn.shape != nn_base.shape:
+            hybrid_kern_nn = interpolate_spatial_field(
+                hybrid_kern_nn, hybrid_lon, hybrid_lat, lon, lat
+            )
+            hybrid_lon = lon
+            hybrid_lat = lat
+        hybrid_north_mask = hybrid_lat >= 60
+        hybrid_diff = hybrid_kern_nn - nn_base
+        plot_north_pole_field(
+            hybrid_diff,
+            hybrid_lon,
+            hybrid_lat,
+            f"$K_{{NN}} - K_{{NN,base}}$ with {label_name.replace('_', ' ')}\n"
+            f"base {base_date}; varied from {perturbed_date}",
+            output_dir / f"nn-rrtm_{label_name}_np.png",
+            vmin=-0.6,
+            vmax=0.6,
+            annotation=f"{np.mean(hybrid_diff[hybrid_north_mask]):.2f}; {np.mean(np.abs(hybrid_diff[hybrid_north_mask])):.2f}",
+        )
+
     # plot_north_pole_field(
     #    delta_k_nn, plot_lon, plot_lat,
     #    "NN surface albedo kernel difference\n"+f"({dates[1]} minus f{dates[0]})",
@@ -907,7 +1004,7 @@ def second_order_test(
         delta_k_nn_grad,
         plot_grad_lon,
         plot_grad_lat,
-        "NN autograd kernel difference\n" + f"({dates[1]} minus {dates[0]})",
+        "NN autograd kernel difference\n" + f"({perturbed_date} minus {base_date})",
         output_dir / "nn_grad_np.png",
         vmin=-0.6,
         vmax=0.6,
@@ -916,7 +1013,7 @@ def second_order_test(
         delta_k_rrtm,
         plot_lon,
         plot_lat,
-        "ERA5 surface albedo kernel difference\n" + f"({dates[1]} minus {dates[0]})",
+        "ERA5 surface albedo kernel difference\n" + f"({perturbed_date} minus {base_date})",
         output_dir / "rrtm_np.png",
         vmin=-0.6,
         vmax=0.6,
@@ -931,12 +1028,13 @@ def second_order_test(
         delta_k_diff_grad,
         plot_grad_lon,
         plot_grad_lat,
-        r"$K_{NN,\mathrm{grad}} - K_{ERA5}$" + "\n" + f"({dates[1]} minus {dates[0]})",
+        r"$K_{NN,\mathrm{grad}} - K_{ERA5}$" + "\n" + f"({perturbed_date} minus {base_date})",
         output_dir / "nn_grad-rrtm_np.png",
         vmin=-0.6,
         vmax=0.6,
         annotation=f"{np.mean(delta_k_diff_grad[grad_north_mask]):.2f}; {np.mean(np.abs(delta_k_diff_grad[grad_north_mask])):.2f}",
     )
+
 
 
 def main():
@@ -1025,7 +1123,7 @@ def main():
         #    ds=raw_dataset.sel(date="2013-09"),
         #    preprocessor=preprocessor,
         #    model=model,
-        #    config=config,
+        #    config=variable_config,
         #    figures_path=output_dir,
         #    true_kernel=kernels_dataset.sel(date="2013-09"),
         #    date="2013-09",
@@ -1047,7 +1145,7 @@ def main():
             model=model,
             config=variable_config,
             true_kernel=kernels_dataset,
-            dates=["2012-09", "2013-09"],
+            #dates=["2012-09", "2013-09"],
             figures_path=output_dir,
             kernel_name=kernel_name,
         )
