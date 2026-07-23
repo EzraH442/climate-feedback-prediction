@@ -6,6 +6,7 @@ import pandas as pd
 import xarray as xr
 import cartopy.crs as ccrs
 import matplotlib.pyplot as plt
+from cartopy.mpl.gridliner import LATITUDE_FORMATTER, LONGITUDE_FORMATTER
 from matplotlib.path import Path as MplPath
 
 from preprocessing import XarrayMinMaxScaler, DianaPreprocessor
@@ -69,7 +70,17 @@ def setup_north_pole_map(boundary: float = 60):
     ax = plt.axes(projection=ccrs.NorthPolarStereo(central_longitude=0))
     ax.set_extent([-180, 180, boundary, 90], ccrs.PlateCarree())
     ax.coastlines()
-    ax.gridlines(xlocs=np.arange(-180, 181, 60), ylocs=np.arange(boundary, 91, 10))
+    gl = ax.gridlines(
+        draw_labels=True,
+        xlocs=np.arange(-180, 181, 60),
+        ylocs=np.arange(boundary, 91, 10),
+    )
+    gl.xformatter = LONGITUDE_FORMATTER
+    gl.yformatter = LATITUDE_FORMATTER
+    gl.top_labels = False
+    gl.right_labels = False
+    ax.set_xlabel("Longitude")
+    ax.set_ylabel("Latitude")
     _set_round_boundary(ax)
     ax._plot_lat_bounds = (boundary, 90.0)
     return ax
