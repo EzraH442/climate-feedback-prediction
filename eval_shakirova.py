@@ -164,7 +164,6 @@ def plot_field_pair(
     lon, lat = field.longitude, field.latitude
     field_masked = field.isel(latitude=NORTH_MASK)
 
-    print(global_mean(field).values)
     mean = float(global_mean(field).values)
     mean_np = float(global_mean(field_masked).values)
     ann = f"{mean:.2f}"
