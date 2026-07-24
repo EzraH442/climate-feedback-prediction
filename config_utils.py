@@ -28,6 +28,18 @@ def validate_config(config: DictConfig) -> None:
                 f"model.input_dim={config.model.input_dim} but dataset.input_vars has {len(input_vars)} fields."
             )
 
+    scheduler = config.get("optimizer", {}).get("scheduler")
+    if scheduler is not None and scheduler.type.lower() in (
+        "reduce_on_plateau",
+        "reduce_lr_on_plateau",
+    ):
+        patience = int(scheduler.get("patience", 10))
+        max_without_improvement = int(config.train.max_epochs_without_improvement)
+        if patience >= max_without_improvement:
+            raise ValueError(
+                "optimizer.scheduler.patience must be lower than train.max_epochs_without_improvement."
+            )
+
     if "train" in config and "sobolev" in config.train:
         sobolev_vars = config.train.sobolev_vars
         input_vars = config.dataset.input_vars
