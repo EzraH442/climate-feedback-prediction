@@ -18,7 +18,7 @@ filelock==3.29.0+computecanada
 findlibs==0.0.2+computecanada
 fsspec==2026.3.0+computecanada
 gitdb==4.0.12+computecanada
-gitpython==3.1.49+computecanada
+gitpython==3.1.52
 idna==3.12+computecanada
 importlib_metadata==9.0.0+computecanada
 jinja2==3.1.6+computecanada
