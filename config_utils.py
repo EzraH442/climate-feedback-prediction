@@ -36,6 +36,20 @@ def validate_config(config: DictConfig) -> None:
         missing = [var for var in sobolev_vars if var not in input_vars]
         if missing:
             raise ValueError(f"train.sobolev_vars not in dataset.input_vars: {missing}")
+
+        weights = config.train.get("sobolev_var_weights", {})
+        unknown_weights = [var for var in weights if var not in sobolev_vars]
+        if unknown_weights:
+            raise ValueError(
+                f"train.sobolev_var_weights keys not in train.sobolev_vars: {unknown_weights}"
+            )
+        nonpositive_weights = [
+            var for var, weight in weights.items() if float(weight) <= 0
+        ]
+        if nonpositive_weights:
+            raise ValueError(
+                f"train.sobolev_var_weights must be positive: {nonpositive_weights}"
+            )
         
         if config.train.sobolev:
             missing = [
