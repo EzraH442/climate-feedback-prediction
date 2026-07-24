@@ -76,6 +76,7 @@ train:
   area_weighted_sampling: False
   sobolev: False
   sobolev_vars: []
+  sobolev_var_weights: {}
 
 wandb:
   project: 'climate-feedback-sobolev'

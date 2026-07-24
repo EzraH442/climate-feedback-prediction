@@ -399,6 +399,11 @@ class SimpleModelSobolevTrainer:
         sobolev_vars = self.config.train.sobolev_vars
         input_vars = self.config.dataset.input_vars
         self.sobolev_input_indices = [input_vars.index(var) for var in sobolev_vars]
+        sobolev_var_weights = self.config.train.get("sobolev_var_weights", {})
+        self.sobolev_var_weights = torch.tensor(
+            [float(sobolev_var_weights.get(var, 1.0)) for var in sobolev_vars],
+            device=self.device,
+        )
 
     def checkpoint(self, epoch, is_best=False):
         if not os.path.exists(self.config.train.checkpoint_dir):
@@ -460,7 +465,9 @@ class SimpleModelSobolevTrainer:
                 )
 
             loss_0 = F.mse_loss(y_pred, y)
-            loss_1 = self.sobolev_alpha * F.mse_loss(grads, kernels)
+            loss_1 = self.sobolev_alpha * (
+                (grads - kernels).square() * self.sobolev_var_weights
+            ).mean()
             loss = loss_0 + loss_1
 
             if train:
