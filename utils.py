@@ -394,7 +394,20 @@ def nn_pred(
         .to_dataarray()
         .squeeze(dim="variable", drop=True)
     )
+    if var in ("pal", "palc"):
+        flux_var = "tsrc" if var == "palc" else "tsr"
+        tisr = preprocessor.scalar.inverse_transform(ds[["tisr"]])["tisr"]
+        pred = (pred * tisr).rename(flux_var)
     return pred
+
+
+def target_flux(ds: xr.Dataset, preprocessor: DianaPreprocessor, var: str) -> xr.DataArray:
+    raw = preprocessor.scalar.inverse_transform(ds)
+    if var == "pal":
+        return (raw["pal"] * raw["tisr"]).rename("tsr")
+    if var == "palc":
+        return (raw["palc"] * raw["tisr"]).rename("tsrc")
+    return raw[var]
 
 
 def compute_nn_kernel(
