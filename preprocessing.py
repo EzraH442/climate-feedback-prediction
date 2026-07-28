@@ -53,6 +53,15 @@ class ECOD_Calculator(Preprocessor):
         return ds
 
 
+class PlanetaryAlbedoCalculator(Preprocessor):
+    def transform(self, ds):
+        if "tsr" in ds and "tisr" in ds:
+            ds["pal"] = ds["tsr"] / ds["tisr"]
+        if "tsrc" in ds and "tisr" in ds:
+            ds["palc"] = ds["tsrc"] / ds["tisr"]
+        return ds
+
+
 class VariableSelector(Preprocessor):
     def __init__(self, vars: list[str]):
         super().__init__()
@@ -282,6 +291,7 @@ class DianaPreprocessor(SequentialPreprocessor):
 
         self.scalar = XarrayMinMaxScaler(dim=("date", "latitude", "longitude"))
         preprocessors = [
+            PlanetaryAlbedoCalculator(),
             (
                 ECOD_Calculator(log=config.preprocess.ecod.log)
                 if config.preprocess.ecod.enabled
