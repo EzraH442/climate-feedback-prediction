@@ -24,7 +24,8 @@ from utils_cartopy import (
     compute_nn_kernel_autograd,
     nn_pred,
     make_kernel_filename,
-    load_model_and_preprocessor
+    load_model_and_preprocessor,
+    target_flux,
 )
 
 from model import SimpleModel
@@ -46,11 +47,11 @@ def global_tsr_test(
     lon = ds.longitude.values
 
     target = vc.target_var
-    target_label = target.upper()
+    target_label = "TSR" if target == "pal" else target.upper()
     output_dir = figure_dir(figures_path, "all", "tsr_test")
 
     pred = nn_pred(ds, model, preprocessor, vc, ["date", "latitude", "longitude"])
-    true = preprocessor.preprocessors[-1].inverse_transform(ds)[target]
+    true = target_flux(ds, preprocessor, target)
 
     tsr_true = true.to_numpy() / SECONDS_PER_DAY
     tsr_pred = pred.to_numpy() / SECONDS_PER_DAY
@@ -159,11 +160,11 @@ def global_tsrc_test(
     lon = clear_processed.longitude.values
 
     target = vc.clear_sky_target
-    target_label = target.upper()
+    target_label = "TSRC" if target == "palc" else target.upper()
     output_dir = figure_dir(figures_path, "clr", "tsrc_test")
 
     pred = nn_pred(clear_processed, model, preprocessor, vc, ["date", "latitude", "longitude"], clear=True)
-    true = preprocessor.preprocessors[-1].inverse_transform(clear_processed)[target]
+    true = target_flux(clear_processed, preprocessor, target)
 
     tsrc_true = true.to_numpy() / SECONDS_PER_DAY
     tsrc_pred = pred.to_numpy() / SECONDS_PER_DAY

@@ -53,6 +53,15 @@ class ECOD_Calculator(Preprocessor):
         return ds
 
 
+class PlanetaryAlbedoCalculator(Preprocessor):
+    def transform(self, ds):
+        if "tsr" in ds and "tisr" in ds:
+            ds["pal"] = ds["tsr"] / ds["tisr"]
+        if "tsrc" in ds and "tisr" in ds:
+            ds["palc"] = ds["tsrc"] / ds["tisr"]
+        return ds
+
+
 class VariableSelector(Preprocessor):
     def __init__(self, vars: list[str]):
         super().__init__()
@@ -180,7 +189,21 @@ class XarrayMinMaxScaler(Preprocessor):
 
         ds_std = (ds - self.data_min_) / denom
 
-        return ds_std * (self.max_val - self.min_val) + self.min_val
+        scaled = ds_std * (self.max_val - self.min_val) + self.min_val
+        self._warn_if_out_of_range(scaled)
+        return scaled
+
+    def _warn_if_out_of_range(self, ds):
+        data_min = float(ds.to_array().min(skipna=True).compute())
+        data_max = float(ds.to_array().max(skipna=True).compute())
+        if data_min >= self.min_val and data_max <= self.max_val:
+            return
+
+        message = (
+            f"Preprocessor transformed data outside [{self.min_val}, {self.max_val}]: "
+            f"min={data_min:.6g}, max={data_max:.6g}"
+        )
+        print(f"WARNING: {message}")
 
     def inverse_transform(self, ds):
         if self.data_min_ is None or self.data_max_ is None:
@@ -282,6 +305,7 @@ class DianaPreprocessor(SequentialPreprocessor):
 
         self.scalar = XarrayMinMaxScaler(dim=("date", "latitude", "longitude"))
         preprocessors = [
+            PlanetaryAlbedoCalculator(),
             (
                 ECOD_Calculator(log=config.preprocess.ecod.log)
                 if config.preprocess.ecod.enabled

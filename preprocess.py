@@ -50,6 +50,18 @@ def interpolate_kernel_dataset(
     )
 
 
+def convert_kernels_for_target(processed_kernel, target_var, train_data, val_data):
+    if target_var not in ("pal", "palc"):
+        return processed_kernel
+    raw_tisr = xr.concat([train_data.tisr, val_data.tisr], dim="date").interp(
+        latitude=processed_kernel.latitude,
+        longitude=processed_kernel.longitude,
+        method="linear",
+        kwargs={"fill_value": "extrapolate"},
+    )
+    return processed_kernel / raw_tisr
+
+
 KERNEL_YEARS = set(range(2011, 2016))
 
 
@@ -135,6 +147,9 @@ def preprocess(config_path):
         kern_ds_combined,
         target_latitude=target_latitude,
         target_longitude=target_longitude,
+    )
+    processed_kernel = convert_kernels_for_target(
+        processed_kernel, target_var, train_data, val_data
     )
     processed_kernel = processed_kernel * (ranges) / target_range * (3600 * 24)
 

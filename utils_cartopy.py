@@ -416,7 +416,20 @@ def nn_pred(
         .to_dataarray()
         .squeeze(dim="variable", drop=True)
     )
+    if var in ("pal", "palc"):
+        flux_var = "tsrc" if var == "palc" else "tsr"
+        tisr = preprocessor.scalar.inverse_transform(ds[["tisr"]])["tisr"]
+        pred = (pred * tisr).rename(flux_var)
     return pred
+
+
+def target_flux(ds: xr.Dataset, preprocessor: DianaPreprocessor, var: str) -> xr.DataArray:
+    raw = preprocessor.scalar.inverse_transform(ds)
+    if var == "pal":
+        return (raw["pal"] * raw["tisr"]).rename("tsr")
+    if var == "palc":
+        return (raw["palc"] * raw["tisr"]).rename("tsrc")
+    return raw[var]
 
 
 def compute_nn_kernel(
@@ -434,10 +447,10 @@ def compute_nn_kernel(
     )
 
     pred = nn_pred(
-        preprocessor.transform(ds_base), model, preprocessor, variable_config, dim_order
+        preprocessor.transform(ds_base), model, preprocessor, variable_config, dim_order, clear=clear
     )
     pred_perturbed = nn_pred(
-        preprocessor.transform(ds_p), model, preprocessor, variable_config, dim_order
+        preprocessor.transform(ds_p), model, preprocessor, variable_config, dim_order, clear=clear
     )
 
     kernel = (pred_perturbed - pred) / SECONDS_PER_DAY
@@ -458,7 +471,7 @@ def compute_nn_kernel_autograd(
     lon = processed_ds.longitude
     lat = processed_ds.latitude
 
-    target = variable_config.target_var
+    target = variable_config.clear_sky_target if clear else variable_config.target_var
     input_var = var
     feature_names = variable_config.input_order()
     input_idx = feature_names.index(input_var)
