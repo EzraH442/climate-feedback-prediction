@@ -55,6 +55,13 @@ def select_kernel_month(ds: xr.Dataset, date: str) -> xr.Dataset:
     return ds.sel(month=pd.Timestamp(date).month, drop=True)
 
 
+def with_flux_targets(ds: xr.Dataset) -> xr.Dataset:
+    return ds.assign(
+        tsr=ds.tsr / SECONDS_PER_DAY,
+        tsrc=ds.tsrc / SECONDS_PER_DAY,
+    )
+
+
 def albedo_kernel_components(da, albedo_kernel) -> tuple[xr.DataArray, xr.DataArray]:
     dR_a_k = albedo_kernel.TOA_all * da * 100
     dR_a_k_clr = albedo_kernel.TOA_clr * da * 100
@@ -517,7 +524,9 @@ def compute_responses(
         clear=True,
     )
 
-    anomaly = perturbed - base
+    base_flux = with_flux_targets(base)
+    perturbed_flux = with_flux_targets(perturbed)
+    anomaly = perturbed_flux - base_flux
     dR_clr = anomaly.tsrc.compute()
     dR = anomaly.tsr.compute()
 
@@ -631,12 +640,10 @@ def main():
         combine="nested",
         concat_dim="date",
     )
-    ds["tsr"] = ds.tsr / SECONDS_PER_DAY
-    ds["tsrc"] = ds.tsrc / SECONDS_PER_DAY
 
     base = select_date_state(ds, d1).interp(**kernel_grid)
     perturbed = select_date_state(ds, d2).interp(**kernel_grid)
-    anomaly = perturbed - base
+    anomaly = with_flux_targets(perturbed) - with_flux_targets(base)
 
     if response_save_path.exists() and not args.overwrite_responses:
         print("=" * 20 + " loaded cached responses " + "=" * 20)

@@ -40,6 +40,13 @@ MONTH_NAMES = [
 ]
 
 
+def with_flux_targets(ds: xr.Dataset) -> xr.Dataset:
+    return ds.assign(
+        tsr=ds.tsr / SECONDS_PER_DAY,
+        tsrc=ds.tsrc / SECONDS_PER_DAY,
+    )
+
+
 def albedo_kernel_components(da, albedo_kernel) -> tuple[xr.DataArray, xr.DataArray]:
     dR_a_k = albedo_kernel.TOA_all * da * 100
     dR_a_k_clr = albedo_kernel.TOA_clr * da * 100
@@ -113,6 +120,7 @@ def perturbation_responses(
         preprocessor,
         variable_config,
         ["perturbation", "year", "month", "latitude", "longitude"],
+        clear=clear,
     )
     pred_original = nn_pred(
         preprocessor.transform(original),
@@ -120,6 +128,7 @@ def perturbation_responses(
         preprocessor,
         variable_config,
         ["month", "latitude", "longitude"],
+        clear=clear,
     )
     diff = (pred_perturbed - pred_original) / SECONDS_PER_DAY
     return [diff.sel(perturbation=i) for i in range(len(diff.perturbation))]
@@ -985,7 +994,7 @@ def compute_responses(
         clear=True,
     )
     
-    anomaly = ds_monthly - ds_monthly_means
+    anomaly = with_flux_targets(ds_monthly) - with_flux_targets(ds_monthly_means)
     dR_clr = anomaly.tsrc.compute()
     dR = anomaly.tsr.compute()
 
@@ -1099,12 +1108,10 @@ def main():
         concat_dim="date",
     )
     ds = ds.sel(date=slice(args.start_date, args.end_date)).interp(**kernel_grid)
-    ds["tsr"] = ds.tsr / SECONDS_PER_DAY
-    ds["tsrc"] = ds.tsrc / SECONDS_PER_DAY
     
     ds_monthly = to_monthly(ds.copy(deep=True))
     ds_monthly_means = ds_monthly.mean("year")
-    anomaly = ds_monthly - ds_monthly_means
+    anomaly = with_flux_targets(ds_monthly) - with_flux_targets(ds_monthly_means)
 
     cloud_vars = variable_config.clear_sky_zero_vars
     if response_save_path.exists() and not args.overwrite_responses:

@@ -447,10 +447,10 @@ def compute_nn_kernel(
     )
 
     pred = nn_pred(
-        preprocessor.transform(ds_base), model, preprocessor, variable_config, dim_order
+        preprocessor.transform(ds_base), model, preprocessor, variable_config, dim_order, clear=clear
     )
     pred_perturbed = nn_pred(
-        preprocessor.transform(ds_p), model, preprocessor, variable_config, dim_order
+        preprocessor.transform(ds_p), model, preprocessor, variable_config, dim_order, clear=clear
     )
 
     kernel = (pred_perturbed - pred) / SECONDS_PER_DAY
@@ -471,7 +471,7 @@ def compute_nn_kernel_autograd(
     lon = processed_ds.longitude
     lat = processed_ds.latitude
 
-    target = variable_config.target_var
+    target = variable_config.clear_sky_target if clear else variable_config.target_var
     input_var = var
     feature_names = variable_config.input_order()
     input_idx = feature_names.index(input_var)

@@ -189,7 +189,21 @@ class XarrayMinMaxScaler(Preprocessor):
 
         ds_std = (ds - self.data_min_) / denom
 
-        return ds_std * (self.max_val - self.min_val) + self.min_val
+        scaled = ds_std * (self.max_val - self.min_val) + self.min_val
+        self._warn_if_out_of_range(scaled)
+        return scaled
+
+    def _warn_if_out_of_range(self, ds):
+        data_min = float(ds.to_array().min(skipna=True).compute())
+        data_max = float(ds.to_array().max(skipna=True).compute())
+        if data_min >= self.min_val and data_max <= self.max_val:
+            return
+
+        message = (
+            f"Preprocessor transformed data outside [{self.min_val}, {self.max_val}]: "
+            f"min={data_min:.6g}, max={data_max:.6g}"
+        )
+        print(f"WARNING: {message}")
 
     def inverse_transform(self, ds):
         if self.data_min_ is None or self.data_max_ is None:
