@@ -21,6 +21,8 @@ def Dge_from_ice_re(r_e_um=ICE_RE):
     """
     return 8.0 * r_e_um / (3 ** 1.5) # 46.1880215352 x 10^-6
 
+#print("c1:", (SLINGO_a + SLINGO_b / LIQUID_RE))
+#print("c2:", (FU_A0 + FU_A1 / Dge_from_ice_re(ICE_RE)))
 
 def cod_from_water_path(
     liquid_water_path, ice_water_path, liquid_re=LIQUID_RE, ice_re=ICE_RE
