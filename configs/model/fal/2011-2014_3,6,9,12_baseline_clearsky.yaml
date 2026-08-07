@@ -14,11 +14,8 @@ dataset:
     - tisr
     - ecod
     - ecod_fal
-  kernel_vars:
-    - fal
-    - tcwv
-  sky: ['all', 'clear']
   months: [3, 6, 9, 12]
+  sky: ['all', 'clear']
   era5:
     path: './data/fal/era5_processed_mar_june_sep_dec_2011_2014_clearsky'
   kernels:
@@ -36,22 +33,11 @@ preprocess:
 
 model:
   input_dim: 12
-  hidden_dim_sizes: [11]
+  hidden_dim_sizes:
+    - 11
 
 train:
-  name: '2011-2014_3,6,9,12_sob_fal_tcwv_clearsky_muon_cosine-warmup'
-  checkpoint_dir: './checkpoints/fal/2011-2014_3,6,9,12_sob_fal_tcwv_clearsky_muon_cosine-warmup'
-  sobolev: True
-  sobolev_vars: ['fal', 'tcwv']
-  sobolev_alpha: 0.5
-
-optimizer:
-  scheduler:
-    type: cosine_annealing_with_linear_warmup
-    warmup_epochs: 15
-    t_max: 40
-    eta_min: 0.00001
-    start_factor: 0.1
-  learning_rate: 0.0001
-  muon:
-    learning_rate: 0.001
+  name: '2011-2014_3,6,9,12_baseline_clearsky'
+  checkpoint_dir: './checkpoints/fal/2011-2014_3,6,9,12_baseline_clearsky'
+  sobolev: False
+  sobolev_vars: []
