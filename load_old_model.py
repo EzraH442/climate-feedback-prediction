@@ -10,7 +10,7 @@ data = np.load('model_weights.npz')
 print(data)
 
 # 2. Initialize your PyTorch model
-config = load_config("configs/model/baseline.yaml")
+config = load_config("configs/model/fal/1990-2020_1-12_baseline.yaml")
 model = SimpleModel(config)
 
 # 3. Map the names and apply the Transpose

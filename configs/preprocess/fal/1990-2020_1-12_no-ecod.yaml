@@ -1,0 +1,25 @@
+base: ../../base/preprocess/common.yaml
+
+dataset:
+  input_vars:
+    - fal
+    - hcc
+    - mcc
+    - lcc
+    - sp
+    - tciw
+    - tclw
+    - tcwv
+    - tco3
+    - tisr
+  era5:
+    path: './data/fal/era5_processed_no_ecod'
+  kernels:
+    raw_path: './data/fal/kernels'
+    path: './data/fal/kernels_processed_no_ecod'
+
+preprocess:
+  params_dir: 'preprocess_states/fal/1990-2020_1-12_no_ecod'
+  ecod:
+    enabled: False
+    method: 'true'

@@ -1,0 +1,37 @@
+base: ../../base/model/common.yaml
+
+dataset:
+  input_vars:
+    - fal
+    - hcc
+    - mcc
+    - lcc
+    - sp
+    - tciw
+    - tclw
+    - tcwv
+    - tco3
+    - tisr
+    - ecod
+    - ecod_fal
+  era5:
+    path: './data/fal/era5_processed'
+  kernels:
+    raw_path: "./data/fal/kernels"
+    path: './data/fal/kernels_processed'
+
+preprocess:
+  params_dir: 'preprocess_states/fal/1990-2020_1-12'
+  ecod:
+    enabled: True
+    method: "true"
+
+model:
+  input_dim: 12
+  hidden_dim_sizes: [11]
+
+train:
+  name: "1990-2020_1-12_baseline"
+  checkpoint_dir: "./checkpoints/fal/1990-2020_1-12_baseline"
+  sobolev: False
+  sobolev_vars: []

@@ -1,0 +1,45 @@
+base: ../../base/model/common.yaml
+
+dataset:
+  input_vars:
+    - skt
+    - hcc
+    - mcc
+    - lcc
+    - sp
+    - tciw
+    - tclw
+    - tcwv
+    - ecod
+  target_var: "ttr"
+  era5:
+    path: "./data/ts/era5_processed"
+  kernels:
+    raw_path: "./data/ts/kernels"
+    path: "./data/ts/kernels_processed"
+  train_years:
+    - 2011
+    - 2012
+    - 2013
+    - 2014
+  val_years:
+    - 2015
+  test_years:
+    - 2015
+
+preprocess:
+  params_dir: "preprocess_states/ts/2011-2014_1-12"
+  ecod:
+    enabled: True
+    method: "true"
+
+model:
+  input_dim: 9
+  hidden_dim_sizes:
+    - 11
+
+train:
+  name: "2011-2014_1-12_baseline"
+  checkpoint_dir: "./checkpoints/ts/2011-2014_1-12_baseline"
+  sobolev: False
+  sobolev_vars: []

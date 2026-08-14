@@ -1,0 +1,36 @@
+base: ../../base/model/common.yaml
+
+dataset:
+  input_vars:
+    - skt
+    - hcc
+    - mcc
+    - lcc
+    - sp
+    - tciw
+    - tclw
+    - tcwv
+    - ecod
+  target_var: "ttr"
+  era5:
+    path: './data/ts/era5_processed'
+  kernels:
+    raw_path: "./data/ts/kernels"
+    path: './data/ts/kernels_processed'
+
+preprocess:
+  params_dir: 'preprocess_states/ts/1990-2020_1-12'
+  ecod:
+    enabled: True
+    method: "true"
+
+model:
+  input_dim: 9
+  hidden_dim_sizes:
+    - 11
+
+train:
+  name: "1990-2020_1-12_baseline"
+  checkpoint_dir: "./checkpoints/ts/1990-2020_1-12_baseline"
+  sobolev: False
+  sobolev_vars: []

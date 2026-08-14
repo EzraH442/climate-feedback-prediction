@@ -1,6 +1,18 @@
 seed: 42
 
 dataset:
+  target_var: "tsr"
+  input_vars: []
+  kernel_vars: []
+  sky: ['all']
+  clear_sky_var: 'tsrc'
+  clear_sky_zero_vars:
+    - tcc
+    - hcc
+    - mcc
+    - lcc
+    - tciw
+    - tclw
   era5:
     raw_path: './data/era5'
   kernels:
@@ -45,9 +57,16 @@ dataset:
 
 optimizer:
   learning_rate: 0.001
+  scheduler: null
 
 model:
   activation: "tanh"
+
+preprocess:
+  ecod:
+    enabled: True
+    method: "true"
+    log: False
 
 train:
   max_epochs_without_improvement: 10
@@ -55,6 +74,9 @@ train:
   epochs: 100
   batch_size: 256
   area_weighted_sampling: False
+  sobolev: False
+  sobolev_vars: []
+  sobolev_var_weights: {}
 
 wandb:
   project: 'climate-feedback-sobolev'

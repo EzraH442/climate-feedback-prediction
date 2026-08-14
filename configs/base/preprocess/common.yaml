@@ -1,10 +1,21 @@
 seed: 42
 
 dataset:
+  target_var: 'tsr'
+  clear_sky_var: 'tsrc'
+  sky: ['all']
+  input_vars: []
+  clear_sky_zero_vars:
+    - tcc
+    - hcc
+    - mcc
+    - lcc
+    - tciw
+    - tclw
   era5:
-    raw_path: "./data/era5"
+    raw_path: './data/era5'
   kernels:
-    raw_path: "./data/kernels"
+    raw_path: './data/kernels'
   train_years:
     - 1990
     - 1992
@@ -51,3 +62,9 @@ dataset:
     - 10
     - 11
     - 12
+
+preprocess:
+  ecod:
+    enabled: True
+    method: 'true'
+    log: False

@@ -1,0 +1,31 @@
+base: ../../base/preprocess/common.yaml
+
+dataset:
+  input_vars:
+    - fal
+    - hcc
+    - mcc
+    - lcc
+    - sp
+    - tciw
+    - tclw
+    - tcwv
+    - tco3
+    - tisr
+    - ecod
+    - ecod_fal
+  kernel_vars: ['fal', 'tcwv']
+  months: [3, 6, 9, 12]
+  era5:
+    path: './data/fal/era5_processed_mar_june_sep_dec_2011_2014'
+  kernels:
+    raw_path: './data/fal/kernels'
+    path: './data/fal/kernels_processed_mar_june_sep_dec_2011_2014'
+  train_years: [2011, 2012, 2013, 2014]
+  val_years: [2015]
+
+preprocess:
+  params_dir: 'preprocess_states/fal/2011-2014_3,6,9,12'
+  ecod:
+    enabled: True
+    method: 'true'

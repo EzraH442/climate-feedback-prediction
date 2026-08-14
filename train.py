@@ -10,15 +10,18 @@ import omegaconf
 from omegaconf import OmegaConf
 
 from config_utils import load_config
-from dataloader import ClimateTorchDataset, KernelDataset, make_era5_filename
-from model import SimpleModelTrainer, SimpleModelSobolevTrainer, SimpleModelAllSobolevTrainer
+from dataloader import ClimateTorchDataset, make_era5_filename
+from model import (
+    SimpleModelTrainer,
+    SimpleModelSobolevTrainer,
+)
 
 
 def comet_experiment_key_path(checkpoint_dir: str) -> Path:
     return Path(checkpoint_dir) / "comet_experiment_key.txt"
 
 
-def stage_training_data(config_path: str) -> str:
+def stage_training_data(config_path: str, seed=None) -> str:
     config = load_config(config_path)
     slurm_tmpdir = Path(
         os.environ.get("SLURM_TMPDIR", Path(config.dataset.era5.path).resolve())
@@ -43,6 +46,10 @@ def stage_training_data(config_path: str) -> str:
             shutil.copy2(source, destination)
 
     config.dataset.era5.path = str(staged_data_dir)
+    if seed is not None:
+        config.seed = seed
+        config.train.name = config.train.name + f"_seed_{seed}"
+        config.train.checkpoint_dir = config.train.checkpoint_dir + f"_seed_{seed}"
     runtime_config_path = slurm_tmpdir / "train_runtime_config.yaml"
     OmegaConf.save(config, runtime_config_path)
     return str(runtime_config_path)
@@ -86,29 +93,19 @@ def create_comet_experiment(
     return experiment
 
 
-def train(config_path: str, resume: bool = True):
-    staged_config_path = stage_training_data(config_path)
+def train(config_path: str, resume: bool = True, seed=None):
+    staged_config_path = stage_training_data(config_path, seed)
     config = load_config(staged_config_path)
     assert isinstance(config, omegaconf.DictConfig), ""
 
-    if config.train.sobolev in ("cld", "all"):
-        train_dataset = KernelDataset(
-            config_path=staged_config_path,
-            data_type="train",
-        )
-        val_dataset = KernelDataset(
-            config_path=staged_config_path,
-            data_type="val",
-        )
-    else:
-        train_dataset = ClimateTorchDataset(
-            config_path=staged_config_path,
-            data_type="train",
-        )
-        val_dataset = ClimateTorchDataset(
-            config_path=staged_config_path,
-            data_type="val",
-        )
+    train_dataset = ClimateTorchDataset(
+        config_path=staged_config_path,
+        data_type="train",
+    )
+    val_dataset = ClimateTorchDataset(
+        config_path=staged_config_path,
+        data_type="val",
+    )
 
     torch.manual_seed(config.seed)
     device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -176,15 +173,8 @@ def train(config_path: str, resume: bool = True):
 
     experiment = create_comet_experiment(config, checkpoint_path=checkpoint_path)
 
-    if config.train.sobolev == "cld":
+    if config.train.sobolev:
         trainer = SimpleModelSobolevTrainer(
-            config=config,
-            experiment=experiment,
-            device=device,
-            checkpoint_path=checkpoint_path,
-        )
-    elif config.train.sobolev == "all":
-        trainer = SimpleModelAllSobolevTrainer(
             config=config,
             experiment=experiment,
             device=device,
@@ -207,7 +197,13 @@ def main():
         type=str,
         required=False,
         help="Path to config file",
-        default="configs/model/baseline.yaml",
+        default="configs/model/fal/1990-2020_1-12_baseline.yaml",
+    )
+    parser.add_argument(
+        "--seed",
+        type=int,
+        help="Manual seed for training ensembles",
+        default=None,
     )
     parser.add_argument(
         "--resume",
@@ -223,7 +219,7 @@ def main():
     parser.set_defaults(resume=True)
     args = parser.parse_args()
 
-    train(args.config_file, args.resume)
+    train(args.config_file, args.resume, seed=args.seed)
 
 
 if __name__ == "__main__":

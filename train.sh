@@ -1,11 +1,11 @@
 #!/bin/bash
-#SBATCH --job-name=baseline-large-training
+#SBATCH --job-name=baseline
 #SBATCH --account=rrg-yihuang-ad
-#SBATCH --time=13:00:0
+#SBATCH --time=3:00:0
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
-#SBATCH --cpus-per-task=2
-#SBATCH --mem=24G
+#SBATCH --cpus-per-task=1
+#SBATCH --mem=3G
 #SBATCH --output=%x-%j.out
 #SBATCH --error=%x-%j.err
 #SBATCH --mail-type=ALL
@@ -14,7 +14,7 @@
 set -euo pipefail
 
 CONFIG_FILE="${1:-}"
-
+SEED="${2:-}"
 if [[ -z "${CONFIG_FILE}" ]]; then
     echo "Usage: $0 <config-file>"
     exit 1
@@ -26,6 +26,7 @@ if [[ ! -f "${CONFIG_FILE}" ]]; then
 fi
 
 export OMP_NUM_THREADS=$SLURM_CPUS_PER_TASK
+export COMET_API_KEY=MoBGkV7uhoNarGzMpipBaZYsJ
 
 module purge
 module load StdEnv/2023
@@ -40,4 +41,8 @@ source $SLURM_TMPDIR/env/bin/activate
 pip install --no-index --upgrade pip
 pip install --no-index -r requirements.txt
 
-python train.py --config_file "${CONFIG_FILE}"
+if [[ -n "${SEED}" ]]; then
+    python train.py --config_file "${CONFIG_FILE}" --no-resume --seed "${SEED}"
+else
+    python train.py --config_file "${CONFIG_FILE}" --no-resume
+fi
