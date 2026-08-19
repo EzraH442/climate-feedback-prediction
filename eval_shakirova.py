@@ -50,9 +50,7 @@ def select_date_state(ds: xr.Dataset, date: str) -> xr.Dataset:
 
 
 def select_kernel_month(ds: xr.Dataset, date: str) -> xr.Dataset:
-    if "month" not in ds.dims:
-        return ds
-    return ds.sel(month=pd.Timestamp(date).month, drop=True)
+    return ds.sel(month=pd.Timestamp(date).month - 1, drop=True)
 
 
 def with_flux_targets(ds: xr.Dataset) -> xr.Dataset:
