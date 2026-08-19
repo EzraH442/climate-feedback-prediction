@@ -1,9 +1,9 @@
 from pathlib import Path
 
+import numpy as np
+import xarray as xr
 from omegaconf import DictConfig, OmegaConf
 
-import xarray as xr
-import numpy as np
 
 def load_config(config_path: str | Path) -> DictConfig:
     config = _load_config_recursive(Path(config_path).resolve(), seen=set())
@@ -15,29 +15,20 @@ def validate_config(config: DictConfig) -> None:
     if "dataset" not in config:
         return
 
-    if "preprocess" in config and "ecod" in config.preprocess:
-        if config.preprocess.ecod.method not in ("true", "true_tcc", "fast"):
-            raise ValueError(
-                "preprocess.ecod.method must be 'true', 'true_tcc', or 'fast'."
-            )
+    if (
+        "preprocess" in config
+        and "ecod" in config.preprocess
+        and config.preprocess.ecod.method not in ("true", "true_tcc", "fast")
+    ):
+        raise ValueError(
+            "preprocess.ecod.method must be 'true', 'true_tcc', or 'fast'."
+        )
 
     if "model" in config and "input_vars" in config.dataset:
         input_vars = config.dataset.input_vars
         if input_vars and config.model.input_dim != len(input_vars):
             raise ValueError(
                 f"model.input_dim={config.model.input_dim} but dataset.input_vars has {len(input_vars)} fields."
-            )
-
-    scheduler = config.get("optimizer", {}).get("scheduler")
-    if scheduler is not None and scheduler.type.lower() in (
-        "reduce_on_plateau",
-        "reduce_lr_on_plateau",
-    ):
-        patience = int(scheduler.get("patience", 10))
-        max_without_improvement = int(config.train.max_epochs_without_improvement)
-        if patience >= max_without_improvement:
-            raise ValueError(
-                "optimizer.scheduler.patience must be lower than train.max_epochs_without_improvement."
             )
 
     if "train" in config and "sobolev" in config.train:
@@ -62,7 +53,7 @@ def validate_config(config: DictConfig) -> None:
             raise ValueError(
                 f"train.sobolev_var_weights must be positive: {nonpositive_weights}"
             )
-        
+
         if config.train.sobolev:
             missing = [
                 var for var in sobolev_vars if var not in config.dataset.kernel_vars
@@ -98,7 +89,9 @@ def _load_config_recursive(config_path: Path, seen: set[Path]) -> DictConfig:
 
     return OmegaConf.merge(merged, loaded)
 
+
 from dataclasses import dataclass
+
 
 @dataclass
 class VariableConfig:
@@ -107,7 +100,6 @@ class VariableConfig:
     clear_sky_zero_vars: list[str]
     clear_sky_target: str
     kernel_vars: list[str]
-
 
     def all_vars(self) -> list[str]:
         return list(
@@ -135,31 +127,31 @@ class VariableConfig:
 
     def inputs(self, ds: xr.Dataset) -> xr.Dataset:
         return ds[self.input_order()]
-    
+
     def kern_inputs(self, ds: xr.Dataset, clear=False) -> xr.Dataset:
         out = ds[self.kern_input_order()]
         if clear:
-            return out.sel(all_clr='clr')
+            return out.sel(all_clr="clr")
         else:
-            return out.sel(all_clr='all')
-            
-    def outputs(self, ds: xr.Dataset, clear=False) -> xr.DataArray:
+            return out.sel(all_clr="all")
+
+    def outputs(self, ds: xr.Dataset, clear: bool=False) -> xr.DataArray:
         if clear:
             return ds[self.clear_sky_target]
         else:
             return ds[self.target_var]
 
-    def outputs_np(self, ds: xr.Dataset, clear=False) -> np.ndarray:
+    def outputs_np(self, ds: xr.Dataset, clear: bool=False) -> np.ndarray:
         return self.outputs(ds, clear).to_numpy()
 
-    def inputs_np(self, ds: xr.Dataset, dim_order=None) -> np.ndarray:
+    def inputs_np(self, ds: xr.Dataset, dim_order: list[str]|None=None) -> np.ndarray:
         inputs = self.inputs(ds)
         da = inputs.to_dataarray()
         if dim_order is not None:
             da = da.transpose(*dim_order)
         return da.values
 
-    def kern_inputs_np(self, ds: xr.Dataset, dim_order=None, clear=False) -> np.ndarray:
+    def kern_inputs_np(self, ds: xr.Dataset, dim_order: list[str]|None=None, clear: bool=False) -> np.ndarray:
         inputs = self.kern_inputs(ds, clear)
         da = inputs.to_dataarray()
         if dim_order is not None:
