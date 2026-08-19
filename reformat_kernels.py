@@ -1,13 +1,13 @@
-import xarray as xr
-from pathlib import Path
-from itertools import product
 from datetime import datetime
-import numpy as np
+from itertools import product
+from pathlib import Path
 
-from utils import make_qt_filename, make_kernel_filename, make_era5_filename
+import xarray as xr
+
+from utils_cartopy import make_era5_filename, make_kernel_filename
 
 
-def make_kernel_path_alb(year, month, band="sw", sky="cld"):
+def make_kernel_path_alb(year: int, month: str, band: str="sw", sky: str="cld"):
     assert band in ["sw", "lw"], "band must be 'sw' or 'lw'"
     assert sky in ["cld", "clr"], "sky must be 'cld' or 'clr'"
 
@@ -20,7 +20,7 @@ def make_kernel_path_alb(year, month, band="sw", sky="cld"):
     )
 
 
-def make_kernel_path_ts(year, month, band="lw", sky="cld"):
+def make_kernel_path_ts(year: int, month: str, band: str="lw", sky: str="cld"):
     assert band in ["sw", "lw"], "band must be 'sw' or 'lw'"
     assert sky in ["cld", "clr"], "sky must be 'cld' or 'clr'"
 
@@ -33,7 +33,7 @@ def make_kernel_path_ts(year, month, band="lw", sky="cld"):
     )
 
 
-def make_kernel_path_wv(year, month, band="sw", sky="cld"):
+def make_kernel_path_wv(year: int, month: str, band: str="sw", sky: str="cld"):
     assert band in ["sw", "lw"], "band must be 'sw' or 'lw'"
     assert sky in ["cld", "clr"], "sky must be 'cld' or 'clr'"
 
@@ -46,7 +46,7 @@ def make_kernel_path_wv(year, month, band="sw", sky="cld"):
     )
 
 
-def assign_date_coord(ds: xr.Dataset, year, month):
+def assign_date_coord(ds: xr.Dataset, year: int, month: str):
     return ds.assign_coords(date=datetime(int(year), int(month), 1)).expand_dims(
         dim="date"
     )
@@ -56,13 +56,13 @@ def select_toa_arr(ds: xr.Dataset):
     return ds["TOA"].sel(up_down_net=3, band=1)
 
 
-def build_albedo_kernel_dataset(base, years, months):
+def build_albedo_kernel_dataset(base: Path, years: list[int], months: list[str]):
     year_months = list(product(years, months))
     kernel_dataarrays_clr = [
         select_toa_arr(
             assign_date_coord(
                 xr.open_dataset(
-                    Path(base) / make_kernel_path_alb(year, month, band="sw", sky="clr")
+                    base / make_kernel_path_alb(year, month, band="sw", sky="clr")
                 ),
                 year,
                 month,
@@ -85,24 +85,24 @@ def build_albedo_kernel_dataset(base, years, months):
     kernel_ds_clr = xr.combine_by_coords(kernel_dataarrays_clr)
     kernel_ds_cld = xr.combine_by_coords(kernel_dataarrays_cld)
     ds = xr.Dataset(
-        data_vars=dict(
-            fal=(
+        data_vars={
+            "fal": (
                 ["all_clr", "date", "latitude", "longitude"],
                 [kernel_ds_cld.TOA.data, kernel_ds_clr.TOA.data],
             ),
-        ),
-        coords=dict(
-            latitude=("latitude", kernel_ds_cld.latitude.data),
-            longitude=("longitude", kernel_ds_clr.longitude.data),
-            date=("date", kernel_ds_clr.date.data),
-            all_clr=("all_clr", ["all", "clr"]),
-        ),
+        },
+        coords={
+            "latitude": ("latitude", kernel_ds_cld.latitude.data),
+            "longitude": ("longitude", kernel_ds_clr.longitude.data),
+            "date": ("date", kernel_ds_clr.date.data),
+            "all_clr": ("all_clr", ["all", "clr"]),
+        },
     )
     ds = ds.transpose("date", "latitude", "longitude", "all_clr")
     return ds
 
 
-def build_skt_kernel_dataset(base, years, months):
+def build_skt_kernel_dataset(base: Path, years: list[int], months: list[str]):
     year_months = list(product(years, months))
     cld_arrays = [
         select_toa_arr(
@@ -133,35 +133,34 @@ def build_skt_kernel_dataset(base, years, months):
     kernel_ds_cld = kernel_ds_cld["TOA"]
     kernel_ds_clr = kernel_ds_clr["TOA"]
     ds = xr.Dataset(
-        data_vars=dict(
-            skt=(
+        data_vars={
+            "skt": (
                 ["all_clr", "date", "latitude", "longitude"],
                 [kernel_ds_cld.data, kernel_ds_clr.data],
             ),
-        ),
-        coords=dict(
-            latitude=("latitude", kernel_ds_cld.latitude.data),
-            longitude=("longitude", kernel_ds_clr.longitude.data),
-            date=("date", kernel_ds_clr.date.data),
-            all_clr=("all_clr", ["all", "clr"]),
-        ),
+        },
+        coords={
+            "latitude": ("latitude", kernel_ds_cld.latitude.data),
+            "longitude": ("longitude", kernel_ds_clr.longitude.data),
+            "date": ("date", kernel_ds_clr.date.data),
+            "all_clr": ("all_clr", ["all", "clr"]),
+        },
     )
     ds = ds.transpose("date", "latitude", "longitude", "all_clr")
     return ds
 
 
-def build_wv_kernel_dataset(base, years, months, dtcwv, band="sw"):
-    print(dtcwv)
+def build_wv_kernel_dataset(base: Path, years: list[int], months: list[str], dtcwv: xr.DataArray, band: str="sw"):
     year_months = list(product(years, months))
     cld_arrays = []
     clr_arrays = []
 
     for year, month in year_months:
         ds_cld = xr.open_dataset(
-            Path(base) / make_kernel_path_wv(year, month, band=band, sky="cld")
+            base / make_kernel_path_wv(year, month, band=band, sky="cld")
         )
         ds_clr = xr.open_dataset(
-            Path(base) / make_kernel_path_wv(year, month, band=band, sky="clr")
+            base / make_kernel_path_wv(year, month, band=band, sky="clr")
         )
 
         ds_cld = select_toa_arr(ds_cld)
@@ -183,24 +182,24 @@ def build_wv_kernel_dataset(base, years, months, dtcwv, band="sw"):
     kernel_ds_clr = xr.combine_by_coords(clr_arrays)
 
     ds = xr.Dataset(
-        data_vars=dict(
-            tcwv=(
+        data_vars={
+            "tcwv": (
                 ["all_clr", "date", "latitude", "longitude"],
                 [kernel_ds_cld.data, kernel_ds_clr.data],
             ),
-        ),
-        coords=dict(
-            latitude=("latitude", kernel_ds_cld.latitude.data),
-            longitude=("longitude", kernel_ds_clr.longitude.data),
-            date=("date", kernel_ds_clr.date.data),
-            all_clr=("all_clr", ["all", "clr"]),
-        ),
+        },
+        coords={
+            "latitude": ("latitude", kernel_ds_cld.latitude.data),
+            "longitude": ("longitude", kernel_ds_clr.longitude.data),
+            "date": ("date", kernel_ds_clr.date.data),
+            "all_clr": ("all_clr", ["all", "clr"]),
+        },
     )
     ds = ds.transpose("date", "latitude", "longitude", "all_clr")
     return ds
 
 
-def load_tcwv(years):
+def load_tcwv(years: list[int]):
     dss = []
     for year in years:
         t_path = 'data/era5/' + make_era5_filename(year)
