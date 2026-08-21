@@ -1,19 +1,19 @@
-from comet_ml import ExistingExperiment, Experiment
 import argparse
 import os
 import shutil
 from pathlib import Path
 
-import torch
-from torch.utils.data import DataLoader, WeightedRandomSampler
 import omegaconf
+import torch
+from comet_ml import ExistingExperiment, Experiment
 from omegaconf import OmegaConf
+from torch.utils.data import DataLoader, WeightedRandomSampler
 
 from config_utils import load_config
 from dataloader import ClimateTorchDataset, make_era5_filename
 from model import (
-    SimpleModelTrainer,
     SimpleModelSobolevTrainer,
+    SimpleModelTrainer,
 )
 
 
@@ -196,13 +196,11 @@ def main():
         "--config_file",
         type=str,
         required=False,
-        help="Path to config file",
         default="configs/model/fal/1990-2020_1-12_baseline.yaml",
     )
     parser.add_argument(
         "--seed",
         type=int,
-        help="Manual seed for training ensembles",
         default=None,
     )
     parser.add_argument(
