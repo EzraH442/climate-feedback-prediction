@@ -6,10 +6,10 @@ import torch
 
 from config_utils import load_config, variable_config_from_omegaconf
 from preprocessing import DianaPreprocessor
-from utils import (
+from utils_cartopy import (
+    load_yearly_and_filter_by_months,
     make_combined_kernel_filename,
     make_era5_filename,
-    load_yearly_and_filter_by_months,
 )
 
 
@@ -34,25 +34,13 @@ def load_or_create_mmap(path: Path, shape: tuple[int, ...], build_array):
     return np.load(path, mmap_mode="r")
 
 
-def area_weights_from_latitudes(
-    latitudes_deg: np.ndarray,
-    n_dates: int,
-    n_lon: int,
-) -> torch.Tensor:
-    lat_weights = np.cos(np.deg2rad(latitudes_deg)).astype(np.float32)
-    lat_weights = np.clip(lat_weights, 1e-6, None)
-    sample_weights = np.broadcast_to(
-        lat_weights[None, :, None],
-        (n_dates, len(latitudes_deg), n_lon),
-    ).reshape(-1)
-    return torch.as_tensor(sample_weights, dtype=torch.double)
-
-
-class ClimateTorchDataset(torch.utils.data.Dataset):
+class ClimateTorchDataset(
+    torch.utils.data.Dataset[tuple[torch.Tensor, torch.Tensor, torch.Tensor]]
+):
     def __init__(
         self,
-        config_path="configs/model/fal/1990-2020_1-12_baseline.yaml",
-        data_type="train",
+        config_path: str | Path = "configs/model/fal/1990-2020_1-12_baseline.yaml",
+        data_type: str = "train",
     ):
         """
         Args:
@@ -219,7 +207,7 @@ class ClimateTorchDataset(torch.utils.data.Dataset):
         elif self.sky[0] == "clear":
             x, y, k = self._get_clear(idx)
         else:
-            raise NotImplementedError('path not implemented')
+            raise NotImplementedError("path not implemented")
 
         return (
             torch.from_numpy(x.copy()).float(),
