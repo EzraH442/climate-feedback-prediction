@@ -61,6 +61,78 @@ COMPARISONS = {
     ],
 }
 
+ECOD_VALIDATION_MODELS = {
+    "baseline": "configs/model/fal/2011-2014_3,6,9,12_baseline.yaml",
+    "baseline_true_tcc": "configs/model/fal/2011-2014_3,6,9,12_baseline_true-tcc-ecod.yaml",
+    "sob_fal": "configs/model/fal/2011-2014_3,6,9,12_sob_fal.yaml",
+    "sob_fal_fast_ecod": "configs/model/fal/2011-2014_3,6,9,12_sob_fal_fast-ecod.yaml",
+    "sob_fal_true_tcc": "configs/model/fal/2011-2014_3,6,9,12_sob_fal_true-tcc-ecod.yaml",
+    "sob_fal_clear": "configs/model/fal/2011-2014_3,6,9,12_sob_fal_clearsky.yaml",
+    "sob_fal_clear_fast_ecod": "configs/model/fal/2011-2014_3,6,9,12_sob_fal_clearsky_fast-ecod.yaml",
+    "sob_fal_clear_true_tcc": "configs/model/fal/2011-2014_3,6,9,12_sob_fal_clearsky_true-tcc-ecod.yaml",
+    "sob_fal_tcwv": "configs/model/fal/2011-2014_3,6,9,12_sob_fal_tcwv.yaml",
+    "sob_fal_tcwv_true_tcc": "configs/model/fal/2011-2014_3,6,9,12_sob_fal_tcwv_true-tcc-ecod.yaml",
+    "sob_fal_noozone": "configs/model/fal/2011-2014_3,6,9,12_sob_fal_noozone.yaml",
+    "sob_fal_noozone_fast_ecod": "configs/model/fal/2011-2014_3,6,9,12_sob_fal_fast-ecod_noozone.yaml",
+    "sob_fal_noozone_true_tcc": "configs/model/fal/2011-2014_3,6,9,12_sob_fal_noozone_true-tcc-ecod.yaml",
+}
+
+ECOD_VALIDATION_COMPARISONS = {
+    "true_tcc_vs_regular_ecod": [
+        ("baseline -> baseline_true_tcc", "baseline", "baseline_true_tcc"),
+        ("sob_fal -> sob_fal_true_tcc", "sob_fal", "sob_fal_true_tcc"),
+        ("sob_fal_clear -> sob_fal_clear_true_tcc", "sob_fal_clear", "sob_fal_clear_true_tcc"),
+        ("sob_fal_tcwv -> sob_fal_tcwv_true_tcc", "sob_fal_tcwv", "sob_fal_tcwv_true_tcc"),
+        ("sob_fal_noozone -> sob_fal_noozone_true_tcc", "sob_fal_noozone", "sob_fal_noozone_true_tcc"),
+    ],
+    "true_tcc_vs_fast_ecod": [
+        ("sob_fal_fast_ecod -> sob_fal_true_tcc", "sob_fal_fast_ecod", "sob_fal_true_tcc"),
+        ("sob_fal_clear_fast_ecod -> sob_fal_clear_true_tcc", "sob_fal_clear_fast_ecod", "sob_fal_clear_true_tcc"),
+        ("sob_fal_noozone_fast_ecod -> sob_fal_noozone_true_tcc", "sob_fal_noozone_fast_ecod", "sob_fal_noozone_true_tcc"),
+    ],
+}
+
+OZONE_VALIDATION_MODELS = {
+    "sob_fal": "configs/model/fal/2011-2014_3,6,9,12_sob_fal.yaml",
+    "sob_fal_noozone": "configs/model/fal/2011-2014_3,6,9,12_sob_fal_noozone.yaml",
+    "sob_fal_clear": "configs/model/fal/2011-2014_3,6,9,12_sob_fal_clearsky.yaml",
+    "sob_fal_clear_noozone": "configs/model/fal/2011-2014_3,6,9,12_sob_fal_clearsky_noozone.yaml",
+    "sob_fal_tcwv": "configs/model/fal/2011-2014_3,6,9,12_sob_fal_tcwv.yaml",
+    "sob_fal_tcwv_noozone": "configs/model/fal/2011-2014_3,6,9,12_sob_fal_tcwv_noozone.yaml",
+    "sob_fal_tcwv_clear_noozone": "configs/model/fal/2011-2014_3,6,9,12_sob_fal_tcwv_clearsky_noozone.yaml",
+    "sob_fal_true_tcc": "configs/model/fal/2011-2014_3,6,9,12_sob_fal_true-tcc-ecod.yaml",
+    "sob_fal_noozone_true_tcc": "configs/model/fal/2011-2014_3,6,9,12_sob_fal_noozone_true-tcc-ecod.yaml",
+    "sob_fal_clear_true_tcc": "configs/model/fal/2011-2014_3,6,9,12_sob_fal_clearsky_true-tcc-ecod.yaml",
+    "sob_fal_clear_noozone_true_tcc": "configs/model/fal/2011-2014_3,6,9,12_sob_fal_clearsky_noozone_true-tcc-ecod.yaml",
+}
+
+OZONE_VALIDATION_COMPARISONS = {
+    "ozone_vs_noozone": [
+        ("sob_fal -> sob_fal_noozone", "sob_fal", "sob_fal_noozone"),
+        ("sob_fal_clear -> sob_fal_clear_noozone", "sob_fal_clear", "sob_fal_clear_noozone"),
+        ("sob_fal_tcwv -> sob_fal_tcwv_noozone", "sob_fal_tcwv", "sob_fal_tcwv_noozone"),
+        ("sob_fal_true_tcc -> sob_fal_noozone_true_tcc", "sob_fal_true_tcc", "sob_fal_noozone_true_tcc"),
+        ("sob_fal_clear_true_tcc -> sob_fal_clear_noozone_true_tcc", "sob_fal_clear_true_tcc", "sob_fal_clear_noozone_true_tcc"),
+    ],
+    "tcwv_noozone": [
+        ("sob_fal_clear_noozone -> sob_fal_tcwv_clear_noozone", "sob_fal_clear_noozone", "sob_fal_tcwv_clear_noozone"),
+    ],
+}
+
+SETUPS = {
+    "default": (MODELS, COMPARISONS, Path("analysis_tables")),
+    "ecod_validation": (
+        ECOD_VALIDATION_MODELS,
+        ECOD_VALIDATION_COMPARISONS,
+        Path("ecod_validation"),
+    ),
+    "ozone_validation": (
+        OZONE_VALIDATION_MODELS,
+        OZONE_VALIDATION_COMPARISONS,
+        Path("ozone_validation"),
+    ),
+}
+
 
 def metric(diff):
     mbe = float(np.mean(global_mean(diff)))
@@ -89,9 +161,9 @@ def task_slug(name):
     return name.replace("/", "_").replace(" ", "_").replace(",", "").lower()
 
 
-def write_tables(cache, output_dir):
+def write_tables(cache, output_dir, comparisons=COMPARISONS):
     output_dir.mkdir(parents=True, exist_ok=True)
-    for group, comparisons in COMPARISONS.items():
+    for group, group_comparisons in comparisons.items():
         task_names = sorted({
             task
             for model in cache.values()
@@ -103,7 +175,7 @@ def write_tables(cache, output_dir):
             with path.open("w", newline="", encoding="ascii") as f:
                 writer = csv.writer(f)
                 writer.writerow(["comparison", "MBE change", "|MBE| change", "RMSE change"])
-                for label, src, dst in comparisons:
+                for label, src, dst in group_comparisons:
                     old = cache.get(src, {}).get(task, {})
                     new = cache.get(dst, {}).get(task, {})
                     row = [label]
@@ -323,7 +395,7 @@ def north_pole_cache(cache, manifest_path, boundary):
     return out
 
 
-def write_residual_plots(cache, output_dir, manifest_path):
+def write_residual_plots(cache, output_dir, manifest_path, comparisons=COMPARISONS):
     if not manifest_path.exists():
         return
     manifest = json.loads(manifest_path.read_text(encoding="ascii"))
@@ -335,11 +407,11 @@ def write_residual_plots(cache, output_dir, manifest_path):
     plot_dir = output_dir / "residual_plots"
     plot_dir.mkdir(parents=True, exist_ok=True)
     try:
-        for group, comparisons in COMPARISONS.items():
+        for group, group_comparisons in comparisons.items():
             for task in metric_tasks(cache):
                 var = cached_residual_name(task)
                 rows = []
-                for label, src, dst in comparisons:
+                for label, src, dst in group_comparisons:
                     if src not in datasets or dst not in datasets:
                         continue
                     if var not in datasets[src] or var not in datasets[dst]:
@@ -561,12 +633,12 @@ def closure_metrics(config, predictions):
     return out
 
 
-def compute_cache(output_dir, years, dates):
+def compute_cache(output_dir, years, dates, models=MODELS):
     cache = {}
     manifest = {}
     prediction_dir = output_dir / "prediction_cache"
     prediction_dir.mkdir(parents=True, exist_ok=True)
-    for name, config_path in MODELS.items():
+    for name, config_path in models.items():
         config = load_config(config_path)
         predictions = {}
         tasks = closure_metrics(config, predictions)
@@ -598,29 +670,33 @@ def compute_cache(output_dir, years, dates):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--output-dir", type=Path, default=Path("analysis_tables"))
+    parser.add_argument("--output-dir", type=Path)
+    parser.add_argument("--setup", choices=SETUPS, default="default")
     parser.add_argument("--cache", type=Path)
     parser.add_argument("--north-boundary", type=float, default=NORTH_BOUNDARY)
     parser.add_argument("--years", type=int, nargs="+", default=[2015])
     parser.add_argument("--dates", nargs="+", default=["2015-09"])
     args = parser.parse_args()
 
+    models, comparisons, default_output_dir = SETUPS[args.setup]
+    output_dir = args.output_dir or default_output_dir
+
     if args.cache:
         cache = json.loads(args.cache.read_text(encoding="ascii"))
     else:
-        cache = compute_cache(args.output_dir, args.years, args.dates)
-    write_tables(cache, args.output_dir)
+        cache = compute_cache(output_dir, args.years, args.dates, models)
+    write_tables(cache, output_dir, comparisons)
     north_cache = north_pole_cache(
         cache,
-        args.output_dir / "prediction_cache_manifest.json",
+        output_dir / "prediction_cache_manifest.json",
         args.north_boundary,
     )
     if north_cache:
-        write_tables(north_cache, args.output_dir / "north_pole")
-    write_residual_plots(cache, args.output_dir, args.output_dir / "prediction_cache_manifest.json")
-    write_tsr_field_correlations(cache, args.output_dir)
-    write_tsr_field_scatter_plots(args.output_dir, args.output_dir / "prediction_cache_manifest.json")
-    print(f"wrote tables and cache under {args.output_dir}")
+        write_tables(north_cache, output_dir / "north_pole", comparisons)
+    write_residual_plots(cache, output_dir, output_dir / "prediction_cache_manifest.json", comparisons)
+    write_tsr_field_correlations(cache, output_dir)
+    write_tsr_field_scatter_plots(output_dir, output_dir / "prediction_cache_manifest.json")
+    print(f"wrote tables and cache under {output_dir}")
 
 
 if __name__ == "__main__":
