@@ -57,7 +57,7 @@ toolz==1.1.0+computecanada
 torch==2.11.0+computecanada
 tqdm==4.67.3+computecanada
 typing_inspection==0.4.2+computecanada
-urllib3==2.6.3+computecanada
+urllib3==2.8.0
 wandb==0.24.0+computecanada
 wrapt==2.1.2+computecanada
 wurlitzer==3.1.1+computecanada
