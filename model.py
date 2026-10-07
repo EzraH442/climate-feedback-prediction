@@ -8,10 +8,6 @@ from comet_ml import Experiment
 from torch import nn
 
 
-def _checkpoint_optimizer_states(optimizers: dict[str, torch.optim.Optimizer]):
-    return {"optimizer_state_dict": optimizers["optimizer"].state_dict()}
-
-
 class SimpleModel(nn.Module):
     def __init__(self, config: omegaconf.DictConfig):
         super().__init__()
@@ -305,7 +301,7 @@ class SimpleModelSobolevTrainer:
 
             if train:
                 loss.backward()
-                _step_optimizers(self.optimizers)
+                self.optimizer.step()
 
             total_loss_0 += loss_0.item()
             total_loss_1 += loss_1.item()
