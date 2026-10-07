@@ -86,16 +86,10 @@ class ClimateTorchDataset(
         self.n_lat = len(self.dataset_era5.latitude)
         self.n_lon = len(self.dataset_era5.longitude)
         self.base_len = self.n_dates * self.n_lat * self.n_lon
-        self.sample_weights = area_weights_from_latitudes(
-            self.dataset_era5.latitude.to_numpy(),
-            n_dates=self.n_dates,
-            n_lon=self.n_lon,
-        )
-        self.sample_weights = torch.cat([self.sample_weights] * len(self.sky))
 
         slurm_tmpdir = os.getenv("SLURM_TMPDIR")
         if not slurm_tmpdir:
-            raise EnvironmentError("SLURM_TMPDIR environment variable is not set.")
+            raise OSError("SLURM_TMPDIR environment variable is not set.")
         mmap_dir = Path(slurm_tmpdir)
         mmap_dir.mkdir(parents=True, exist_ok=True)
 
@@ -193,19 +187,18 @@ class ClimateTorchDataset(
 
         return x, y, k
 
-    def __getitem__(self, idx):
+    def __getitem__(self, index):
         if len(self.sky) == 2:
-            clear_sky_sample = idx >= self.base_len
+            clear_sky_sample = index >= self.base_len
             if clear_sky_sample:
-                idx -= self.base_len
-                x, y, k = self._get_clear(idx)
+                index -= self.base_len
+                x, y, k = self._get_clear(index)
             else:
-                x, y, k = self._get_all(idx)
-            pass
+                x, y, k = self._get_all(index)
         elif self.sky[0] == "all":
-            x, y, k = self._get_all(idx)
+            x, y, k = self._get_all(index)
         elif self.sky[0] == "clear":
-            x, y, k = self._get_clear(idx)
+            x, y, k = self._get_clear(index)
         else:
             raise NotImplementedError("path not implemented")
 

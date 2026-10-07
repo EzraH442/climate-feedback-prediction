@@ -9,9 +9,12 @@ import xarray as xr
 from config_utils import load_config, variable_config_from_omegaconf
 from utils_cartopy import (
     SECONDS_PER_DAY,
+    generate_paths_yearly,
     global_date_series,
     global_mean,
     integrate_over_pressure_levels,
+    load_model_and_preprocessor,
+    make_era5_filename,
     nn_pred,
     plot_global_field,
     plot_north_pole_field,
@@ -19,11 +22,7 @@ from utils_cartopy import (
     to_monthly,
     weighted_residuals_by_month,
     weighted_residuals_by_year_month,
-    load_model_and_preprocessor,
-    generate_paths_yearly,
-    make_era5_filename,
 )
-
 
 NORTH_BOUNDARY = 75
 NORTH_MASK = None
@@ -148,16 +147,16 @@ def plot_field_pair(
         raise RuntimeError("NORTH_MASK must be initialized before plotting.")
     lon, lat = field.longitude, field.latitude
     field_masked = field.isel(latitude=NORTH_MASK)
-    
+
     mean    = global_mean(field).values
     mean_np = global_mean(field_masked).values
     ann     = f"{mean:.2f}"
     ann_np  = f"{mean_np:.2f}"
-    
+
     if ann_rmse:
         rmse_val    = np.sqrt(global_mean(field * field).values)
         rmse_val_np = np.sqrt(global_mean(field_masked * field_masked).values)
-        
+
         ann    += f"; {rmse_val:.2f}"
         ann_np += f"; {rmse_val_np:.2f}"
 
@@ -290,8 +289,8 @@ def plot_component_timeseries(series, output_dir: Path, clear_sky: bool) -> None
 
 
 RESIDUAL_SOURCES = ["nn", "k", "nn_allcross"]
- 
- 
+
+
 def _residual_key(source: str, clear_sky: bool) -> str:
     return f"dR_res_{source}" + ("_clr" if clear_sky else "")
 
@@ -307,7 +306,7 @@ def build_residual_series(residual_fields: dict, north_pole: bool = False) -> di
             field = field.isel(latitude=NORTH_MASK)
         series[f"dR_res_{name}"] = global_date_series(field)
     return series
-    
+
 def build_rmse_residual_series(residual_fields: dict, north_pole: bool = False) -> dict:
     series = {}
     for name, field in residual_fields.items():
@@ -351,7 +350,7 @@ def plot_residual_mbe_timeseries(series, output_dir: Path, clear_sky: bool) -> N
     fig.tight_layout()
     fig.savefig(output_dir / "timeseries_mbe.png", dpi=200)
     plt.close(fig)
-    
+
 def plot_net_timeseries(net_series, save_path: Path) -> None:
     fig, ax = setup_timeseries_plot()
     ax.axhline(0, alpha=0.1)
@@ -651,7 +650,7 @@ def timeseries_test(
     mbe_series_clr = build_residual_series(mbe_fields_clr, north_pole=False)
     mbe_series_all_np = build_residual_series(mbe_fields_all, north_pole=True)
     mbe_series_clr_np = build_residual_series(mbe_fields_clr, north_pole=True)
- 
+
     plot_residual_mbe_timeseries(
         {**mbe_series_all, **mbe_series_clr}, timeseries_all, clear_sky=False
     )
@@ -670,7 +669,7 @@ def timeseries_test(
     rmse_series_clr = build_rmse_residual_series(mbe_fields_clr, north_pole=False)
     rmse_series_all_np = build_rmse_residual_series(mbe_fields_all, north_pole=True)
     rmse_series_clr_np = build_rmse_residual_series(mbe_fields_clr, north_pole=True)
- 
+
     plot_residual_rmse_timeseries(
         {**rmse_series_all, **rmse_series_clr}, timeseries_all, clear_sky=False
     )
@@ -939,7 +938,7 @@ def feedback_test(
     output_all = output_root / "all"
     output_clr.mkdir(exist_ok=True, parents=True)
     output_all.mkdir(exist_ok=True, parents=True)
-    
+
     dR = responses["dR_era5_all"]
     dR_clr = responses["dR_era5_clr"]
 
@@ -950,7 +949,7 @@ def feedback_test(
 
     respones_regression_results = responses_global_mean.polyfit('dt2m', deg=1, cov=True)
     print(respones_regression_results)
-    #respones_regression_results.to_netcdf(output_root / 'feedbacks.nc')  
+    #respones_regression_results.to_netcdf(output_root / 'feedbacks.nc')
 
     xmin, xmax = responses_global_mean.dt2m.min().values, responses_global_mean.dt2m.max().values
     for var in responses_global_mean.data_vars:
@@ -993,7 +992,7 @@ def compute_responses(
         [["fal"], ["tcwv"]],
         clear=True,
     )
-    
+
     anomaly = with_flux_targets(ds_monthly) - with_flux_targets(ds_monthly_means)
     dR_clr = anomaly.tsrc.compute()
     dR = anomaly.tsr.compute()
@@ -1006,7 +1005,7 @@ def compute_responses(
     dR_a_k, dR_a_k_clr = albedo_kernel_components(anomaly.fal, K_a)
     dR_q_k, dR_q_k_clr = water_vapor_kernel_components(ds_monthly, ds_qt, K_q)
     dR_c_k = (dR - dR_clr) - (dR_a_k - dR_a_k_clr) - (dR_q_k - dR_q_k_clr)
-    
+
     response_attrs = {
         "dR_era5_all": {"plot_label": "ERA5 all",   "filename": "dR_era5_all.png"},
         "dR_era5_clr": {"plot_label": "ERA5 clear", "filename": "dR_era5_clr.png"},
@@ -1108,7 +1107,7 @@ def main():
         concat_dim="date",
     )
     ds = ds.sel(date=slice(args.start_date, args.end_date)).interp(**kernel_grid)
-    
+
     ds_monthly = to_monthly(ds.copy(deep=True))
     ds_monthly_means = ds_monthly.mean("year")
     anomaly = with_flux_targets(ds_monthly) - with_flux_targets(ds_monthly_means)
@@ -1117,7 +1116,7 @@ def main():
     if response_save_path.exists() and not args.overwrite_responses:
         print('='*20 + ' loaded cached responses ' + '='*20)
         responses = xr.load_dataset(response_save_path)
-        
+
     else:
         responses = compute_responses(
             ds_monthly,
@@ -1153,7 +1152,7 @@ def main():
         responses,
         output_root,
     )
-    
+
 
 if __name__ == "__main__":
     main()

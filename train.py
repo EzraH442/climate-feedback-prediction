@@ -32,7 +32,7 @@ def stage_training_data(config_path: str, seed=None) -> str:
     staged_data_dir.mkdir(parents=True, exist_ok=True)
 
     years_to_stage = sorted(
-        set([*config.dataset.train_years, *config.dataset.val_years])
+        {*config.dataset.train_years, *config.dataset.val_years}
     )
 
     for year in years_to_stage:
@@ -60,7 +60,7 @@ def create_comet_experiment(
 ):
     api_key = os.environ.get("COMET_API_KEY")
     if not api_key:
-        raise EnvironmentError(
+        raise OSError(
             "COMET_API_KEY is not set. Export it before running train.py."
         )
 
@@ -121,14 +121,6 @@ def train(config_path: str, resume: bool = True, seed=None):
 
     train_sampler = None
     train_shuffle = True
-    if config.train.area_weighted_sampling:
-        train_sampler = WeightedRandomSampler(
-            weights=train_dataset.sample_weights,
-            num_samples=len(train_dataset),
-            replacement=True,
-            generator=torch.Generator().manual_seed(config.seed),
-        )
-        train_shuffle = False
 
     train_dataloader = DataLoader(
         train_dataset,

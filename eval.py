@@ -6,29 +6,28 @@ import numpy as np
 import torch
 import xarray as xr
 
-from config_utils import load_config, variable_config_from_omegaconf, VariableConfig
+from config_utils import VariableConfig, load_config, variable_config_from_omegaconf
+from model import SimpleModel
 from preprocessing import DianaPreprocessor
-
 from utils_cartopy import (
-    generate_paths_yearly,
-    plot_global_field,
-    plot_north_pole_field,
-    interpolate_spatial_field,
-    make_era5_filename,
     SECONDS_PER_DAY,
-    kernel_delta,
-    kernel_title,
-    kernel_label,
-    scale_minmax_value,
     compute_nn_kernel,
     compute_nn_kernel_autograd,
-    nn_pred,
-    make_kernel_filename,
+    generate_paths_yearly,
+    interpolate_spatial_field,
+    kernel_delta,
+    kernel_label,
+    kernel_title,
     load_model_and_preprocessor,
+    make_era5_filename,
+    make_kernel_filename,
+    nn_pred,
+    plot_global_field,
+    plot_north_pole_field,
+    scale_minmax_value,
     target_flux,
 )
 
-from model import SimpleModel
 
 def figure_dir(figures_path: Path, *parts: str) -> Path:
     path = figures_path.joinpath(*parts)
@@ -1069,7 +1068,7 @@ def main():
         else Path(config.train.checkpoint_dir) / "best_model.pt"
     )
     model, preprocessor, epoch = load_model_and_preprocessor(config, checkpoint_path)
-    
+
     # --- setup output directory ---
     output_dir = Path(config.train.checkpoint_dir) / "figures" / str(epoch)
     if args.output_dir:
