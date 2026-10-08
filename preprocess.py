@@ -4,7 +4,6 @@ from pathlib import Path
 import xarray as xr
 
 from config_utils import load_config
-from constants import KERNEL_YEARS
 from preprocessing import Preprocessor
 from utils import (
     load_yearly_and_filter_by_months,
@@ -13,6 +12,8 @@ from utils import (
     make_era5_filename,
     make_kernel_filename,
 )
+
+KERNEL_YEARS = {2011, 2012, 2013, 2014, 2015}
 
 
 def load_cloud_profiles(

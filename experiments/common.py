@@ -1,0 +1,54 @@
+import json
+from pathlib import Path
+
+import torch
+import xarray as xr
+
+from utils import SECONDS_PER_DAY
+
+
+def output_path(args, default_name: str) -> Path:
+    path = Path(args.output_dir or default_name)
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def write_json(path: Path, data: dict) -> None:
+    path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+
+
+def write_netcdf(path: Path, data: xr.Dataset | xr.DataArray) -> None:
+    data.to_netcdf(path)
+
+
+def with_flux_targets(ds: xr.Dataset) -> xr.Dataset:
+    return ds.assign(
+        tsr=ds.tsr / SECONDS_PER_DAY,
+        tsrc=ds.tsrc / SECONDS_PER_DAY,
+    )
+
+
+def albedo_kernel_components(da, albedo_kernel) -> tuple[xr.DataArray, xr.DataArray]:
+    dR_a_k = albedo_kernel.TOA_all * da * 100
+    dR_a_k_clr = albedo_kernel.TOA_clr * da * 100
+    return dR_a_k, dR_a_k_clr
+
+
+class EnsembleModel(torch.nn.Module):
+    def __init__(self, models):
+        super().__init__()
+        self.models = torch.nn.ModuleList(models)
+
+    def forward(self, x):
+        return torch.stack([model(x) for model in self.models]).mean(dim=0)
+
+
+def parse_seed_ranges(seed_ranges):
+    seeds = []
+    for seed_range in seed_ranges:
+        if "-" in seed_range:
+            start, end = map(int, seed_range.split("-", 1))
+            seeds.extend(range(start, end + 1))
+        else:
+            seeds.append(int(seed_range))
+    return seeds
