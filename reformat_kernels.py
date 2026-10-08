@@ -223,20 +223,25 @@ def write_yearly_kernels(ds, output_dir, years, var):
         kernel_subset = ds.sel(date=(ds.date.dt.year == year))
         kernel_subset.to_netcdf(path)
 
-base = Path("./data/kernels_shared")
-years = [2011, 2012, 2013, 2014, 2015]
-months = [f"{m:02d}" for m in range(1,13)]
-print(months, years)
+def main():
+    base = Path("./data/kernels_shared")
+    years = [2011, 2012, 2013, 2014, 2015]
+    months = [f"{m:02d}" for m in range(1, 13)]
+    print(months, years)
 
-tcwv = load_tcwv(years)
-dtcwv = tcwv * 0.1
+    tcwv = load_tcwv(years)
+    dtcwv = tcwv * 0.1
 
-fal_kernel_ds = build_albedo_kernel_dataset(base, years, months)
-skt_kernel_ds = build_skt_kernel_dataset(base, years, months)
-sw_tcwv_kernel_ds = build_wv_kernel_dataset(base, years, months, dtcwv, band='sw')
-lw_tcwv_kernel_ds = build_wv_kernel_dataset(base, years, months, dtcwv, band='lw')
+    fal_kernel_ds = build_albedo_kernel_dataset(base, years, months)
+    skt_kernel_ds = build_skt_kernel_dataset(base, years, months)
+    sw_tcwv_kernel_ds = build_wv_kernel_dataset(base, years, months, dtcwv, band="sw")
+    lw_tcwv_kernel_ds = build_wv_kernel_dataset(base, years, months, dtcwv, band="lw")
 
-write_yearly_kernels(fal_kernel_ds, "data/fal/kernels", years, 'fal')
-write_yearly_kernels(sw_tcwv_kernel_ds, "data/fal/kernels", years, 'tcwv')
-write_yearly_kernels(skt_kernel_ds, "data/ts/kernels", years, 'ts')
-write_yearly_kernels(lw_tcwv_kernel_ds, "data/ts/kernels", years, 'tcwv')
+    write_yearly_kernels(fal_kernel_ds, "data/fal/kernels", years, "fal")
+    write_yearly_kernels(sw_tcwv_kernel_ds, "data/fal/kernels", years, "tcwv")
+    write_yearly_kernels(skt_kernel_ds, "data/ts/kernels", years, "ts")
+    write_yearly_kernels(lw_tcwv_kernel_ds, "data/ts/kernels", years, "tcwv")
+
+
+if __name__ == "__main__":
+    main()
