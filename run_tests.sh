@@ -17,9 +17,9 @@ CONFIGS=(
 EVAL_ARGS=""
 CLOSURE_ARGS="--skip_cross --skip_input_anomaly_plots"
 for config in "${CONFIGS[@]}"; do
-  echo "==> eval.py ${config}"
-  python eval.py --config_file "${config}" ${EVAL_ARGS:-}
+  echo "==> standard_eval ${config}"
+  python experiments/standard_eval/main.py --config_file "${config}" ${EVAL_ARGS:-}
 
-  #echo "==> eval_closure.py ${config}"
-  #python eval_closure.py --config_file "${config}" ${CLOSURE_ARGS:-}
+  #echo "==> radiative_closure_timeseries ${config}"
+  #python experiments/radiative_closure_timeseries/main.py --config_file "${config}" ${CLOSURE_ARGS:-}
 done

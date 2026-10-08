@@ -7,7 +7,7 @@ import omegaconf
 import torch
 from comet_ml import ExistingExperiment, Experiment
 from omegaconf import OmegaConf
-from torch.utils.data import DataLoader, WeightedRandomSampler
+from torch.utils.data import DataLoader
 
 from config_utils import load_config
 from dataloader import ClimateTorchDataset, make_era5_filename
@@ -31,9 +31,7 @@ def stage_training_data(config_path: str, seed=None) -> str:
     staged_data_dir = slurm_tmpdir / "era5_processed"
     staged_data_dir.mkdir(parents=True, exist_ok=True)
 
-    years_to_stage = sorted(
-        {*config.dataset.train_years, *config.dataset.val_years}
-    )
+    years_to_stage = sorted({*config.dataset.train_years, *config.dataset.val_years})
 
     for year in years_to_stage:
         filename = make_era5_filename(year)
@@ -60,9 +58,7 @@ def create_comet_experiment(
 ):
     api_key = os.environ.get("COMET_API_KEY")
     if not api_key:
-        raise OSError(
-            "COMET_API_KEY is not set. Export it before running train.py."
-        )
+        raise OSError("COMET_API_KEY is not set. Export it before running train.py.")
 
     key_path = comet_experiment_key_path(config.train.checkpoint_dir)
     experiment_key = None

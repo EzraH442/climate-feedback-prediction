@@ -1,9 +1,9 @@
 import os
+import pickle
+from pathlib import Path
+
 import numpy as np
 import xarray as xr
-from pathlib import Path
-import pickle
-
 
 from config_utils import variable_config_from_omegaconf
 from ecod_calculation import cod_from_water_path
@@ -297,7 +297,7 @@ class SequentialPreprocessor(Preprocessor):
             preprocessor.load(Path(path) / f"preprocessor_{i}")
 
 
-class DianaPreprocessor(SequentialPreprocessor):
+class Preprocessor(SequentialPreprocessor):
     def __init__(self, config, downscaling=True):
         self.config = config
         self.variable_config = variable_config_from_omegaconf(config)

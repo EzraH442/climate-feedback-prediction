@@ -101,6 +101,9 @@ class VariableConfig:
     clear_sky_target: str
     kernel_vars: list[str]
 
+    def get_target_var(self, clear):
+        return self.clear_sky_target if clear else self.target_var
+
     def all_vars(self) -> list[str]:
         return list(
             dict.fromkeys(
@@ -135,23 +138,27 @@ class VariableConfig:
         else:
             return out.sel(all_clr="all")
 
-    def outputs(self, ds: xr.Dataset, clear: bool=False) -> xr.DataArray:
+    def outputs(self, ds: xr.Dataset, clear: bool = False) -> xr.DataArray:
         if clear:
             return ds[self.clear_sky_target]
         else:
             return ds[self.target_var]
 
-    def outputs_np(self, ds: xr.Dataset, clear: bool=False) -> np.ndarray:
+    def outputs_np(self, ds: xr.Dataset, clear: bool = False) -> np.ndarray:
         return self.outputs(ds, clear).to_numpy()
 
-    def inputs_np(self, ds: xr.Dataset, dim_order: list[str]|None=None) -> np.ndarray:
+    def inputs_np(
+        self, ds: xr.Dataset, dim_order: list[str] | None = None
+    ) -> np.ndarray:
         inputs = self.inputs(ds)
         da = inputs.to_dataarray()
         if dim_order is not None:
             da = da.transpose(*dim_order)
         return da.values
 
-    def kern_inputs_np(self, ds: xr.Dataset, dim_order: list[str]|None=None, clear: bool=False) -> np.ndarray:
+    def kern_inputs_np(
+        self, ds: xr.Dataset, dim_order: list[str] | None = None, clear: bool = False
+    ) -> np.ndarray:
         inputs = self.kern_inputs(ds, clear)
         da = inputs.to_dataarray()
         if dim_order is not None:

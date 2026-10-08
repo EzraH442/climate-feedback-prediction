@@ -27,7 +27,7 @@ ARGS+=(
 )
 
 for config_file in "${ARGS[@]}"; do
-    python eval.py --config_file "${config_file}"
+    python experiments/standard_eval/main.py --config_file "${config_file}"
     echo $config_file
-    python eval_closure.py --config_file "${config_file}" --skip_input_anomaly_plots --skip_cross
+    python experiments/radiative_closure_timeseries/main.py --config_file "${config_file}" --skip_input_anomaly_plots --skip_cross
 done

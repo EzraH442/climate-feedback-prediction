@@ -5,8 +5,8 @@ import numpy as np
 import torch
 
 from config_utils import load_config, variable_config_from_omegaconf
-from preprocessing import DianaPreprocessor
-from utils_cartopy import (
+from preprocessing import Preprocessor
+from utils import (
     load_yearly_and_filter_by_months,
     make_combined_kernel_filename,
     make_era5_filename,
@@ -110,7 +110,7 @@ class ClimateTorchDataset(
         if "clear" in self.sky:
 
             def build_x_clear():
-                preprocessor = DianaPreprocessor(conf)
+                preprocessor = Preprocessor(conf)
                 preprocessor.load(conf.preprocess.params_dir)
                 raw = load_yearly_and_filter_by_months(
                     path=conf.dataset.era5.raw_path,
