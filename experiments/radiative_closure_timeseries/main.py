@@ -214,7 +214,7 @@ def compute_closure_eval(args):
     kernel_grid = {"latitude": K_a.latitude, "longitude": K_a.longitude}
 
     north_boundary = float(args.north_boundary)
-    analysis.NORTH_MASK = K_a.latitude.values > north_boundary
+    north_mask = K_a.latitude.values > north_boundary
 
     config = load_config(args.config_file)
     variable_config = variable_config_from_omegaconf(config)
@@ -276,6 +276,8 @@ def compute_closure_eval(args):
         "preprocessor": preprocessor,
         "responses": responses,
         "output_root": output_root,
+        "north_mask": north_mask,
+        "north_boundary": north_boundary,
         "year": year,
         "month": month,
         "residual_samples": args.residual_samples,
@@ -292,6 +294,8 @@ def main():
         eval_data["responses"],
         eval_data["output_root"],
         eval_data["residual_samples"],
+        eval_data["north_mask"],
+        eval_data["north_boundary"],
     )
     dt2m = eval_data["ds_monthly"].t2m - eval_data["ds_monthly"].t2m.mean("year")
     analysis.feedback_test(dt2m, eval_data["responses"], eval_data["output_root"])

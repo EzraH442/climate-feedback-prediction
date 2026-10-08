@@ -7,11 +7,6 @@ import torch
 import xarray as xr
 
 from config_utils import VariableConfig, load_config, variable_config_from_omegaconf
-from constants import (
-    SEED_AGGREGATED_MODELS,
-    SOBOLEV_LAMBDA_SPECS,
-    TABLE_MODEL_SPECS,
-)
 from experiments import radiative_closure_single_date as shakirova_context
 from experiments.radiative_closure_single_date.analysis import (
     arctic_field,
@@ -39,6 +34,41 @@ from utils import (
     scale_minmax_value,
     target_flux,
 )
+
+TABLE_MODEL_SPECS = [
+    ("NN", Path("configs/model/fal/2011-2014_3,6,9,12_baseline.yaml")),
+    (
+        "NN + clear-sky",
+        Path("configs/model/fal/2011-2014_3,6,9,12_baseline_clearsky.yaml"),
+    ),
+    (
+        "NN + clear-sky + Sob.",
+        Path("configs/model/fal/2011-2014_3,6,9,12_sob_fal_clearsky.yaml"),
+    ),
+]
+SEED_AGGREGATED_MODELS = ["NN", "NN + clear-sky", "NN + clear-sky + Sob."]
+SOBOLEV_LAMBDA_SPECS = [
+    (
+        "lambda=0.25",
+        Path("configs/model/fal/2011-2014_3,6,9,12_sob_fal_0.25_clearsky.yaml"),
+    ),
+    (
+        "lambda=0.5",
+        Path("configs/model/fal/2011-2014_3,6,9,12_sob_fal_0.5_clearsky.yaml"),
+    ),
+    (
+        "lambda=1",
+        Path("configs/model/fal/2011-2014_3,6,9,12_sob_fal_1_clearsky.yaml"),
+    ),
+    (
+        "lambda=2",
+        Path("configs/model/fal/2011-2014_3,6,9,12_sob_fal_2_clearsky.yaml"),
+    ),
+    (
+        "lambda=4",
+        Path("configs/model/fal/2011-2014_3,6,9,12_sob_fal_4_clearsky.yaml"),
+    ),
+]
 
 
 def global_tsr_test(
@@ -1242,20 +1272,16 @@ closure_table_path = table_output_dir / "closure_1990_2020.csv"
 feedback_table_path = table_output_dir / "feedback_quantification_two_year.csv"
 
 
-def seed_checkpoint_paths(config_path, checkpoint_path):
+def seed_checkpoint_paths(config_path):
     config_for_path = load_config(config_path)
-    base_dir = (
-        checkpoint_path.parent
-        if checkpoint_path is not None
-        else Path(config_for_path.train.checkpoint_dir)
-    )
+    base_dir = Path(config_for_path.train.checkpoint_dir)
     return sorted(base_dir.parent.glob(f"{base_dir.name}_seed_*/best_model.pt"))
 
 
 def expanded_table_model_specs():
-    for label, config_path, checkpoint_path in TABLE_MODEL_SPECS:
+    for label, config_path in TABLE_MODEL_SPECS:
         seeds = (
-            seed_checkpoint_paths(config_path, checkpoint_path)
+            seed_checkpoint_paths(config_path)
             if label in SEED_AGGREGATED_MODELS
             else []
         )
@@ -1263,8 +1289,7 @@ def expanded_table_model_specs():
             for i, seed_path in enumerate(seeds, start=1):
                 yield f"{label} [seed {i}]", config_path, seed_path
         else:
-            yield label, config_path, checkpoint_path
-        # yield label, config_path, checkpoint_path # simple for now
+            yield label, config_path, None
 
 
 def seed_rows_for(table, label):
@@ -1326,8 +1351,8 @@ def aggregate_seed_rows(table):
 def seed_aggregation_available():
     """Whether any seed-aggregated model currently has >1 discovered seed checkpoint."""
     return any(
-        len(seed_checkpoint_paths(config_path, checkpoint_path)) > 1
-        for label, config_path, checkpoint_path in TABLE_MODEL_SPECS
+        len(seed_checkpoint_paths(config_path)) > 1
+        for label, config_path in TABLE_MODEL_SPECS
         if label in SEED_AGGREGATED_MODELS
     )
 
@@ -1690,7 +1715,7 @@ def write_albedo_kernel_finite_difference_table():
 def collect_feedback_response_metrics(label, config_path, checkpoint_path):
     rows = []
     responses = load_feedback_ablation_responses(
-        label, config_path, checkpoint_path, "nn"
+        label, config_path, "nn", checkpoint_path
     )
     for sky, response_sky in [("all", "all"), ("clear", "clr")]:
         terms = shakirova_terms(responses, response_sky)
@@ -1703,70 +1728,9 @@ def collect_feedback_response_metrics(label, config_path, checkpoint_path):
     return rows
 
 
-"""
-def load_feedback_ablation_responses(label, config_path, checkpoint_path, source):
-    if source == "kernel":
-        return shakirova_responses
-
-    ablation_config = load_config(config_path)
-    ablation_vc = variable_config_from_omegaconf(ablation_config)
-    checkpoint_path = checkpoint_path or Path(ablation_config.train.checkpoint_dir) / "best_model.pt"
-    cache_path = shakirova_output_dir / f"ablation_responses_{checkpoint_path.parent.name}.nc"
-    if cache_path.exists():
-        return xr.load_dataset(cache_path)
-
-    ablation_model, ablation_preprocessor, _ = load_model_and_preprocessor(
-        ablation_config, checkpoint_path, downscaling=False
-    )
-    responses = compute_responses(
-        shakirova_perturbed,
-        shakirova_base,
-        ablation_model,
-        ablation_preprocessor,
-        ablation_vc,
-        shakirova_base_date,
-        shakirova_perturbed_date,
-        Path(ablation_config.dataset.era5.raw_path),
-    )
-    responses.to_netcdf(cache_path)
-    return responses
-
-
-
-def shakirova_terms(responses, sky):
-    suffix = "all" if sky == "all" else "clr"
-    target = responses[f"dR_era5_{suffix}"]
-    if sky == "all":
-        kernel_parts = [
-            responses["dR_a_k_all"],
-            responses["dR_q_k_all"],
-            responses["dR_c_k_all"],
-        ]
-        nn_parts = [
-            responses["dR_a_nn_all"],
-            responses["dR_q_nn_all"],
-            responses["dR_c_nn_all"],
-        ]
-        nn_allcross = responses["dR_nn_all"]
-    else:
-        kernel_parts = [responses["dR_a_k_clr"], responses["dR_q_k_clr"]]
-        nn_parts = [responses["dR_a_nn_clr"], responses["dR_q_nn_clr"]]
-        nn_allcross = responses["dR_nn_clr"]
-
-    kernel_sum = add_fields(kernel_parts)
-    nn_sum = add_fields(nn_parts)
-    return {
-        "target": target,
-        "kernel": [*kernel_parts, kernel_sum, target - kernel_sum],
-        "nn": [*nn_parts, nn_sum, target - nn_sum],
-        "allcross": [nn_allcross, target - nn_allcross],
-    }
-"""
-
-
 def collect_feedback_kernel_metrics():
     rows = []
-    responses = load_feedback_ablation_responses(None, None, None, "kernel")
+    responses = load_feedback_ablation_responses(None, None, "kernel")
     for sky, response_sky in [("all", "all"), ("clear", "clr")]:
         terms = shakirova_terms(responses, response_sky)
         diff = terms["kernel"][-1]
@@ -1860,7 +1824,7 @@ sobolev_lambda_feedback_raw_path = (
 
 
 def sobolev_lambda_seed_paths(label, config_path):
-    seeds = seed_checkpoint_paths(config_path, None)
+    seeds = seed_checkpoint_paths(config_path)
     if len(seeds) != 5:
         raise FileNotFoundError(
             f"{label}: expected 5 seeded checkpoints, found {len(seeds)}"

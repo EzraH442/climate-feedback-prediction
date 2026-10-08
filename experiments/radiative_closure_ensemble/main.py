@@ -225,7 +225,7 @@ def compute_closure_ensemble_eval(args):
     kernel_grid = {"latitude": K_a.latitude, "longitude": K_a.longitude}
 
     north_boundary = float(args.north_boundary)
-    analysis.NORTH_MASK = K_a.latitude.values > north_boundary
+    north_mask = K_a.latitude.values > north_boundary
 
     config = load_config(args.config_file)
     if args.seeds:
@@ -292,18 +292,22 @@ def compute_closure_ensemble_eval(args):
         responses.attrs["north_boundary"] = north_boundary
         responses.to_netcdf(response_save_path)
 
-    return ds_monthly, responses, output_root
+    return ds_monthly, responses, output_root, north_mask, north_boundary
 
 
 def main():
     args = ClosureEnsembleEvalArgs(
         description="Run closure-test analysis."
     ).parse_args()
-    ds_monthly, responses, output_root = compute_closure_ensemble_eval(args)
+    ds_monthly, responses, output_root, north_mask, north_boundary = (
+        compute_closure_ensemble_eval(args)
+    )
     analysis.timeseries_test(
         responses,
         output_root,
         args.residual_samples,
+        north_mask,
+        north_boundary,
     )
     dt2m = ds_monthly.t2m - ds_monthly.t2m.mean("year")
     analysis.feedback_test(

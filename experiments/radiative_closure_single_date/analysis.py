@@ -8,9 +8,7 @@ import xarray as xr
 
 from config_utils import load_config, variable_config_from_omegaconf
 from constants import (
-    ABLATION_SPECS,
     ALBEDO_KERNEL_PATH,
-    SHAKIROVA_NORTH_BOUNDARY,
     WATER_VAPOR_KERNEL_PATH,
 )
 from experiments.common import albedo_kernel_components, with_flux_targets
@@ -37,9 +35,21 @@ from utils import (
     plot_text_on_ax,
 )
 
-NORTH_BOUNDARY = SHAKIROVA_NORTH_BOUNDARY
-NORTH_MASK = None
-
+ABLATION_SPECS = [
+    ("kernel", None),
+    (
+        "NN",
+        Path("configs/model/fal/2011-2014_3,6,9,12_baseline.yaml"),
+    ),
+    (
+        "NN+clear-sky",
+        Path("configs/model/fal/2011-2014_3,6,9,12_baseline_clearsky.yaml"),
+    ),
+    (
+        "NN+clear-sky+Sob.",
+        Path("configs/model/fal/2011-2014_3,6,9,12_sob_fal_clearsky.yaml"),
+    ),
+]
 
 def select_date_state(ds: xr.Dataset, date: str) -> xr.Dataset:
     selected = ds.sel(date=date)
@@ -152,9 +162,10 @@ def date_closure_test(
     dR_co3_nn=None,
     dR_co3_nn_clr=None,
     skip_input_anomaly_plots=False,
+    *,
+    north_mask,
+    north_boundary: float,
 ) -> None:
-    if NORTH_MASK is None:
-        raise RuntimeError("NORTH_MASK must be initialized before date_closure_test.")
     date_clear = output_root / "clr"
     date_all = output_root / "all"
     date_clear.mkdir(exist_ok=True, parents=True)
@@ -173,8 +184,8 @@ def date_closure_test(
             anomaly_ecod,
             dR_clr,
             output_root,
-            north_mask=NORTH_MASK,
-            north_boundary=NORTH_BOUNDARY,
+            north_mask=north_mask,
+            north_boundary=north_boundary,
         )
     nn_responses_to_print = [
         ("dR_nn", responses["dR_nn_all"]),
@@ -198,8 +209,8 @@ def date_closure_test(
         ),
         date_all,
         source="NN",
-        north_mask=NORTH_MASK,
-        north_boundary=NORTH_BOUNDARY,
+        north_mask=north_mask,
+        north_boundary=north_boundary,
     )
     plot_response_dataset(
         responses[["dR_a_nn_clr", "dR_q_nn_clr"]].rename(
@@ -207,8 +218,8 @@ def date_closure_test(
         ),
         date_clear,
         source="NN",
-        north_mask=NORTH_MASK,
-        north_boundary=NORTH_BOUNDARY,
+        north_mask=north_mask,
+        north_boundary=north_boundary,
     )
 
     for name, response in [
@@ -226,8 +237,8 @@ def date_closure_test(
         ),
         date_all,
         source="K",
-        north_mask=NORTH_MASK,
-        north_boundary=NORTH_BOUNDARY,
+        north_mask=north_mask,
+        north_boundary=north_boundary,
     )
     plot_response_dataset(
         responses[["dR_a_k_clr", "dR_q_k_clr"]].rename(
@@ -235,8 +246,8 @@ def date_closure_test(
         ),
         date_clear,
         source="K",
-        north_mask=NORTH_MASK,
-        north_boundary=NORTH_BOUNDARY,
+        north_mask=north_mask,
+        north_boundary=north_boundary,
     )
 
     dR_sum_nn = (
@@ -321,32 +332,32 @@ def date_closure_test(
         nn_all_closure,
         date_all,
         source="NN",
-        north_mask=NORTH_MASK,
-        north_boundary=NORTH_BOUNDARY,
+        north_mask=north_mask,
+        north_boundary=north_boundary,
         ann_rmse=True,
     )
     plot_response_dataset(
         kernel_all_closure,
         date_all,
         source="K",
-        north_mask=NORTH_MASK,
-        north_boundary=NORTH_BOUNDARY,
+        north_mask=north_mask,
+        north_boundary=north_boundary,
         ann_rmse=True,
     )
     plot_response_dataset(
         nn_clr_closure,
         date_clear,
         source="NN",
-        north_mask=NORTH_MASK,
-        north_boundary=NORTH_BOUNDARY,
+        north_mask=north_mask,
+        north_boundary=north_boundary,
         ann_rmse=True,
     )
     plot_response_dataset(
         kernel_clr_closure,
         date_clear,
         source="K",
-        north_mask=NORTH_MASK,
-        north_boundary=NORTH_BOUNDARY,
+        north_mask=north_mask,
+        north_boundary=north_boundary,
         ann_rmse=True,
     )
 
@@ -364,8 +375,8 @@ def date_closure_test(
         ),
         date_all,
         source="NN",
-        north_mask=NORTH_MASK,
-        north_boundary=NORTH_BOUNDARY,
+        north_mask=north_mask,
+        north_boundary=north_boundary,
     )
 
     dR_aq_nn = responses["dR_aq_nn_all"]
@@ -388,8 +399,8 @@ def date_closure_test(
         cross_closure,
         date_all,
         source="NN",
-        north_mask=NORTH_MASK,
-        north_boundary=NORTH_BOUNDARY,
+        north_mask=north_mask,
+        north_boundary=north_boundary,
     )
 
 
@@ -481,16 +492,14 @@ def compute_responses(
 
 
 def compute_shakirova_eval(args):
-    global NORTH_BOUNDARY, NORTH_MASK
     K_a = xr.open_dataset(ALBEDO_KERNEL_PATH)
     kernel_grid = {"latitude": K_a.latitude, "longitude": K_a.longitude}
 
     # --- parse args ---
     d1, d2 = args.base_date, args.perturbed_date
 
-    #  --- setup global vars ---
-    NORTH_BOUNDARY = args.north_boundary
-    NORTH_MASK = K_a.latitude.values > NORTH_BOUNDARY
+    north_boundary = float(args.north_boundary)
+    north_mask = K_a.latitude.values > north_boundary
 
     #  --- load model ---
     config = load_config(args.config_file)
@@ -534,6 +543,7 @@ def compute_shakirova_eval(args):
     if response_save_path.exists() and not args.overwrite_responses:
         print("=" * 20 + " loaded cached responses " + "=" * 20)
         responses = xr.load_dataset(response_save_path)
+        responses.attrs["north_boundary"] = north_boundary
 
     else:
         responses = compute_responses(
@@ -546,6 +556,7 @@ def compute_shakirova_eval(args):
             d2,
             data_path,
         )
+        responses.attrs["north_boundary"] = north_boundary
         responses.to_netcdf(response_save_path)
     return {
         "anomaly": anomaly,
@@ -554,6 +565,8 @@ def compute_shakirova_eval(args):
         "preprocessor": preprocessor,
         "responses": responses,
         "output_root": output_root,
+        "north_mask": north_mask,
+        "north_boundary": north_boundary,
         "skip_input_anomaly_plots": args.skip_input_anomaly_plots,
     }
 
@@ -567,6 +580,8 @@ def plot_shakirova_eval(eval_data):
         eval_data["responses"],
         eval_data["output_root"],
         skip_input_anomaly_plots=eval_data["skip_input_anomaly_plots"],
+        north_mask=eval_data["north_mask"],
+        north_boundary=eval_data["north_boundary"],
     )
 
 
@@ -897,7 +912,7 @@ def setup_neurips_feedback_context(
     return shakirova_responses
 
 
-def load_feedback_ablation_responses(label, config_path, checkpoint_path, source):
+def load_feedback_ablation_responses(label, config_path, source, checkpoint_path=None):
     if source == "kernel":
         return shakirova_responses
 
@@ -967,10 +982,9 @@ def plot_feedback_ablation_residuals(arctic=True):
     ]
     labels = iter("abcdefghijklmn")
     residual_im = None
-    for row, (label, config_path, checkpoint_path, source) in enumerate(ABLATION_SPECS):
-        responses = load_feedback_ablation_responses(
-            label, config_path, checkpoint_path, source
-        )
+    for row, (label, config_path) in enumerate(ABLATION_SPECS):
+        source = "kernel" if config_path is None else "nn"
+        responses = load_feedback_ablation_responses(label, config_path, source)
         for col, field in enumerate(
             feedback_ablation_residual_fields(responses, source)
         ):
@@ -1029,7 +1043,7 @@ def coupling_slug(label):
     return "".join(ch if ch.isalnum() else "_" for ch in str(label).lower()).strip("_")
 
 
-def load_albedo_cloud_model(config_path, checkpoint_path):
+def load_albedo_cloud_model(config_path, checkpoint_path=None):
     coupling_config = load_config(config_path)
     coupling_vc = variable_config_from_omegaconf(coupling_config)
     checkpoint_path = (
@@ -1060,7 +1074,7 @@ def load_sensitivity_model(config_path, checkpoint_path=None):
     )
 
 
-def compute_albedo_cloud_coupling(label, config_path, checkpoint_path):
+def compute_albedo_cloud_coupling(label, config_path, checkpoint_path=None):
     cache_path = (
         shakirova_output_dir
         / f"{coupling_slug(label)}_compute_albedo_cloud_coupling.nc"
@@ -1119,9 +1133,9 @@ def predict_flux_for_states(
     )
 
 
-def albedo_cloud_diagnostic_fields(label, config_path, checkpoint_path):
+def albedo_cloud_diagnostic_fields(label, config_path, checkpoint_path=None):
     responses = load_feedback_ablation_responses(
-        label, config_path, checkpoint_path, "nn"
+        label, config_path, "nn", checkpoint_path
     )
     terms = shakirova_terms(responses, "all")
     allcross_residual = terms["allcross"][-1]
@@ -1143,9 +1157,9 @@ def spatial_field_correlation(a, b, arctic=True):
 
 def plot_albedo_cloud_coupling_residuals(arctic=True):
     nn_specs = [
-        (label, config_path, checkpoint_path)
-        for label, config_path, checkpoint_path, source in ABLATION_SPECS
-        if source == "nn"
+        (label, config_path)
+        for label, config_path in ABLATION_SPECS
+        if config_path is not None
     ]
     fig, ax = plt.subplots(
         len(nn_specs),
@@ -1171,8 +1185,8 @@ def plot_albedo_cloud_coupling_residuals(arctic=True):
     ]
     letters = iter("abcdefghijkl")
     im = None
-    for row, (label, config_path, checkpoint_path) in enumerate(nn_specs):
-        fields = albedo_cloud_diagnostic_fields(label, config_path, checkpoint_path)
+    for row, (label, config_path) in enumerate(nn_specs):
+        fields = albedo_cloud_diagnostic_fields(label, config_path)
         print(
             f"{label}: corr((a)-(b), Delta R_ac) = {spatial_field_correlation(fields[2], fields[3], arctic=arctic):.3f}"
         )
@@ -1210,17 +1224,15 @@ def plot_albedo_cloud_coupling_residuals(arctic=True):
 
 
 def plot_albedo_cloud_coupling_diagnostics(arctic=True):
-    label, config_path, checkpoint_path, _ = ABLATION_SPECS[-1]
-    responses = load_feedback_ablation_responses(
-        label, config_path, checkpoint_path, "nn"
-    )
+    label, config_path = ABLATION_SPECS[-1]
+    responses = load_feedback_ablation_responses(label, config_path, "nn")
     terms = shakirova_terms(responses, "all")
     target = terms["target"]
     a_field = target - terms["allcross"][0]
     b_field = target - terms["nn"][-2]
     c_field = terms["kernel"][-1]
     d_field = b_field - a_field
-    e_field = compute_albedo_cloud_coupling(label, config_path, checkpoint_path)
+    e_field = compute_albedo_cloud_coupling(label, config_path)
     f_field = e_field - d_field
 
     panels = [
@@ -1340,10 +1352,8 @@ def plot_albedo_cloud_coupling_diagnostics(arctic=True):
 
 # %%
 def plot_albedo_response_stack(arctic=True):
-    label, config_path, checkpoint_path, _ = ABLATION_SPECS[-1]
-    responses = load_feedback_ablation_responses(
-        label, config_path, checkpoint_path, "nn"
-    )
+    label, config_path = ABLATION_SPECS[-1]
+    responses = load_feedback_ablation_responses(label, config_path, "nn")
     terms = shakirova_terms(responses, "all")
     fields = [
         (terms["target"], r"$\Delta R$"),
@@ -1398,7 +1408,7 @@ def plot_albedo_response_stack(arctic=True):
 def plot_albedo_sensitivity_change(base_date=None, perturbed_date=None, arctic=True):
     base_date = base_date or shakirova_base_date
     perturbed_date = perturbed_date or shakirova_perturbed_date
-    label, config_path, checkpoint_path, _ = ABLATION_SPECS[1]
+    label, config_path = ABLATION_SPECS[1]
     cache_path = (
         shakirova_output_dir
         / f"{coupling_slug(label)}_albedo_sensitivity_differences_{perturbed_date}_minus_{base_date}.nc"
@@ -1422,7 +1432,7 @@ def plot_albedo_sensitivity_change(base_date=None, perturbed_date=None, arctic=T
     anomaly = perturbed - base
 
     coupling_model, coupling_preprocessor, coupling_vc = load_albedo_cloud_model(
-        config_path, checkpoint_path
+        config_path
     )
     cloud_vars = [var for var in coupling_vc.clear_sky_zero_vars if var in base]
     delta_ecod = (
@@ -1560,7 +1570,7 @@ def plot_albedo_sensitivity_change(base_date=None, perturbed_date=None, arctic=T
 def plot_albedo_kernel_comparison(base_date=None, perturbed_date=None, arctic=True):
     base_date = base_date or shakirova_base_date
     perturbed_date = perturbed_date or shakirova_perturbed_date
-    label, config_path, checkpoint_path, _ = ABLATION_SPECS[1]
+    label, config_path = ABLATION_SPECS[1]
     cache_path = (
         shakirova_output_dir
         / f"{coupling_slug(label)}_albedo_kernels_{base_date}_{perturbed_date}.nc"
@@ -1598,7 +1608,7 @@ def plot_albedo_kernel_comparison(base_date=None, perturbed_date=None, arctic=Tr
                 .load()
             )
         coupling_model, coupling_preprocessor, coupling_vc = load_albedo_cloud_model(
-            config_path, checkpoint_path
+            config_path
         )
 
         def nn_albedo_kernel(date):

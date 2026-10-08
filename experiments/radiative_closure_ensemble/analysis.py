@@ -5,10 +5,7 @@ import numpy as np
 import pandas as pd
 import xarray as xr
 
-from constants import (
-    CLOSURE_NORTH_BOUNDARY,
-    MONTH_NAMES,
-)
+from constants import MONTH_NAMES
 from utils import (
     global_date_series,
     plot_input_anomalies,
@@ -17,13 +14,6 @@ from utils import (
     weighted_residuals_by_month,
     weighted_residuals_by_year_month,
 )
-
-NORTH_MASK = None
-
-
-def closure_north_boundary(responses: xr.Dataset) -> float:
-    return float(responses.attrs.get("north_boundary", CLOSURE_NORTH_BOUNDARY))
-
 
 def plot_component_timeseries(series, output_dir: Path, clear_sky: bool) -> None:
     variables = ["a", "q"] if clear_sky else ["a", "q", "c"]
@@ -51,7 +41,9 @@ def _residual_key(source: str, clear_sky: bool) -> str:
     return f"dR_res_{source}" + ("_clr" if clear_sky else "")
 
 
-def build_residual_series(residual_fields: dict, north_pole: bool = False) -> dict:
+def build_residual_series(
+    residual_fields: dict, north_pole: bool = False, north_mask=None
+) -> dict:
     """
     build the {dR_res_<source>[_clr]: timeseries} dict
     residual_fields keys are expected to look like "nn", "k", "nn_allcross",
@@ -60,16 +52,18 @@ def build_residual_series(residual_fields: dict, north_pole: bool = False) -> di
     series = {}
     for name, field in residual_fields.items():
         if north_pole:
-            field = field.isel(latitude=NORTH_MASK)
+            field = field.isel(latitude=north_mask)
         series[f"dR_res_{name}"] = global_date_series(field)
     return series
 
 
-def build_rmse_residual_series(residual_fields: dict, north_pole: bool = False) -> dict:
+def build_rmse_residual_series(
+    residual_fields: dict, north_pole: bool = False, north_mask=None
+) -> dict:
     series = {}
     for name, field in residual_fields.items():
         if north_pole:
-            field = field.isel(latitude=NORTH_MASK)
+            field = field.isel(latitude=north_mask)
         series[f"dR_res_{name}"] = np.sqrt(global_date_series(field * field))
     return series
 
@@ -153,7 +147,9 @@ def plot_boxes_on_ax(ax, data, positions, width, color, label) -> None:
     ax.scatter([], [], color=color, label=label, s=20)
 
 
-def plot_residual_boxplots(residuals, residuals_np, output_dir: Path) -> None:
+def plot_residual_boxplots(
+    residuals, residuals_np, output_dir: Path, north_boundary: float
+) -> None:
     colors = {"nn": "tab:blue", "nn_cross": "purple", "kernel": "tab:orange"}
     keys = [key for key in ["nn", "nn_cross", "kernel"] if key in residuals]
     width = 0.7 / len(keys)
@@ -164,7 +160,11 @@ def plot_residual_boxplots(residuals, residuals_np, output_dir: Path) -> None:
 
     for title, data_dict, save_name in [
         ("Global", residuals, "boxplot_residuals_by_month_global.png"),
-        ("North Pole (>75 deg N)", residuals_np, "boxplot_residuals_by_month_np.png"),
+        (
+            f"North Pole (>{north_boundary:g} deg N)",
+            residuals_np,
+            "boxplot_residuals_by_month_np.png",
+        ),
     ]:
         fig, ax = setup_box_plot()
         for key in keys:
@@ -235,9 +235,9 @@ def timeseries_test(
     responses: xr.Dataset,
     output_root: Path,
     residual_samples: int,
+    north_mask,
+    north_boundary: float,
 ) -> None:
-    if NORTH_MASK is None:
-        raise RuntimeError("NORTH_MASK must be initialized before timeseries_test.")
     output_root.mkdir(exist_ok=True, parents=True)
     timeseries_clear = output_root / "clr"
     timeseries_all = output_root / "all"
@@ -289,7 +289,7 @@ def timeseries_test(
     }
     field_series = {key: global_date_series(value) for key, value in fields.items()}
     field_series_np = {
-        key: global_date_series(value.isel(latitude=NORTH_MASK))
+        key: global_date_series(value.isel(latitude=north_mask))
         for key, value in fields.items()
     }
 
@@ -309,7 +309,7 @@ def timeseries_test(
         key: global_date_series(value) for key, value in component_inputs.items()
     }
     component_series_np = {
-        key: global_date_series(value.isel(latitude=NORTH_MASK))
+        key: global_date_series(value.isel(latitude=north_mask))
         for key, value in component_inputs.items()
     }
     plot_component_timeseries(component_series, timeseries_all, clear_sky=False)
@@ -403,8 +403,12 @@ def timeseries_test(
     }
     mbe_series_all = build_residual_series(mbe_fields_all, north_pole=False)
     mbe_series_clr = build_residual_series(mbe_fields_clr, north_pole=False)
-    mbe_series_all_np = build_residual_series(mbe_fields_all, north_pole=True)
-    mbe_series_clr_np = build_residual_series(mbe_fields_clr, north_pole=True)
+    mbe_series_all_np = build_residual_series(
+        mbe_fields_all, north_pole=True, north_mask=north_mask
+    )
+    mbe_series_clr_np = build_residual_series(
+        mbe_fields_clr, north_pole=True, north_mask=north_mask
+    )
 
     plot_residual_mbe_timeseries(
         {**mbe_series_all, **mbe_series_clr}, timeseries_all, clear_sky=False
@@ -425,8 +429,12 @@ def timeseries_test(
 
     rmse_series_all = build_rmse_residual_series(mbe_fields_all, north_pole=False)
     rmse_series_clr = build_rmse_residual_series(mbe_fields_clr, north_pole=False)
-    rmse_series_all_np = build_rmse_residual_series(mbe_fields_all, north_pole=True)
-    rmse_series_clr_np = build_rmse_residual_series(mbe_fields_clr, north_pole=True)
+    rmse_series_all_np = build_rmse_residual_series(
+        mbe_fields_all, north_pole=True, north_mask=north_mask
+    )
+    rmse_series_clr_np = build_rmse_residual_series(
+        mbe_fields_clr, north_pole=True, north_mask=north_mask
+    )
 
     plot_residual_rmse_timeseries(
         {**rmse_series_all, **rmse_series_clr}, timeseries_all, clear_sky=False
@@ -453,9 +461,9 @@ def timeseries_test(
         residual_samples,
     )
     plot_residual_year_month_boxplots(
-        dR_res_nn.isel(latitude=NORTH_MASK),
-        dR_res_k.isel(latitude=NORTH_MASK),
-        "North Pole (>75 deg N)",
+        dR_res_nn.isel(latitude=north_mask),
+        dR_res_k.isel(latitude=north_mask),
+        f"North Pole (>{north_boundary:g} deg N)",
         timeseries_all / "np" / "boxplot_residuals_by_year_month_np.png",
         residual_samples,
     )
@@ -467,9 +475,9 @@ def timeseries_test(
         residual_samples,
     )
     plot_residual_year_month_boxplots(
-        dR_res_nn_clr.isel(latitude=NORTH_MASK),
-        dR_res_k_clr.isel(latitude=NORTH_MASK),
-        "North Pole (>75 deg N) clear-sky",
+        dR_res_nn_clr.isel(latitude=north_mask),
+        dR_res_k_clr.isel(latitude=north_mask),
+        f"North Pole (>{north_boundary:g} deg N) clear-sky",
         timeseries_clear / "np" / "boxplot_residuals_by_year_month_np.png",
         residual_samples,
     )
@@ -480,13 +488,15 @@ def timeseries_test(
     }
     residuals_clear_np = {
         "nn": weighted_residuals_by_month(
-            dR_res_nn_clr.isel(latitude=NORTH_MASK), residual_samples, rng
+            dR_res_nn_clr.isel(latitude=north_mask), residual_samples, rng
         ),
         "kernel": weighted_residuals_by_month(
-            dR_res_k_clr.isel(latitude=NORTH_MASK), residual_samples, rng
+            dR_res_k_clr.isel(latitude=north_mask), residual_samples, rng
         ),
     }
-    plot_residual_boxplots(residuals_clear, residuals_clear_np, timeseries_clear)
+    plot_residual_boxplots(
+        residuals_clear, residuals_clear_np, timeseries_clear, north_boundary
+    )
 
     # if not has_cross:
     #    return
@@ -499,16 +509,16 @@ def timeseries_test(
     # }
     # residuals_np = {
     #    "nn": weighted_residuals_by_month(
-    #        dR_res_nn.isel(latitude=NORTH_MASK), residual_samples, rng
+    #        dR_res_nn.isel(latitude=north_mask), residual_samples, rng
     #    ),
     #    "nn_cross": weighted_residuals_by_month(
-    #        dR_res_nn_cross.isel(latitude=NORTH_MASK), residual_samples, rng
+    #        dR_res_nn_cross.isel(latitude=north_mask), residual_samples, rng
     #    ),
     #    "kernel": weighted_residuals_by_month(
-    #        dR_res_k.isel(latitude=NORTH_MASK), residual_samples, rng
+    #        dR_res_k.isel(latitude=north_mask), residual_samples, rng
     #    ),
     # }
-    # plot_residual_boxplots(residuals, residuals_np, timeseries_all)
+    # plot_residual_boxplots(residuals, residuals_np, timeseries_all, north_boundary)
 
 
 def date_closure_test(
@@ -523,10 +533,10 @@ def date_closure_test(
     dR_co3_nn=None,
     dR_co3_nn_clr=None,
     skip_input_anomaly_plots=False,
+    *,
+    north_mask,
+    north_boundary: float,
 ) -> None:
-    if NORTH_MASK is None:
-        raise RuntimeError("NORTH_MASK must be initialized before date_closure_test.")
-    north_boundary = closure_north_boundary(responses)
     date_root = output_root / f"{year}_{month:02d}"
     date_root.mkdir(exist_ok=True, parents=True)
     date_clear = date_root / "clr"
@@ -547,7 +557,7 @@ def date_closure_test(
             anomaly_ecod,
             dR_clr,
             date_root,
-            north_mask=NORTH_MASK,
+            north_mask=north_mask,
             north_boundary=north_boundary,
             year=year,
             month=month,
@@ -574,7 +584,7 @@ def date_closure_test(
         ),
         date_all,
         source="NN",
-        north_mask=NORTH_MASK,
+        north_mask=north_mask,
         north_boundary=north_boundary,
         year=year,
         month=month,
@@ -586,7 +596,7 @@ def date_closure_test(
         ),
         date_clear,
         source="NN",
-        north_mask=NORTH_MASK,
+        north_mask=north_mask,
         north_boundary=north_boundary,
         year=year,
         month=month,
@@ -608,7 +618,7 @@ def date_closure_test(
         ),
         date_all,
         source="K",
-        north_mask=NORTH_MASK,
+        north_mask=north_mask,
         north_boundary=north_boundary,
         year=year,
         month=month,
@@ -620,7 +630,7 @@ def date_closure_test(
         ),
         date_clear,
         source="K",
-        north_mask=NORTH_MASK,
+        north_mask=north_mask,
         north_boundary=north_boundary,
         year=year,
         month=month,
@@ -709,7 +719,7 @@ def date_closure_test(
         nn_all_closure,
         date_all,
         source="NN",
-        north_mask=NORTH_MASK,
+        north_mask=north_mask,
         north_boundary=north_boundary,
         year=year,
         month=month,
@@ -720,7 +730,7 @@ def date_closure_test(
         kernel_all_closure,
         date_all,
         source="K",
-        north_mask=NORTH_MASK,
+        north_mask=north_mask,
         north_boundary=north_boundary,
         year=year,
         month=month,
@@ -731,7 +741,7 @@ def date_closure_test(
         nn_clr_closure,
         date_clear,
         source="NN",
-        north_mask=NORTH_MASK,
+        north_mask=north_mask,
         north_boundary=north_boundary,
         year=year,
         month=month,
@@ -742,7 +752,7 @@ def date_closure_test(
         kernel_clr_closure,
         date_clear,
         source="K",
-        north_mask=NORTH_MASK,
+        north_mask=north_mask,
         north_boundary=north_boundary,
         year=year,
         month=month,
@@ -764,7 +774,7 @@ def date_closure_test(
         ),
         date_all,
         source="NN",
-        north_mask=NORTH_MASK,
+        north_mask=north_mask,
         north_boundary=north_boundary,
         year=year,
         month=month,
@@ -791,7 +801,7 @@ def date_closure_test(
         cross_closure,
         date_all,
         source="NN",
-        north_mask=NORTH_MASK,
+        north_mask=north_mask,
         north_boundary=north_boundary,
         year=year,
         month=month,
