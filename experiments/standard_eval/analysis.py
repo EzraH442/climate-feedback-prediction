@@ -8,6 +8,14 @@ import xarray as xr
 
 from config_utils import VariableConfig, load_config, variable_config_from_omegaconf
 from experiments import radiative_closure_single_date as shakirova_context
+from experiments.kernel_difference.analysis import (
+    plot_hybrid_kernel_difference,
+    plot_kernel_difference,
+)
+from experiments.kernel_difference.main import (
+    compute_hybrid_kernel_difference,
+    compute_kernel_difference,
+)
 from experiments.radiative_closure_single_date.analysis import (
     arctic_field,
     load_feedback_ablation_responses,
@@ -903,196 +911,20 @@ def second_order_test(
         kernel_name,
         f"{perturbed_date}_minus_{base_date}",
     )
-    nn_kern_cld_1, lon, lat = compute_nn_kernel(
-        ds.sel(date=perturbed_date),
+    fields = compute_kernel_difference(
+        ds,
+        true_kernel,
         preprocessor,
         model,
         config,
-        perturbation_var=kernel_name,
+        base_date,
+        perturbed_date,
+        kernel_name,
     )
-    nn_kern_cld_0, _, _ = compute_nn_kernel(
-        ds.sel(date=base_date),
-        preprocessor,
-        model,
-        config,
-        perturbation_var=kernel_name,
-    )
-    delta_kern_nn = nn_kern_cld_1 - nn_kern_cld_0
-    nn_grad_cld_1, grad_lon, grad_lat = compute_nn_kernel_autograd(
-        ds.sel(date=perturbed_date), preprocessor, model, config, var=kernel_name
-    )
-    nn_grad_cld_0, _, _ = compute_nn_kernel_autograd(
-        ds.sel(date=base_date), preprocessor, model, config, var=kernel_name
-    )
-    delta_kern_nn_grad = nn_grad_cld_1 - nn_grad_cld_0
-
-    rrtm_lat, rrtm_lon = true_kernel.latitude, true_kernel.longitude
-    rrtm_kern_cld_1 = true_kernel[kernel_name].sel(
-        all_clr="all", date=perturbed_date
-    ).as_numpy()[0] * kernel_delta(kernel_name)
-    rrtm_kern_cld_0 = true_kernel[kernel_name].sel(
-        all_clr="all", date=base_date
-    ).as_numpy()[0] * kernel_delta(kernel_name)
-    delta_kern_rrtm = rrtm_kern_cld_1 - rrtm_kern_cld_0
-
-    if delta_kern_nn.shape != delta_kern_rrtm.shape:
-        plot_lon = rrtm_lon
-        plot_lat = rrtm_lat
-    else:
-        plot_lon = rrtm_lon
-        plot_lat = rrtm_lat
-    if delta_kern_nn_grad.shape != delta_kern_rrtm.shape:
-        delta_kern_nn_grad = interpolate_spatial_field(
-            delta_kern_nn_grad,
-            grad_lon,
-            grad_lat,
-            rrtm_lon,
-            rrtm_lat,
-        )
-        plot_grad_lon = rrtm_lon
-        plot_grad_lat = rrtm_lat
-    else:
-        plot_grad_lon = rrtm_lon
-        plot_grad_lat = rrtm_lat
-    grad_north_mask = plot_grad_lat >= 60
-
-    delta_k_diff_grad = delta_kern_nn_grad - delta_kern_rrtm
-    delta_k_nn_grad = delta_kern_nn_grad
-    delta_k_rrtm = delta_kern_rrtm.to_numpy()
-
-    base = select_date_state(ds, base_date)
-    perturbed = select_date_state(ds, perturbed_date)
-    nn_base = nn_grad_cld_0
-    processed_base = preprocessor.transform(base)
-    processed_perturbed = preprocessor.transform(perturbed)
-    delta_fal = perturbed.fal - base.fal
-    delta_ecod = processed_perturbed.ecod - processed_base.ecod
-    fal_base_north = base.fal.where(base.fal.latitude >= 60, drop=True).to_numpy()
-    ecod_base_north = processed_base.ecod.where(
-        processed_base.ecod.latitude >= 60, drop=True
-    ).to_numpy()
-    delta_fal_north = delta_fal.where(delta_fal.latitude >= 60, drop=True).to_numpy()
-    delta_ecod_north = delta_ecod.where(delta_ecod.latitude >= 60, drop=True).to_numpy()
-    plot_north_pole_field(
-        base.fal,
-        base.fal.longitude,
-        base.fal.latitude,
-        f"FAL ({base_date})",
-        output_dir / "fal_base_np.png",
-        cmap="Spectral",
-        vmin=0,
-        vmax=1,
-        annotation=f"{np.mean(fal_base_north):.2f}",
-    )
-    plot_north_pole_field(
-        processed_base.ecod,
-        processed_base.ecod.longitude,
-        processed_base.ecod.latitude,
-        f"ECOD ({base_date})",
-        output_dir / "ecod_base_np.png",
-        cmap="Spectral",
-        vmin=-1,
-        vmax=1,
-        annotation=f"{np.mean(ecod_base_north):.2f}",
-    )
-    plot_north_pole_field(
-        delta_fal,
-        delta_fal.longitude,
-        delta_fal.latitude,
-        f"$\\Delta$FAL ({perturbed_date} minus {base_date})",
-        output_dir / "delta_fal_np.png",
-        cmap="RdBu_r",
-        vmin=-0.2,
-        vmax=0.2,
-        annotation=f"{np.mean(delta_fal_north):.2f}; {np.mean(np.abs(delta_fal_north)):.2f}",
-    )
-    plot_north_pole_field(
-        delta_ecod,
-        delta_ecod.longitude,
-        delta_ecod.latitude,
-        f"$\\Delta$ECOD ({perturbed_date} minus {base_date})",
-        output_dir / "delta_ecod_np.png",
-        cmap="RdBu_r",
-        vmin=-1,
-        vmax=1,
-        annotation=f"{np.mean(delta_ecod_north):.2f}; {np.mean(np.abs(delta_ecod_north)):.2f}",
-    )
-    for label_name, fields in (
-        ("albedo_only", ["fal"]),
-        ("cloud_only", [var for var in config.clear_sky_zero_vars if var in ds]),
-    ):
-        hybrid = base.assign(
-            {var: (base[var].dims, perturbed[var].data) for var in fields}
-        )
-        hybrid_kern_nn, hybrid_lon, hybrid_lat = compute_nn_kernel_autograd(
-            hybrid.expand_dims(date=[base_date]),
-            preprocessor,
-            model,
-            config,
-            var=kernel_name,
-        )
-        if hybrid_kern_nn.shape != nn_base.shape:
-            hybrid_kern_nn = interpolate_spatial_field(
-                hybrid_kern_nn, hybrid_lon, hybrid_lat, lon, lat
-            )
-            hybrid_lon = lon
-            hybrid_lat = lat
-        hybrid_north_mask = hybrid_lat >= 60
-        hybrid_diff = hybrid_kern_nn - nn_base
-        plot_north_pole_field(
-            hybrid_diff,
-            hybrid_lon,
-            hybrid_lat,
-            f"$K_{{NN}} - K_{{NN,base}}$ with {label_name.replace('_', ' ')}\n"
-            f"base {base_date}; varied from {perturbed_date}",
-            output_dir / f"nn-rrtm_{label_name}_np.png",
-            vmin=-0.6,
-            vmax=0.6,
-            annotation=f"{np.mean(hybrid_diff[hybrid_north_mask]):.2f}; {np.mean(np.abs(hybrid_diff[hybrid_north_mask])):.2f}",
-        )
-
-    # plot_north_pole_field(
-    #    delta_k_nn, plot_lon, plot_lat,
-    #    "NN surface albedo kernel difference\n"+f"({dates[1]} minus f{dates[0]})",
-    #    figures_path / "delta_k_nn_np.png",
-    #    vmin=-1, vmax=1,
-    # )
-    plot_north_pole_field(
-        delta_k_nn_grad,
-        plot_grad_lon,
-        plot_grad_lat,
-        "NN autograd kernel difference\n" + f"({perturbed_date} minus {base_date})",
-        output_dir / "nn_grad_np.png",
-        vmin=-0.6,
-        vmax=0.6,
-    )
-    plot_north_pole_field(
-        delta_k_rrtm,
-        plot_lon,
-        plot_lat,
-        "ERA5 surface albedo kernel difference\n"
-        + f"({perturbed_date} minus {base_date})",
-        output_dir / "rrtm_np.png",
-        vmin=-0.6,
-        vmax=0.6,
-    )
-    # plot_north_pole_field(
-    #    delta_k_diff, plot_lon, plot_lat,
-    #    r"$K_{NN} - K_{ERA5}$" + "\n"+f"({dates[1]} minus f{dates[0]})",
-    #    figures_path / "delta_k_nn-rrtm_north_pole_2013-09_minus_2012-09.png",
-    #    vmin=-1, vmax=1,
-    # )
-    plot_north_pole_field(
-        delta_k_diff_grad,
-        plot_grad_lon,
-        plot_grad_lat,
-        r"$K_{NN,\mathrm{grad}} - K_{ERA5}$"
-        + "\n"
-        + f"({perturbed_date} minus {base_date})",
-        output_dir / "nn_grad-rrtm_np.png",
-        vmin=-0.6,
-        vmax=0.6,
-        annotation=f"{np.mean(delta_k_diff_grad[grad_north_mask]):.2f}; {np.mean(np.abs(delta_k_diff_grad[grad_north_mask])):.2f}",
+    plot_kernel_difference(fields, output_dir)
+    plot_hybrid_kernel_difference(
+        compute_hybrid_kernel_difference(fields, preprocessor, model, config, kernel_name),
+        output_dir,
     )
 
 
