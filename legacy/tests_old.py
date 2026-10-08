@@ -8,7 +8,7 @@
 import tensorflow as tf
 from tensorflow import keras
 
-## import general libraries 
+## import general libraries
 import os,sys,glob
 import numpy as np
 import xarray as xr
@@ -45,7 +45,7 @@ xrr_sl['tsr'] =xrr_sl.tsr/24/3600
 #xrr_sl['tsr'] = xr.where(xrr_sl.tsr < 0, np.nan, xrr_sl.tsr)
 #xrr_sl['tisr'] = xr.where(xrr_sl.tisr < 0, np.nan, xrr_sl.tisr)
 
-## divide datasets for training and testing 
+## divide datasets for training and testing
 # extract the years from the time dimension
 years = xrr_sl['time.year']
 
@@ -59,8 +59,8 @@ xrr_sl_even = xrr_sl.sel(time=(years % 2 == 0))
 
 ## We test the NN with the odd years
 df_test = xrr_sl_odd.to_dataframe()
-vars_list_test =  [ np.array(df_test.tisr), np.array(df_test.tciw), np.array(df_test.tclw), np.array(df_test.tcwv),                   
-                   np.array(df_test.lcc), np.array(df_test.mcc), np.array(df_test.hcc), np.array(df_test.sp), 
+vars_list_test =  [ np.array(df_test.tisr), np.array(df_test.tciw), np.array(df_test.tclw), np.array(df_test.tcwv),
+                   np.array(df_test.lcc), np.array(df_test.mcc), np.array(df_test.hcc), np.array(df_test.sp),
                    np.array(df_test.tco3), np.array(df_test.fal),np.array(df_test.ecod),
                    np.array(df_test.ecod*df_test.fal)]
 
@@ -74,7 +74,7 @@ min_val_test = np.round(np.min(tsr_test),2)
 a = -1
 b = 1
 nrmlzd_vars_list_test = []
-for x in vars_list_test:    
+for x in vars_list_test:
     n = MinMaxNorm(x,a,b)
     nrmlzd_vars_list_test.append(n)
 
@@ -180,11 +180,11 @@ if abs(np.min(difference))>abs(np.max(difference)):
     value = abs(np.min(difference))
 else:
     value = abs(np.max(difference))
-    
+
 MBE = np.round(np.mean(difference),2)
 MBE_str = str(MBE.values)
 MBE_plot = MBE_str
-    
+
 
 fig = plt.figure(figsize=(8, 6),dpi=300)
 
