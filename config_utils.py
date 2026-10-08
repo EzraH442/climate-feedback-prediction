@@ -5,8 +5,10 @@ import xarray as xr
 from omegaconf import DictConfig, OmegaConf
 
 
-def load_config(config_path: str | Path) -> DictConfig:
+def load_config(config_path: str | Path, overrides: list[str] | None = None) -> DictConfig:
     config = _load_config_recursive(Path(config_path).resolve(), seen=set())
+    if overrides:
+        config = OmegaConf.merge(config, OmegaConf.from_dotlist(overrides))
     validate_config(config)
     return config
 

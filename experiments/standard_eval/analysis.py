@@ -55,26 +55,38 @@ TABLE_MODEL_SPECS = [
     ),
 ]
 SEED_AGGREGATED_MODELS = ["NN", "NN + clear-sky", "NN + clear-sky + Sob."]
+SOBOLEV_LAMBDA_CONFIG = Path("configs/experiments/fal/sobolev_lambda.yaml")
+SOBOLEV_ABLATION_CHECKPOINT_ROOT = Path("sobolev-ablation/checkpoints")
 SOBOLEV_LAMBDA_SPECS = [
     (
         "lambda=0.25",
-        Path("configs/model/fal/2011-2014_3,6,9,12_sob_fal_0.25_clearsky.yaml"),
+        SOBOLEV_LAMBDA_CONFIG,
+        SOBOLEV_ABLATION_CHECKPOINT_ROOT
+        / "2011-2014_3,6,9,12_sob_fal_0.25_clearsky",
     ),
     (
         "lambda=0.5",
-        Path("configs/model/fal/2011-2014_3,6,9,12_sob_fal_0.5_clearsky.yaml"),
+        SOBOLEV_LAMBDA_CONFIG,
+        SOBOLEV_ABLATION_CHECKPOINT_ROOT
+        / "2011-2014_3,6,9,12_sob_fal_0.5_clearsky",
     ),
     (
         "lambda=1",
-        Path("configs/model/fal/2011-2014_3,6,9,12_sob_fal_1_clearsky.yaml"),
+        SOBOLEV_LAMBDA_CONFIG,
+        SOBOLEV_ABLATION_CHECKPOINT_ROOT
+        / "2011-2014_3,6,9,12_sob_fal_1_clearsky",
     ),
     (
         "lambda=2",
-        Path("configs/model/fal/2011-2014_3,6,9,12_sob_fal_2_clearsky.yaml"),
+        SOBOLEV_LAMBDA_CONFIG,
+        SOBOLEV_ABLATION_CHECKPOINT_ROOT
+        / "2011-2014_3,6,9,12_sob_fal_2_clearsky",
     ),
     (
         "lambda=4",
-        Path("configs/model/fal/2011-2014_3,6,9,12_sob_fal_4_clearsky.yaml"),
+        SOBOLEV_LAMBDA_CONFIG,
+        SOBOLEV_ABLATION_CHECKPOINT_ROOT
+        / "2011-2014_3,6,9,12_sob_fal_4_clearsky",
     ),
 ]
 
@@ -1104,9 +1116,9 @@ closure_table_path = table_output_dir / "closure_1990_2020.csv"
 feedback_table_path = table_output_dir / "feedback_quantification_two_year.csv"
 
 
-def seed_checkpoint_paths(config_path):
+def seed_checkpoint_paths(config_path, checkpoint_dir=None):
     config_for_path = load_config(config_path)
-    base_dir = Path(config_for_path.train.checkpoint_dir)
+    base_dir = Path(checkpoint_dir or config_for_path.train.checkpoint_dir)
     return sorted(base_dir.parent.glob(f"{base_dir.name}_seed_*/best_model.pt"))
 
 
@@ -1655,8 +1667,8 @@ sobolev_lambda_feedback_raw_path = (
 )
 
 
-def sobolev_lambda_seed_paths(label, config_path):
-    seeds = seed_checkpoint_paths(config_path)
+def sobolev_lambda_seed_paths(label, config_path, checkpoint_dir):
+    seeds = seed_checkpoint_paths(config_path, checkpoint_dir)
     if len(seeds) != 5:
         raise FileNotFoundError(
             f"{label}: expected 5 seeded checkpoints, found {len(seeds)}"
@@ -1698,17 +1710,18 @@ def missing_sobolev_specs(table):
         ).astype(str)
     )
     return [
-        (label, config_path)
-        for label, config_path in SOBOLEV_LAMBDA_SPECS
+        (label, config_path, checkpoint_dir)
+        for label, config_path, checkpoint_dir in SOBOLEV_LAMBDA_SPECS
         if not set(sobolev_seed_labels(label)).issubset(existing)
     ]
 
 
 def sobolev_lambda_collect_model_metric_rows(row_fn, specs=None, *args, **kwargs):
     rows = []
-    for label, config_path in specs or SOBOLEV_LAMBDA_SPECS:
+    for label, config_path, checkpoint_dir in specs or SOBOLEV_LAMBDA_SPECS:
         for seed_label, checkpoint_path in zip(
-            sobolev_seed_labels(label), sobolev_lambda_seed_paths(label, config_path)
+            sobolev_seed_labels(label),
+            sobolev_lambda_seed_paths(label, config_path, checkpoint_dir),
         ):
             table_config, table_vc, table_model, table_preprocessor = (
                 load_evaluation_model(config_path, checkpoint_path)
@@ -1740,7 +1753,7 @@ def load_or_update_raw_sobolev_table(path, description, compute_table, index_col
         print(f"{description}: loaded {path}")
         return table
 
-    print(f"{description}: computing missing configs {[label for label, _ in missing]}")
+    print(f"{description}: computing missing configs {[label for label, *_ in missing]}")
     table = pd.concat([table, compute_table(missing)])
     table = table[~table.index.duplicated(keep="last")]
     table.to_csv(path)
@@ -1763,9 +1776,10 @@ def compute_sobolev_lambda_kernel_raw_table(specs):
 
 def compute_sobolev_lambda_feedback_raw_table(specs):
     rows = []
-    for label, config_path in specs:
+    for label, config_path, checkpoint_dir in specs:
         for seed_label, checkpoint_path in zip(
-            sobolev_seed_labels(label), sobolev_lambda_seed_paths(label, config_path)
+            sobolev_seed_labels(label),
+            sobolev_lambda_seed_paths(label, config_path, checkpoint_dir),
         ):
             rows.extend(
                 collect_feedback_response_metrics(

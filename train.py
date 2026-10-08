@@ -21,8 +21,8 @@ def comet_experiment_key_path(checkpoint_dir: str) -> Path:
     return Path(checkpoint_dir) / "comet_experiment_key.txt"
 
 
-def stage_training_data(config_path: str, seed=None) -> str:
-    config = load_config(config_path)
+def stage_training_data(config_path: str, seed=None, overrides=None) -> str:
+    config = load_config(config_path, overrides=overrides)
     slurm_tmpdir = Path(
         os.environ.get("SLURM_TMPDIR", Path(config.dataset.era5.path).resolve())
     )
@@ -48,6 +48,11 @@ def stage_training_data(config_path: str, seed=None) -> str:
         config.seed = seed
         config.train.name = config.train.name + f"_seed_{seed}"
         config.train.checkpoint_dir = config.train.checkpoint_dir + f"_seed_{seed}"
+
+    checkpoint_dir = Path(config.train.checkpoint_dir)
+    checkpoint_dir.mkdir(parents=True, exist_ok=True)
+    OmegaConf.save(config, checkpoint_dir / "config.yaml")
+
     runtime_config_path = slurm_tmpdir / "train_runtime_config.yaml"
     OmegaConf.save(config, runtime_config_path)
     return str(runtime_config_path)
@@ -89,8 +94,8 @@ def create_comet_experiment(
     return experiment
 
 
-def train(config_path: str, resume: bool = True, seed=None):
-    staged_config_path = stage_training_data(config_path, seed)
+def train(config_path: str, resume: bool = True, seed=None, overrides=None):
+    staged_config_path = stage_training_data(config_path, seed, overrides=overrides)
     config = load_config(staged_config_path)
     assert isinstance(config, omegaconf.DictConfig), ""
 
@@ -202,10 +207,15 @@ def main():
         dest="resume",
         help="Whether to start training from scratch",
     )
+    parser.add_argument(
+        "overrides",
+        nargs="*",
+        help="OmegaConf dotlist overrides, e.g. train.sobolev_alpha=0.25",
+    )
     parser.set_defaults(resume=True)
     args = parser.parse_args()
 
-    train(args.config_file, args.resume, seed=args.seed)
+    train(args.config_file, args.resume, seed=args.seed, overrides=args.overrides)
 
 
 if __name__ == "__main__":

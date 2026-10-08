@@ -14,100 +14,39 @@
 
 set -euo pipefail
 
-ROOT="baseline-optimization"
-CONFIG_DIR="${ROOT}/configs"
-CHECKPOINT_DIR="${ROOT}/checkpoints"
-mkdir -p "${CONFIG_DIR}" "${CHECKPOINT_DIR}"
-
+CONFIG="configs/experiments/fal/baseline_optimization.yaml"
+CHECKPOINT_ROOT="./baseline-optimization/checkpoints"
 HIDDEN_SIZES=(11 15 20 30 50)
 MONTH_KEYS=("3,6,9,12" "1-12")
 
-write_config() {
-    local hidden_size="$1"
-    local month_key="$2"
-    local months data_path preprocess_dir name
-
-    if [[ "${month_key}" == "3,6,9,12" ]]; then
-        months="  months: [3, 6, 9, 12]"
-        data_path="./data/fal/era5_processed_mar_june_sep_dec_2011_2014"
-        preprocess_dir="preprocess_states/fal/2011-2014_3,6,9,12"
-        name="baseline_opt_2011-2014_3,6,9,12_hidden-${hidden_size}"
-    else
-        months="  months: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]"
-        data_path="./data/fal/era5_processed"
-        preprocess_dir="preprocess_states/fal/2011-2014_1-12"
-        name="baseline_opt_2011-2014_1-12_hidden-${hidden_size}"
-    fi
-
-    local config_path="${CONFIG_DIR}/${name}.yaml"
-    cat > "${config_path}" <<EOF
-base: ../../configs/base/model/common.yaml
-
-dataset:
-  input_vars:
-    - fal
-    - hcc
-    - mcc
-    - lcc
-    - sp
-    - tciw
-    - tclw
-    - tcwv
-    - tco3
-    - tisr
-    - ecod
-    - ecod_fal
-${months}
-  era5:
-    path: '${data_path}'
-  kernels:
-    raw_path: './data/fal/kernels'
-    path: './data/fal/kernels_processed'
-  train_years: [2011, 2012, 2013, 2014]
-  val_years: [2015]
-  test_years: [2015]
-
-preprocess:
-  params_dir: '${preprocess_dir}'
-  ecod:
-    enabled: True
-    method: 'true'
-
-model:
-  input_dim: 12
-  hidden_dim_sizes: [${hidden_size}]
-
-train:
-  name: '${name}'
-  checkpoint_dir: './${CHECKPOINT_DIR}/${name}'
-  sobolev: False
-  sobolev_vars: []
-EOF
-    echo "${config_path}"
-}
-
-CONFIGS=()
+ARGS=()
 for month_key in "${MONTH_KEYS[@]}"; do
     for hidden_size in "${HIDDEN_SIZES[@]}"; do
-        CONFIGS+=("$(write_config "${hidden_size}" "${month_key}")")
+        if [[ "${month_key}" == "3,6,9,12" ]]; then
+            name="baseline_opt_2011-2014_3,6,9,12_hidden-${hidden_size}"
+            ARGS+=(
+                "model.hidden_dim_sizes=[${hidden_size}] dataset.months=[3,6,9,12] dataset.era5.path=./data/fal/era5_processed_mar_june_sep_dec_2011_2014 preprocess.params_dir=preprocess_states/fal/2011-2014_3,6,9,12 train.name=${name} train.checkpoint_dir=${CHECKPOINT_ROOT}/${name}"
+            )
+        else
+            name="baseline_opt_2011-2014_1-12_hidden-${hidden_size}"
+            ARGS+=(
+                "model.hidden_dim_sizes=[${hidden_size}] dataset.months=[1,2,3,4,5,6,7,8,9,10,11,12] dataset.era5.path=./data/fal/era5_processed preprocess.params_dir=preprocess_states/fal/2011-2014_1-12 train.name=${name} train.checkpoint_dir=${CHECKPOINT_ROOT}/${name}"
+            )
+        fi
     done
 done
 
-if [[ "${1:-}" == "--generate-only" ]]; then
-    printf '%s\n' "${CONFIGS[@]}"
-    exit 0
-fi
-
 train_one() {
-    local config_file="$1"
-    python train.py --config_file "${config_file}" --no-resume
+    local overrides="$1"
+    local override_args=()
+    read -r -a override_args <<< "${overrides}"
+    python train.py --config_file "${CONFIG}" --no-resume "${override_args[@]}"
 }
 
 export OMP_NUM_THREADS="${SLURM_CPUS_PER_TASK:-1}"
 export COMET_API_KEY="${COMET_API_KEY:-MoBGkV7uhoNarGzMpipBaZYsJ}"
 
 if [[ -n "${SLURM_JOB_ID:-}" ]]; then
-
     module purge
     module load StdEnv/2023
     module load python/3.11
@@ -121,9 +60,9 @@ if [[ -n "${SLURM_JOB_ID:-}" ]]; then
     pip install --no-index --upgrade pip
     pip install --no-index -r requirements.txt
 
-    train_one "${CONFIGS[$SLURM_ARRAY_TASK_ID]}"
+    train_one "${ARGS[$SLURM_ARRAY_TASK_ID]}"
 else
-    for config_file in "${CONFIGS[@]}"; do
-        train_one "${config_file}"
+    for overrides in "${ARGS[@]}"; do
+        train_one "${overrides}"
     done
 fi
