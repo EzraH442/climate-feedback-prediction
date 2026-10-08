@@ -1,5 +1,3 @@
-from pathlib import Path
-
 import matplotlib.pyplot as plt
 
 from experiments.radiative_closure_single_date.analysis import (
@@ -18,20 +16,6 @@ from experiments.standard_eval.analysis import (
     write_neurips_summary_tables,
     write_sobolev_lambda_summary_tables,
 )
-
-PROJ_DATA_DIR = Path(
-    "/cvmfs/soft.computecanada.ca/easybuild/software/2023/"
-    "x86-64-v4/Compiler/gcccore/proj/9.2.0/share/proj"
-)
-
-
-def configure_proj() -> None:
-    if not PROJ_DATA_DIR.exists():
-        return
-
-    import pyproj
-
-    pyproj.datadir.set_data_dir(PROJ_DATA_DIR)
 
 
 def save(fig):
@@ -63,7 +47,6 @@ def make_feedback_figures() -> None:
 
 
 def main() -> None:
-    configure_proj()
     write_neurips_summary_tables()
     write_sobolev_lambda_summary_tables()
     make_feedback_figures()

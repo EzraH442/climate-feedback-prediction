@@ -64,9 +64,9 @@ def convert_kernels_for_target(processed_kernel, target_var, train_data, val_dat
     )
     return processed_kernel / raw_tisr
 
+
 def preprocess(config_path):
     config = load_config(config_path)
-    input_vars = config.dataset.input_vars
     target_var = config.dataset.target_var
 
     train_val_years = [config.dataset.train_years, config.dataset.val_years]
@@ -94,7 +94,7 @@ def preprocess(config_path):
             raw_kern_path,
             all_kern_years,
             config.dataset.months,
-            lambda year: make_kernel_filename(year, var),
+            lambda year, var=var: make_kernel_filename(year, var),
         )
         for var in kernel_vars
     ]  # list of datasets (date, lat, lon, all_clr), with field .<var> for each kernel variable

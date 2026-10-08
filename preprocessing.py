@@ -25,12 +25,10 @@ class Preprocessor:
     def save(self, path):
         if not os.path.exists(path):
             os.makedirs(path)
-        pass
 
     def load(self, path):
         if not os.path.exists(path):
             raise FileNotFoundError(f"Preprocessor state not found at: {path}")
-        pass
 
 
 class ECOD_Calculator(Preprocessor):
@@ -75,11 +73,9 @@ class VariableSelector(Preprocessor):
 
 
 class Downscaler(Preprocessor):
-    def __init__(
-        self, factor: list[tuple[str, int]] = [("latitude", 4), ("longitude", 4)]
-    ):
+    def __init__(self, factor: list[tuple[str, int]] | None = None):
         super().__init__()
-        self.factor = factor
+        self.factor = factor or [("latitude", 4), ("longitude", 4)]
         self.original_dims_sizes = {}
 
     def transform(self, ds: xr.Dataset):
@@ -304,7 +300,7 @@ class Preprocessor(SequentialPreprocessor):
         vars = self.variable_config.all_vars()
 
         self.scalar = XarrayMinMaxScaler(dim=("date", "latitude", "longitude"))
-        preprocessors = [
+        preprocessors: list[Preprocessor] = [
             PlanetaryAlbedoCalculator(),
             (
                 ECOD_Calculator(log=config.preprocess.ecod.log)

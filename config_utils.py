@@ -5,7 +5,9 @@ import xarray as xr
 from omegaconf import DictConfig, OmegaConf
 
 
-def load_config(config_path: str | Path, overrides: list[str] | None = None) -> DictConfig:
+def load_config(
+    config_path: str | Path, overrides: list[str] | None = None
+) -> DictConfig:
     config = _load_config_recursive(Path(config_path).resolve(), seen=set())
     if overrides:
         config = OmegaConf.merge(config, OmegaConf.from_dotlist(overrides))
@@ -130,10 +132,10 @@ class VariableConfig:
         assign_dict = {var: xr.zeros_like(ds[var]) for var in zero_vars if var in ds}
         return ds.assign(assign_dict)
 
-    def inputs(self, ds: xr.Dataset) -> xr.Dataset:
+    def inputs(self, ds: xr.Dataset) -> xr.DataArray:
         return ds[self.input_order()]
 
-    def kern_inputs(self, ds: xr.Dataset, clear=False) -> xr.Dataset:
+    def kern_inputs(self, ds: xr.Dataset, clear=False) -> xr.DataArray:
         out = ds[self.kern_input_order()]
         if clear:
             return out.sel(all_clr="clr")

@@ -7,7 +7,7 @@ import xarray as xr
 from utils import make_era5_filename, make_kernel_filename
 
 
-def make_kernel_path_alb(year: int, month: str, band: str="sw", sky: str="cld"):
+def make_kernel_path_alb(year: int, month: str, band: str = "sw", sky: str = "cld"):
     assert band in ["sw", "lw"], "band must be 'sw' or 'lw'"
     assert sky in ["cld", "clr"], "sky must be 'cld' or 'clr'"
 
@@ -20,7 +20,7 @@ def make_kernel_path_alb(year: int, month: str, band: str="sw", sky: str="cld"):
     )
 
 
-def make_kernel_path_ts(year: int, month: str, band: str="lw", sky: str="cld"):
+def make_kernel_path_ts(year: int, month: str, band: str = "lw", sky: str = "cld"):
     assert band in ["sw", "lw"], "band must be 'sw' or 'lw'"
     assert sky in ["cld", "clr"], "sky must be 'cld' or 'clr'"
 
@@ -33,7 +33,7 @@ def make_kernel_path_ts(year: int, month: str, band: str="lw", sky: str="cld"):
     )
 
 
-def make_kernel_path_wv(year: int, month: str, band: str="sw", sky: str="cld"):
+def make_kernel_path_wv(year: int, month: str, band: str = "sw", sky: str = "cld"):
     assert band in ["sw", "lw"], "band must be 'sw' or 'lw'"
     assert sky in ["cld", "clr"], "sky must be 'cld' or 'clr'"
 
@@ -150,7 +150,13 @@ def build_skt_kernel_dataset(base: Path, years: list[int], months: list[str]):
     return ds
 
 
-def build_wv_kernel_dataset(base: Path, years: list[int], months: list[str], dtcwv: xr.DataArray, band: str="sw"):
+def build_wv_kernel_dataset(
+    base: Path,
+    years: list[int],
+    months: list[str],
+    dtcwv: xr.DataArray,
+    band: str = "sw",
+):
     year_months = list(product(years, months))
     cld_arrays = []
     clr_arrays = []
@@ -166,8 +172,8 @@ def build_wv_kernel_dataset(base: Path, years: list[int], months: list[str], dtc
         ds_cld = select_toa_arr(ds_cld)
         ds_clr = select_toa_arr(ds_clr)
 
-        ds_cld = ds_cld.sum(dim='level')
-        ds_clr = ds_clr.sum(dim='level')
+        ds_cld = ds_cld.sum(dim="level")
+        ds_clr = ds_clr.sum(dim="level")
 
         ds_cld = assign_date_coord(ds_cld, year, month)
         ds_clr = assign_date_coord(ds_clr, year, month)
@@ -202,18 +208,20 @@ def build_wv_kernel_dataset(base: Path, years: list[int], months: list[str], dtc
 def load_tcwv(years: list[int]):
     dss = []
     for year in years:
-        t_path = 'data/era5/' + make_era5_filename(year)
+        t_path = "data/era5/" + make_era5_filename(year)
         dss.append(xr.open_dataset(t_path))
     ds = xr.concat(dss, dim="date").tcwv
     return ds
 
+
 def load_surface_pressure(years):
     dss = []
     for year in years:
-        sp_path = 'data/era5/' + make_era5_filename(year)
+        sp_path = "data/era5/" + make_era5_filename(year)
         dss.append(xr.open_dataset(sp_path))
     ds = xr.concat(dss, dim="date")
     return ds
+
 
 def write_yearly_kernels(ds, output_dir, years, var):
     output_dir = Path(output_dir)
@@ -222,6 +230,7 @@ def write_yearly_kernels(ds, output_dir, years, var):
         path = output_dir / make_kernel_filename(year, var)
         kernel_subset = ds.sel(date=(ds.date.dt.year == year))
         kernel_subset.to_netcdf(path)
+
 
 def main():
     base = Path("./data/kernels_shared")

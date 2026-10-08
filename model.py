@@ -235,7 +235,7 @@ class SimpleModelSobolevTrainer:
         self.sobolev_input_indices: list[int] = [
             input_vars.index(var) for var in sobolev_vars
         ]
-        sobolev_var_weights: list[float] = self.config.train.get(
+        sobolev_var_weights: dict[str, int] = self.config.train.get(
             "sobolev_var_weights", {}
         )
         self.sobolev_var_weights = torch.tensor(
