@@ -1,3 +1,4 @@
+# Example: python experiments/radiative_closure_timeseries/main.py
 import sys
 from pathlib import Path
 

@@ -1,6 +1,8 @@
+# Example: python experiments/standard_eval/main.py --config_file configs/model/fal/2011-2014_3,6,9,12_baseline.yaml
 import sys
 from pathlib import Path
 
+import torch
 import xarray as xr
 from tap import Tap
 
@@ -39,15 +41,24 @@ from utils import (
 
 
 class StandardEvalArgs(Tap):
-    config_file: str
-    checkpoint_path: str | None = None
-    output_dir: str | None = None
+    config_file: Path
+    checkpoint_path: Path | None = None
+    output_dir: Path | None = None
 
-
-def output_dir_for_args(args, config, epoch) -> Path:
-    if args.output_dir:
-        return Path(args.output_dir)
-    return Path(config.train.checkpoint_dir) / "figures" / str(epoch)
+    def process_args(self):
+        self.config = load_config(self.config_file)
+        if self.output_dir is None:
+            checkpoint_path = self.checkpoint_path or (
+                Path(self.config.train.checkpoint_dir) / "best_model.pt"
+            )
+            checkpoint = torch.load(
+                checkpoint_path, map_location="cpu", weights_only=False
+            )
+            self.output_dir = (
+                Path(self.config.train.checkpoint_dir)
+                / "figures"
+                / str(checkpoint["epoch"])
+            )
 
 
 def flux_summary(pred: xr.DataArray, truth: xr.DataArray, attrs: dict) -> xr.Dataset:
@@ -195,15 +206,15 @@ def align_hybrid_fields(fields):
 
 
 def compute_standard_eval(args):
-    config = load_config(args.config_file)
+    config = args.config
     vc = variable_config_from_omegaconf(config)
     checkpoint_path = (
-        Path(args.checkpoint_path)
+        args.checkpoint_path
         if args.checkpoint_path
         else Path(config.train.checkpoint_dir) / "best_model.pt"
     )
-    model, preprocessor, epoch = load_model_and_preprocessor(config, checkpoint_path)
-    output_dir = output_dir_for_args(args, config, epoch)
+    model, preprocessor, _ = load_model_and_preprocessor(config, checkpoint_path)
+    output_dir = args.output_dir
     results_dir = output_dir / "results"
     results_dir.mkdir(parents=True, exist_ok=True)
 

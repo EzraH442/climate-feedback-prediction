@@ -1,3 +1,4 @@
+# Example: python experiments/sensitivity_prediction/main.py --config_file configs/model/fal/2011-2014_3,6,9,12_baseline.yaml --dates 2015-09
 import sys
 from pathlib import Path
 
@@ -12,7 +13,6 @@ from config_utils import load_config, variable_config_from_omegaconf
 from experiments.common import (
     checkpoint_paths_for_args,
     model_label,
-    output_path,
     parse_args_and_confirm,
     write_netcdf,
 )
@@ -42,6 +42,8 @@ class SensitivityPredictionArgs(Tap):
     def process_args(self):
         if self.seeds and self.checkpoint_path:
             self.error("--seeds and --checkpoint_path are mutually exclusive")
+        self.output_dir = Path(self.output_dir or "sensitivity_prediction")
+        self.output_dir.mkdir(parents=True, exist_ok=True)
 
 
 def collect_sensitivity_input_data(data_path: Path, dates: list[str]) -> xr.Dataset:
@@ -147,7 +149,7 @@ def main():
     args = parse_args_and_confirm(SensitivityPredictionArgs())
     config = load_config(args.config_file)
     vc = variable_config_from_omegaconf(config)
-    output_dir = output_path(args, "sensitivity_prediction")
+    output_dir = args.output_dir
 
     ds = collect_sensitivity_input_data(args.era5_data_path, args.dates)
     truth = collect_sensitivity_truth_data(

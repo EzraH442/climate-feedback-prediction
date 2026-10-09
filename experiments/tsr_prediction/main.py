@@ -1,3 +1,4 @@
+# Example: python experiments/tsr_prediction/main.py --config_file configs/model/fal/2011-2014_3,6,9,12_baseline.yaml
 import sys
 from pathlib import Path
 
@@ -32,7 +33,7 @@ class TSRTestArgs(Tap):
     config_file: Path
     checkpoint_path: list[Path] | None = None
     seeds: list[str] | None = None
-    output_base: str | None = None
+    output_dir: Path | None = None
     config: DictConfig | None = None
 
     era5_data_path: Path = Path("data/era5")
@@ -46,6 +47,8 @@ class TSRTestArgs(Tap):
         self.config = load_config(self.config_file)
         self.vc = variable_config_from_omegaconf(self.config)
         self.era5_data_path = Path(self.era5_data_path)
+        self.output_dir = Path(self.output_dir or "tsr_prediction")
+        self.output_dir.mkdir(parents=True, exist_ok=True)
 
 
 def collect_tsr_input_data(data_path: Path, dates: list[str]) -> xr.Dataset:
@@ -95,14 +98,11 @@ def predict_tsr_for_models(
 def main():
     args: TSRTestArgs = parse_args_and_confirm(TSRTestArgs())
 
-    output_dir = Path(args.output_base or "tsr_prediction")
-    output_dir.mkdir(parents=True, exist_ok=True)
-
     data = collect_tsr_input_data(args.era5_data_path, args.dates)
     pred = predict_tsr_for_models(args, data, checkpoint_paths_for_args(args, args.config))
     true = data[args.vc.get_target_var(args.clear_sky)]
     write_netcdf(
-        output_dir / "fields.nc",
+        args.output_dir / "fields.nc",
         xr.Dataset({"prediction": pred, "truth": true}),
     )
 

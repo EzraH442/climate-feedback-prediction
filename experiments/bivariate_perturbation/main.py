@@ -1,3 +1,4 @@
+# Example: python experiments/bivariate_perturbation/main.py --config_file configs/model/fal/2011-2014_3,6,9,12_baseline.yaml --date 2015-09
 import sys
 from pathlib import Path
 
@@ -12,7 +13,6 @@ if str(ROOT) not in sys.path:
 
 from config_utils import load_config, variable_config_from_omegaconf
 from experiments.common import (
-    output_path,
     parse_args_and_confirm,
     write_netcdf,
 )
@@ -36,6 +36,10 @@ class BivariatePerturbationArgs(Tap):
     var_a: str = "fal"
     var_b: str = "tcwv"
     clear_sky: bool = False
+
+    def process_args(self):
+        self.output_dir = Path(self.output_dir or "bivariate_perturbation")
+        self.output_dir.mkdir(parents=True, exist_ok=True)
 
 
 def collect_bivariate_input_data(data_path: Path, date: str) -> xr.Dataset:
@@ -213,7 +217,7 @@ def main():
     model, preprocessor, _ = load_model_and_preprocessor(
         config, checkpoint_path, downscaling=False
     )
-    output_dir = output_path(args, "bivariate_perturbation")
+    output_dir = args.output_dir
 
     base = collect_bivariate_input_data(args.era5_data_path, args.date)
     if args.clear_sky:

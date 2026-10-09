@@ -21,12 +21,6 @@ def parse_args_and_confirm(parser):
     return args
 
 
-def output_path(args, default_name: str) -> Path:
-    path = Path(args.output_dir or default_name)
-    path.mkdir(parents=True, exist_ok=True)
-    return path
-
-
 def write_json(path: Path, data: dict) -> None:
     path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
 

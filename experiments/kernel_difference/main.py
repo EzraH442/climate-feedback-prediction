@@ -1,3 +1,4 @@
+# Example: python experiments/kernel_difference/main.py --config_file configs/model/fal/2011-2014_3,6,9,12_baseline.yaml
 import sys
 from pathlib import Path
 
@@ -9,7 +10,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from config_utils import load_config, variable_config_from_omegaconf
-from experiments.common import output_path, parse_args_and_confirm
+from experiments.common import parse_args_and_confirm
 from experiments.kernel_difference.analysis import (
     plot_hybrid_kernel_difference,
     plot_kernel_difference,
@@ -35,6 +36,10 @@ class KernelDifferenceArgs(Tap):
     base_date: str = "2012-09"
     perturbed_date: str = "2013-09"
     variable: str = "fal"
+
+    def process_args(self):
+        self.output_dir = Path(self.output_dir or "kernel_difference")
+        self.output_dir.mkdir(parents=True, exist_ok=True)
 
 
 def select_date_state(ds: xr.Dataset, date: str) -> xr.Dataset:
@@ -196,7 +201,7 @@ def run_kernel_difference(args) -> None:
     kernel_path = args.kernel_data_path or Path(config.dataset.kernels.raw_path)
     raw = collect_kernel_difference_input_data(era5_path, dates)
     kernels = collect_kernel_difference_kernel_data(kernel_path, dates, args.variable)
-    output_dir = output_path(args, "kernel_difference")
+    output_dir = args.output_dir
 
     fields = compute_kernel_difference(
         raw,
