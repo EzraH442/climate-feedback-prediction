@@ -33,6 +33,7 @@ train_one() {
 
 export OMP_NUM_THREADS="${SLURM_CPUS_PER_TASK:-1}"
 export COMET_API_KEY="${COMET_API_KEY:-MoBGkV7uhoNarGzMpipBaZYsJ}"
+export PROJ_DATA="/cvmfs/soft.computecanada.ca/easybuild/software/2023/x86-64-v4/Compiler/gcccore/proj/9.2.0/share/proj"
 
 if [[ -n "${SLURM_JOB_ID:-}" ]]; then
     module purge

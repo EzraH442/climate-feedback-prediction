@@ -19,6 +19,7 @@ module load mpi4py/4.1.0
 module load scipy-stack
 module load httpproxy
 
+export PROJ_DATA="/cvmfs/soft.computecanada.ca/easybuild/software/2023/x86-64-v4/Compiler/gcccore/proj/9.2.0/share/proj"
 source ~/venv/bin/activate
 
 # python train.py
