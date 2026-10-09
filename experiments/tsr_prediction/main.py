@@ -2,9 +2,11 @@
 import sys
 from pathlib import Path
 
+import numpy as np
 import xarray as xr
 from omegaconf import DictConfig
 from tap import Tap
+from tqdm import tqdm
 
 ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
@@ -15,14 +17,17 @@ from experiments.common import (
     checkpoint_paths_for_args,
     model_label,
     parse_args_and_confirm,
-    write_netcdf,
 )
 from utils import (
+    SECONDS_PER_DAY,
     generate_paths_yearly,
+    global_mean,
     load_model_and_preprocessor,
     make_era5_filename,
     nn_pred,
 )
+
+TSR_DATE_BATCH_SIZE = 12
 
 DEFAULT_DATES = [
     f"{year}-{month:02d}" for year in range(1990, 2021) for month in range(1, 13)
@@ -80,45 +85,88 @@ def predict_tsr(
     )
 
 
-def predict_tsr_for_models(
+def compute_tsr_metrics_for_models(
     args, data: xr.Dataset, checkpoint_paths: list[Path]
-) -> xr.DataArray:
+) -> tuple[xr.DataArray, xr.DataArray]:
     loaded_models = [
         load_model_and_preprocessor(args.config, checkpoint_path)
         for checkpoint_path in checkpoint_paths
     ]
-    model_input = args.vc.clear_sky_input(data) if args.clear_sky else data
-    processed_data = loaded_models[0][1].transform(model_input)
+    labels = [model_label(checkpoint_path) for checkpoint_path in checkpoint_paths]
+    mbe_total = None
+    mse_total = None
+    n_dates = 0
 
-    predictions = []
-    labels = []
-    for checkpoint_path, (model, pp, _) in zip(checkpoint_paths, loaded_models):
-        predictions.append(
+    for start in tqdm(
+        range(0, data.sizes["date"], TSR_DATE_BATCH_SIZE),
+        desc="Evaluating TSR batches",
+    ):
+        batch = data.isel(date=slice(start, start + TSR_DATE_BATCH_SIZE))
+        model_input = args.vc.clear_sky_input(batch) if args.clear_sky else batch
+        processed_data = loaded_models[0][1].transform(model_input)
+        predictions = [
             predict_tsr(
-                data,
+                batch,
                 model,
                 pp,
                 args.vc,
                 clear_sky=args.clear_sky,
                 processed_data=processed_data,
             )
+            for model, pp, _ in loaded_models
+        ]
+        if len(predictions) == 1:
+            predictions_da = predictions[0].expand_dims(model=[labels[0]])
+        else:
+            predictions_da = xr.concat(
+                predictions, dim=xr.IndexVariable("model", labels)
+            )
+
+        truth = batch[args.vc.get_target_var(args.clear_sky)] / SECONDS_PER_DAY
+        residual = predictions_da / SECONDS_PER_DAY - truth
+        batch_dates = batch.sizes["date"]
+        batch_mbe = global_mean(residual.mean("date"))
+        batch_mse = global_mean((residual**2).mean("date"))
+        mbe_total = (
+            batch_mbe * batch_dates
+            if mbe_total is None
+            else mbe_total + batch_mbe * batch_dates
         )
-        labels.append(model_label(checkpoint_path))
-    if len(predictions) == 1:
-        return predictions[0]
-    return xr.concat(predictions, dim=xr.IndexVariable("model", labels))
+        mse_total = (
+            batch_mse * batch_dates
+            if mse_total is None
+            else mse_total + batch_mse * batch_dates
+        )
+        n_dates += batch_dates
+
+    mbe = mbe_total / n_dates
+    rmse = np.sqrt(mse_total / n_dates)
+    return mbe, rmse
+
+
+def print_tsr_metrics(mbe: xr.DataArray, rmse: xr.DataArray) -> None:
+    if mbe.sizes["model"] == 1:
+        print(f"MBE: {float(mbe.squeeze('model')):.4f} W/m^2")
+        print(f"RMSE: {float(rmse.squeeze('model')):.4f} W/m^2")
+        return
+    print(
+        f"MBE: {float(mbe.mean('model')):.4f} +/- "
+        f"{float(mbe.std('model')):.4f} W/m^2"
+    )
+    print(
+        f"RMSE: {float(rmse.mean('model')):.4f} +/- "
+        f"{float(rmse.std('model')):.4f} W/m^2"
+    )
 
 
 def main():
     args: TSRTestArgs = parse_args_and_confirm(TSRTestArgs())
 
     data = collect_tsr_input_data(args.era5_data_path, args.dates)
-    pred = predict_tsr_for_models(args, data, checkpoint_paths_for_args(args, args.config))
-    true = data[args.vc.get_target_var(args.clear_sky)]
-    write_netcdf(
-        args.output_dir / "fields.nc",
-        xr.Dataset({"prediction": pred, "truth": true}),
+    mbe, rmse = compute_tsr_metrics_for_models(
+        args, data, checkpoint_paths_for_args(args, args.config)
     )
+    print_tsr_metrics(mbe, rmse)
 
 
 if __name__ == "__main__":
