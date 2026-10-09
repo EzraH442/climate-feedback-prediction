@@ -20,6 +20,8 @@ from constants import (
 )
 from experiments.common import (
     albedo_kernel_components,
+    checkpoint_paths_for_args,
+    model_label,
     parse_args_and_confirm,
     with_flux_targets,
 )
@@ -36,7 +38,8 @@ from utils import (
 
 class ClosureEvalArgs(Tap):
     config_file: str = "configs/model/fal/2011-2014_3,6,9,12_sob_fal.yaml"
-    checkpoint_path: str | None = None
+    checkpoint_path: list[str] | None = None
+    seeds: list[str] | None = None
     output_dir: str | None = None
     year: int = 2012
     month: int = 9
@@ -48,6 +51,10 @@ class ClosureEvalArgs(Tap):
     skip_cross: bool = False
     skip_input_anomaly_plots: bool = False
     overwrite_responses: bool = False
+
+    def process_args(self):
+        if self.seeds and self.checkpoint_path:
+            self.error("--seeds and --checkpoint_path are mutually exclusive")
 
 
 def collect_closure_timeseries_input_data(
@@ -224,6 +231,46 @@ def compute_responses(
     )
 
 
+def compute_model_responses(
+    checkpoint_paths,
+    config,
+    ds_monthly,
+    ds_monthly_means,
+    variable_config,
+    cloud_vars,
+):
+    responses = []
+    epochs = []
+    labels = []
+    for checkpoint_path in checkpoint_paths:
+        model, preprocessor, epoch = load_model_and_preprocessor(
+            config, checkpoint_path, downscaling=False
+        )
+        responses.append(
+            compute_responses(
+                ds_monthly,
+                ds_monthly_means,
+                model,
+                preprocessor,
+                variable_config,
+                cloud_vars,
+            )
+        )
+        epochs.append(epoch)
+        labels.append(model_label(checkpoint_path))
+
+    if len(responses) == 1:
+        return responses[0], epochs[0]
+    return (
+        xr.concat(responses, dim=xr.IndexVariable("model", labels)),
+        f"models_{len(responses)}",
+    )
+
+
+def responses_for_plots(responses: xr.Dataset) -> xr.Dataset:
+    return responses.mean("model") if "model" in responses.dims else responses
+
+
 def compute_closure_eval(args):
     K_a = xr.open_dataset(ALBEDO_KERNEL_PATH)
     kernel_grid = {"latitude": K_a.latitude, "longitude": K_a.longitude}
@@ -233,16 +280,17 @@ def compute_closure_eval(args):
 
     config = load_config(args.config_file)
     variable_config = variable_config_from_omegaconf(config)
-    checkpoint_path = (
-        Path(args.checkpoint_path)
-        if args.checkpoint_path
-        else Path(config.train.checkpoint_dir) / "best_model.pt"
-    )
-    model, preprocessor, epoch = load_model_and_preprocessor(
-        config, checkpoint_path, downscaling=False
-    )
+    checkpoint_paths = checkpoint_paths_for_args(args, config)
 
     year, month = args.year, args.month
+    epoch = "cached"
+    if len(checkpoint_paths) == 1:
+        _, preprocessor, epoch = load_model_and_preprocessor(
+            config, checkpoint_paths[0], downscaling=False
+        )
+    else:
+        preprocessor = None
+        epoch = f"models_{len(checkpoint_paths)}"
     output_root = (
         Path(args.output_dir)
         if args.output_dir
@@ -261,16 +309,21 @@ def compute_closure_eval(args):
     anomaly = with_flux_targets(ds_monthly) - with_flux_targets(ds_monthly_means)
 
     cloud_vars = variable_config.clear_sky_zero_vars
-    if response_save_path.exists() and not args.overwrite_responses:
+    use_cache = response_save_path.exists() and not args.overwrite_responses
+    if use_cache:
         print("=" * 20 + " loaded cached responses " + "=" * 20)
         responses = xr.load_dataset(response_save_path)
+        if len(checkpoint_paths) > 1 and "model" not in responses.dims:
+            raise ValueError(
+                f"{response_save_path} has no model dimension; rerun with --overwrite_responses."
+            )
         responses.attrs["north_boundary"] = north_boundary
     else:
-        responses = compute_responses(
+        responses, epoch = compute_model_responses(
+            checkpoint_paths,
+            config,
             ds_monthly,
             ds_monthly_means,
-            model,
-            preprocessor,
             variable_config,
             cloud_vars,
         )
@@ -283,6 +336,7 @@ def compute_closure_eval(args):
         "ds_monthly_means": ds_monthly_means,
         "preprocessor": preprocessor,
         "responses": responses,
+        "plot_responses": responses_for_plots(responses),
         "output_root": output_root,
         "north_mask": north_mask,
         "north_boundary": north_boundary,
@@ -299,14 +353,14 @@ def main():
     )
     eval_data = compute_closure_eval(args)
     analysis.timeseries_test(
-        eval_data["responses"],
+        eval_data["plot_responses"],
         eval_data["output_root"],
         eval_data["residual_samples"],
         eval_data["north_mask"],
         eval_data["north_boundary"],
     )
     dt2m = eval_data["ds_monthly"].t2m - eval_data["ds_monthly"].t2m.mean("year")
-    analysis.feedback_test(dt2m, eval_data["responses"], eval_data["output_root"])
+    analysis.feedback_test(dt2m, eval_data["plot_responses"], eval_data["output_root"])
 
 
 if __name__ == "__main__":

@@ -3,7 +3,6 @@ import shlex
 import sys
 from pathlib import Path
 
-import torch
 import xarray as xr
 
 from utils import SECONDS_PER_DAY
@@ -49,15 +48,6 @@ def albedo_kernel_components(da, albedo_kernel) -> tuple[xr.DataArray, xr.DataAr
     return dR_a_k, dR_a_k_clr
 
 
-class EnsembleModel(torch.nn.Module):
-    def __init__(self, models):
-        super().__init__()
-        self.models = torch.nn.ModuleList(models)
-
-    def forward(self, x):
-        return torch.stack([model(x) for model in self.models]).mean(dim=0)
-
-
 def parse_seed_ranges(seed_ranges):
     seeds = []
     for seed_range in seed_ranges:
@@ -67,3 +57,18 @@ def parse_seed_ranges(seed_ranges):
         else:
             seeds.append(int(seed_range))
     return seeds
+
+
+def checkpoint_paths_for_args(args, config) -> list[Path]:
+    if args.seeds:
+        return [
+            Path(f"{config.train.checkpoint_dir}_seed_{seed}") / "best_model.pt"
+            for seed in parse_seed_ranges(args.seeds)
+        ]
+    if args.checkpoint_path:
+        return [Path(path) for path in args.checkpoint_path]
+    return [Path(config.train.checkpoint_dir) / "best_model.pt"]
+
+
+def model_label(checkpoint_path: Path) -> str:
+    return checkpoint_path.parent.name

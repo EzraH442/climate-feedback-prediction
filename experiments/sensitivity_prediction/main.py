@@ -10,6 +10,8 @@ if str(ROOT) not in sys.path:
 
 from config_utils import load_config, variable_config_from_omegaconf
 from experiments.common import (
+    checkpoint_paths_for_args,
+    model_label,
     output_path,
     parse_args_and_confirm,
     write_netcdf,
@@ -27,7 +29,8 @@ from utils import (
 
 class SensitivityPredictionArgs(Tap):
     config_file: Path
-    checkpoint_path: Path | None = None
+    checkpoint_path: list[Path] | None = None
+    seeds: list[str] | None = None
     output_dir: Path | None = None
     era5_data_path: Path = Path("data/era5")
     kernel_data_path: Path | None = None
@@ -35,6 +38,10 @@ class SensitivityPredictionArgs(Tap):
     variable: str = "fal"
     clear_sky: bool = False
     autograd: bool = False
+
+    def process_args(self):
+        if self.seeds and self.checkpoint_path:
+            self.error("--seeds and --checkpoint_path are mutually exclusive")
 
 
 def collect_sensitivity_input_data(data_path: Path, dates: list[str]) -> xr.Dataset:
@@ -102,18 +109,24 @@ def sensitivity_field(field, dates, lon, lat):
     )
 
 
+def predict_sensitivity_for_models(ds, config, vc, args, truth, checkpoint_paths):
+    predictions = []
+    labels = []
+    for checkpoint_path in checkpoint_paths:
+        model, preprocessor, _ = load_model_and_preprocessor(
+            config, checkpoint_path, downscaling=False
+        )
+        predictions.append(predict_sensitivity(ds, preprocessor, model, vc, args, truth))
+        labels.append(model_label(checkpoint_path))
+    if len(predictions) == 1:
+        return predictions[0]
+    return xr.concat(predictions, dim=xr.IndexVariable("model", labels))
+
+
 def main():
     args = parse_args_and_confirm(SensitivityPredictionArgs())
     config = load_config(args.config_file)
     vc = variable_config_from_omegaconf(config)
-    checkpoint_path = (
-        Path(args.checkpoint_path)
-        if args.checkpoint_path
-        else Path(config.train.checkpoint_dir) / "best_model.pt"
-    )
-    model, preprocessor, _ = load_model_and_preprocessor(
-        config, checkpoint_path, downscaling=False
-    )
     output_dir = output_path(args, "sensitivity_prediction")
 
     ds = collect_sensitivity_input_data(args.era5_data_path, args.dates)
@@ -123,7 +136,9 @@ def main():
         args.variable,
         args.clear_sky,
     )
-    prediction = predict_sensitivity(ds, preprocessor, model, vc, args, truth)
+    prediction = predict_sensitivity_for_models(
+        ds, config, vc, args, truth, checkpoint_paths_for_args(args, config)
+    )
 
     write_netcdf(
         output_dir / f"{args.variable}.nc",

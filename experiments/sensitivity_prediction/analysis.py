@@ -12,18 +12,30 @@ class SensitivityPredictionAnalysisArgs(Tap):
     input_path: Path = Path("sensitivity_prediction/fal.nc")
 
 
-def metrics(ds: xr.Dataset) -> tuple[float, float]:
+def metrics(ds: xr.Dataset):
     residual = ds["prediction"] - ds["truth"]
-    mbe = float(global_mean(residual).mean("date"))
-    rmse = float(np.sqrt(global_mean(residual**2).mean("date")))
+    mbe = global_mean(residual).mean("date")
+    rmse = np.sqrt(global_mean(residual**2).mean("date"))
     return mbe, rmse
+
+
+def print_metrics(mbe, rmse) -> None:
+    if "model" in mbe.dims:
+        print(
+            f"MBE: {float(mbe.mean('model')):.4f} +/- {float(mbe.std('model')):.4f} W/m^2"
+        )
+        print(
+            f"RMSE: {float(rmse.mean('model')):.4f} +/- {float(rmse.std('model')):.4f} W/m^2"
+        )
+        return
+    print(f"MBE: {float(mbe):.4f} W/m^2")
+    print(f"RMSE: {float(rmse):.4f} W/m^2")
 
 
 def main() -> None:
     args = parse_args_and_confirm(SensitivityPredictionAnalysisArgs())
     mbe, rmse = metrics(xr.open_dataset(args.input_path))
-    print(f"MBE: {mbe:.4f} W/m^2")
-    print(f"RMSE: {rmse:.4f} W/m^2")
+    print_metrics(mbe, rmse)
 
 
 if __name__ == "__main__":
