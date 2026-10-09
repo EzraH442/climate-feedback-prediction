@@ -37,6 +37,6 @@ module load mpi4py/4.1.0
 module load scipy-stack
 module load httpproxy
 
-source ~/.venv/bin/activate
+source ~/venv/bin/activate
 
 python train.py --config_file "${CONFIG_FILE}" --no-resume --seed "${SEED}"

@@ -60,7 +60,7 @@ if [[ -n "${SLURM_JOB_ID:-}" ]]; then
     module load scipy-stack
     module load httpproxy
 
-    source ~/.venv/bin/activate
+    source ~/venv/bin/activate
 
     task_id="${SLURM_ARRAY_TASK_ID}"
     config_index=$((task_id / 5))

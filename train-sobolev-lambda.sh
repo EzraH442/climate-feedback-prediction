@@ -44,7 +44,7 @@ if [[ -n "${SLURM_JOB_ID:-}" ]]; then
     module load scipy-stack
     module load httpproxy
 
-    source ~/.venv/bin/activate
+    source ~/venv/bin/activate
 fi
 
 if [[ -n "${SLURM_JOB_ID:-}" ]]; then

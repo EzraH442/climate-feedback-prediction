@@ -32,7 +32,7 @@ module load mpi4py/4.1.0
 module load scipy-stack
 module load httpproxy
 
-source ~/.venv/bin/activate
+source ~/venv/bin/activate
 
 config_file=${ARGS[$SLURM_ARRAY_TASK_ID]}
 python train.py --config_file "${config_file}" --no-resume

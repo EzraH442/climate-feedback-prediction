@@ -43,7 +43,7 @@ if [[ -n "${SLURM_JOB_ID:-}" ]]; then
     module load scipy-stack
     module load httpproxy
 
-    source ~/.venv/bin/activate
+    source ~/venv/bin/activate
 
     train_one "${ARGS[$SLURM_ARRAY_TASK_ID]}"
 else
