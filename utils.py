@@ -742,7 +742,7 @@ def compute_nn_kernel(
     )
 
     kernel = (pred_perturbed - pred) / SECONDS_PER_DAY
-    return kernel.to_numpy().squeeze(axis=0), kernel.longitude, kernel.latitude
+    return kernel.to_numpy(), kernel.longitude, kernel.latitude
 
 
 def compute_nn_kernel_autograd(
@@ -779,8 +779,6 @@ def compute_nn_kernel_autograd(
     # print(f"{target.upper()} range", target_range)
     # print(f"{input_var} range", input_range)
     grad_values = grads.detach().cpu().numpy()
-    if grad_values.shape[0] == 1:
-        grad_values = grad_values.squeeze(axis=0)
     grad_physical_per_unit = grad_values * (target_range / input_range) / SECONDS_PER_DAY
     return grad_physical_per_unit * kernel_delta(input_var), lon, lat
 
