@@ -57,22 +57,34 @@ def collect_tsr_input_data(data_path: Path, dates: list[str]) -> xr.Dataset:
     ).sel(date=dates)
 
 
+def predict_tsr(
+    data: xr.Dataset,
+    model,
+    preprocessor,
+    vc,
+    clear_sky: bool = False,
+) -> xr.DataArray:
+    model_input = vc.clear_sky_input(data) if clear_sky else data
+    dim_names = [dim for dim in ["date", "latitude", "longitude"] if dim in data.dims]
+    return nn_pred(
+        preprocessor.transform(model_input),
+        model,
+        preprocessor,
+        vc,
+        dim_names,
+        clear=clear_sky,
+    )
+
+
 def predict_tsr_for_models(
     args, data: xr.Dataset, checkpoint_paths: list[Path]
 ) -> xr.DataArray:
     predictions = []
     labels = []
-    model_input = args.vc.clear_sky_input(data) if args.clear_sky else data
     for checkpoint_path in checkpoint_paths:
         model, pp, _ = load_model_and_preprocessor(args.config, checkpoint_path)
         predictions.append(
-            nn_pred(
-                pp.transform(model_input),
-                model,
-                pp,
-                args.vc,
-                clear=args.clear_sky,
-            )
+            predict_tsr(data, model, pp, args.vc, clear_sky=args.clear_sky)
         )
         labels.append(model_label(checkpoint_path))
     if len(predictions) == 1:

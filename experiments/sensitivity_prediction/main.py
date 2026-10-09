@@ -72,16 +72,25 @@ def collect_sensitivity_truth_data(
     )
 
 
-def predict_sensitivity(ds, preprocessor, model, vc, args, truth):
+def predict_sensitivity(
+    ds,
+    preprocessor,
+    model,
+    vc,
+    truth,
+    variable: str = "fal",
+    clear_sky: bool = False,
+    autograd: bool = False,
+):
     raw = ds.interp(latitude=truth.latitude, longitude=truth.longitude)
-    if args.autograd:
+    if autograd:
         field, lon, lat = compute_nn_kernel_autograd(
             raw,
             preprocessor,
             model,
             vc,
-            var=args.variable,
-            clear=args.clear_sky,
+            var=variable,
+            clear=clear_sky,
         )
         return sensitivity_field(field, raw.date, lon, lat)
     field, lon, lat = compute_nn_kernel(
@@ -89,8 +98,8 @@ def predict_sensitivity(ds, preprocessor, model, vc, args, truth):
         preprocessor,
         model,
         vc,
-        clear=args.clear_sky,
-        perturbation_var=args.variable,
+        clear=clear_sky,
+        perturbation_var=variable,
     )
     return sensitivity_field(field, raw.date, lon, lat)
 
@@ -116,7 +125,18 @@ def predict_sensitivity_for_models(ds, config, vc, args, truth, checkpoint_paths
         model, preprocessor, _ = load_model_and_preprocessor(
             config, checkpoint_path, downscaling=False
         )
-        predictions.append(predict_sensitivity(ds, preprocessor, model, vc, args, truth))
+        predictions.append(
+            predict_sensitivity(
+                ds,
+                preprocessor,
+                model,
+                vc,
+                truth,
+                variable=args.variable,
+                clear_sky=args.clear_sky,
+                autograd=args.autograd,
+            )
+        )
         labels.append(model_label(checkpoint_path))
     if len(predictions) == 1:
         return predictions[0]
