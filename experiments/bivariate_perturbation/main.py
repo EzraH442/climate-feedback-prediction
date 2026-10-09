@@ -14,18 +14,33 @@ from experiments.common import (
     parse_args_and_confirm,
     write_netcdf,
 )
-from utils import SECONDS_PER_DAY, kernel_delta, load_model_and_preprocessor, nn_pred
+from utils import (
+    SECONDS_PER_DAY,
+    generate_paths_yearly,
+    kernel_delta,
+    load_model_and_preprocessor,
+    make_era5_filename,
+    nn_pred,
+)
 
 
 class BivariatePerturbationArgs(Tap):
     config_file: Path
     checkpoint_path: Path | None = None
     output_dir: Path | None = None
-    era5_data_path: Path
+    era5_data_path: Path = Path("data/era5")
     date: str
     var_a: str = "fal"
     var_b: str = "tcwv"
     clear_sky: bool = False
+
+
+def collect_bivariate_input_data(data_path: Path, date: str) -> xr.Dataset:
+    return xr.open_mfdataset(
+        generate_paths_yearly(data_path, [int(date[:4])], make_era5_filename),
+        combine="nested",
+        concat_dim="date",
+    ).sel(date=[date])
 
 
 def main():
@@ -42,7 +57,7 @@ def main():
     )
     output_dir = output_path(args, "bivariate_perturbation")
 
-    base = xr.open_dataset(args.era5_data_path).sel(date=[args.date])
+    base = collect_bivariate_input_data(args.era5_data_path, args.date)
     if args.clear_sky:
         base = vc.clear_sky_input(base)
 

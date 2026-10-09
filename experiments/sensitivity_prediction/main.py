@@ -17,7 +17,9 @@ from experiments.common import (
 from utils import (
     compute_nn_kernel,
     compute_nn_kernel_autograd,
+    generate_paths_yearly,
     load_model_and_preprocessor,
+    make_era5_filename,
 )
 
 
@@ -25,11 +27,19 @@ class SensitivityPredictionArgs(Tap):
     config_file: Path
     checkpoint_path: Path | None = None
     output_dir: Path | None = None
-    era5_data_path: Path
+    era5_data_path: Path = Path("data/era5")
     date: str
     variable: str = "fal"
     clear_sky: bool = False
     autograd: bool = False
+
+
+def collect_sensitivity_input_data(data_path: Path, date: str) -> xr.Dataset:
+    return xr.open_mfdataset(
+        generate_paths_yearly(data_path, [int(date[:4])], make_era5_filename),
+        combine="nested",
+        concat_dim="date",
+    ).sel(date=[date])
 
 
 def main():
@@ -46,7 +56,7 @@ def main():
     )
     output_dir = output_path(args, "sensitivity_prediction")
 
-    ds = xr.open_dataset(args.era5_data_path).sel(date=[args.date])
+    ds = collect_sensitivity_input_data(args.era5_data_path, args.date)
     if args.autograd:
         field, lon, lat = compute_nn_kernel_autograd(
             ds, preprocessor, model, vc, var=args.variable, clear=args.clear_sky

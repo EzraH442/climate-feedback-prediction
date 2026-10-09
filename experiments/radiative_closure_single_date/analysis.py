@@ -548,12 +548,7 @@ def compute_shakirova_eval(args):
     # -- load necessary data
     data_path = Path(args.data_path)
     dates = [d1, d2]
-    data_years = sorted({pd.Timestamp(d).year for d in dates})
-    ds = xr.open_mfdataset(
-        generate_paths_yearly(data_path, data_years, make_era5_filename),
-        combine="nested",
-        concat_dim="date",
-    )
+    ds = collect_shakirova_input_data(data_path, dates)
 
     base = select_date_state(ds, d1).interp(**kernel_grid)
     perturbed = select_date_state(ds, d2).interp(**kernel_grid)
@@ -588,6 +583,15 @@ def compute_shakirova_eval(args):
         "north_boundary": north_boundary,
         "skip_input_anomaly_plots": args.skip_input_anomaly_plots,
     }
+
+
+def collect_shakirova_input_data(data_path: Path, dates: list[str]) -> xr.Dataset:
+    years = sorted({pd.Timestamp(date).year for date in dates})
+    return xr.open_mfdataset(
+        generate_paths_yearly(data_path, years, make_era5_filename),
+        combine="nested",
+        concat_dim="date",
+    )
 
 
 def plot_shakirova_eval(eval_data):

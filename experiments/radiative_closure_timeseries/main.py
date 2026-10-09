@@ -50,6 +50,17 @@ class ClosureEvalArgs(Tap):
     overwrite_responses: bool = False
 
 
+def collect_closure_timeseries_input_data(
+    data_path: Path, start_date: str, end_date: str
+) -> xr.Dataset:
+    years = range(pd.Timestamp(start_date).year, pd.Timestamp(end_date).year + 1)
+    return xr.open_mfdataset(
+        generate_paths_yearly(data_path, years, make_era5_filename),
+        combine="nested",
+        concat_dim="date",
+    ).sel(date=slice(start_date, end_date))
+
+
 def water_vapor_kernel_components(
     ds_monthly,
     ds_qt,
@@ -241,16 +252,9 @@ def compute_closure_eval(args):
     response_save_path = output_root / "saved_responses_closure_test.nc"
 
     data_path = Path(args.data_path)
-    data_years = range(
-        pd.Timestamp(args.start_date).year,
-        pd.Timestamp(args.end_date).year + 1,
-    )
-    ds = xr.open_mfdataset(
-        generate_paths_yearly(data_path, data_years, make_era5_filename),
-        combine="nested",
-        concat_dim="date",
-    )
-    ds = ds.sel(date=slice(args.start_date, args.end_date)).interp(**kernel_grid)
+    ds = collect_closure_timeseries_input_data(
+        data_path, args.start_date, args.end_date
+    ).interp(**kernel_grid)
 
     ds_monthly = to_monthly(ds.copy(deep=True))
     ds_monthly_means = ds_monthly.mean("year")

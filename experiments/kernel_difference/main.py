@@ -155,6 +155,30 @@ def compute_hybrid_kernel_difference(fields, preprocessor, model, vc, variable) 
     }
 
 
+def collect_kernel_difference_input_data(data_path: Path, dates: list[str]) -> xr.Dataset:
+    years = sorted({int(date[:4]) for date in dates})
+    return xr.open_mfdataset(
+        generate_paths_yearly(data_path, years, make_era5_filename),
+        combine="nested",
+        concat_dim="date",
+    )
+
+
+def collect_kernel_difference_kernel_data(
+    kernel_path: Path, dates: list[str], variable: str
+) -> xr.Dataset:
+    years = sorted({int(date[:4]) for date in dates})
+    return xr.open_mfdataset(
+        generate_paths_yearly(
+            kernel_path,
+            years,
+            lambda year: make_kernel_filename(year, variable),
+        ),
+        combine="nested",
+        concat_dim="date",
+    )
+
+
 def run_kernel_difference(args) -> None:
     config = load_config(args.config_file)
     vc = variable_config_from_omegaconf(config)
@@ -167,23 +191,11 @@ def run_kernel_difference(args) -> None:
         config, checkpoint_path, downscaling=False
     )
 
-    years = sorted({int(args.base_date[:4]), int(args.perturbed_date[:4])})
+    dates = [args.base_date, args.perturbed_date]
     era5_path = args.era5_data_path or Path(config.dataset.era5.raw_path)
     kernel_path = args.kernel_data_path or Path(config.dataset.kernels.raw_path)
-    raw = xr.open_mfdataset(
-        generate_paths_yearly(era5_path, years, make_era5_filename),
-        combine="nested",
-        concat_dim="date",
-    )
-    kernels = xr.open_mfdataset(
-        generate_paths_yearly(
-            kernel_path,
-            years,
-            lambda year: make_kernel_filename(year, args.variable),
-        ),
-        combine="nested",
-        concat_dim="date",
-    )
+    raw = collect_kernel_difference_input_data(era5_path, dates)
+    kernels = collect_kernel_difference_kernel_data(kernel_path, dates, args.variable)
     output_dir = output_path(args, "kernel_difference")
 
     fields = compute_kernel_difference(
