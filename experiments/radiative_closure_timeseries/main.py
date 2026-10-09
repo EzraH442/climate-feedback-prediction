@@ -18,7 +18,11 @@ from constants import (
     QT_PATH,
     WATER_VAPOR_KERNEL_PATH,
 )
-from experiments.common import albedo_kernel_components, with_flux_targets
+from experiments.common import (
+    albedo_kernel_components,
+    parse_args_and_confirm,
+    with_flux_targets,
+)
 from utils import (
     SECONDS_PER_DAY,
     generate_paths_yearly,
@@ -286,9 +290,9 @@ def compute_closure_eval(args):
 
 
 def main():
-    args = ClosureEvalArgs(
-        description="Run radiative closure over a date range."
-    ).parse_args()
+    args = parse_args_and_confirm(
+        ClosureEvalArgs(description="Run radiative closure over a date range.")
+    )
     eval_data = compute_closure_eval(args)
     analysis.timeseries_test(
         eval_data["responses"],

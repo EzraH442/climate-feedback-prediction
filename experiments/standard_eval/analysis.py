@@ -7,7 +7,6 @@ import torch
 import xarray as xr
 
 from config_utils import VariableConfig, load_config, variable_config_from_omegaconf
-from experiments import radiative_closure_single_date as shakirova_context
 from experiments.kernel_difference.analysis import (
     plot_hybrid_kernel_difference,
     plot_kernel_difference,
@@ -19,6 +18,7 @@ from experiments.kernel_difference.main import (
 from experiments.radiative_closure_single_date.analysis import (
     arctic_field,
     load_feedback_ablation_responses,
+    make_neurips_feedback_context,
     shakirova_terms,
 )
 from model import SimpleModel
@@ -1100,10 +1100,7 @@ def run_standard_eval(args):
 # NeurIPS summary table helpers
 # --------------------------------------------------------------------------- #
 
-table_output_dir = (
-    getattr(shakirova_context, "shakirova_output_dir", Path("FiguresNeurIPS"))
-    / "ablation_tables"
-)
+table_output_dir = Path("FiguresNeurIPS") / "ablation_tables"
 
 validation_output_dir = table_output_dir / "validation_points"
 
@@ -1552,14 +1549,14 @@ def write_albedo_kernel_finite_difference_table():
 
 
 # --------------------------------------------------------------------------- #
-# Feedback quantification test: shakirova_base_date -> shakirova_perturbed_date response residuals
+# Feedback quantification test: context base_date -> perturbed_date response residuals
 # --------------------------------------------------------------------------- #
 
 
-def collect_feedback_response_metrics(label, config_path, checkpoint_path):
+def collect_feedback_response_metrics(ctx, label, config_path, checkpoint_path):
     rows = []
     responses = load_feedback_ablation_responses(
-        label, config_path, "nn", checkpoint_path
+        ctx, label, config_path, "nn", checkpoint_path
     )
     for sky, response_sky in [("all", "all"), ("clear", "clr")]:
         terms = shakirova_terms(responses, response_sky)
@@ -1572,9 +1569,9 @@ def collect_feedback_response_metrics(label, config_path, checkpoint_path):
     return rows
 
 
-def collect_feedback_kernel_metrics():
+def collect_feedback_kernel_metrics(ctx):
     rows = []
-    responses = load_feedback_ablation_responses(None, None, "kernel")
+    responses = load_feedback_ablation_responses(ctx, None, None, "kernel")
     for sky, response_sky in [("all", "all"), ("clear", "clr")]:
         terms = shakirova_terms(responses, response_sky)
         diff = terms["kernel"][-1]
@@ -1583,19 +1580,19 @@ def collect_feedback_kernel_metrics():
     return rows
 
 
-def write_feedback_response_table():
+def write_feedback_response_table(ctx):
     rows = []
     for label, config_path, checkpoint_path in expanded_table_model_specs():
         rows.extend(
-            collect_feedback_response_metrics(label, config_path, checkpoint_path)
+            collect_feedback_response_metrics(ctx, label, config_path, checkpoint_path)
         )
-    rows.extend(collect_feedback_kernel_metrics())
+    rows.extend(collect_feedback_kernel_metrics(ctx))
 
     table = aggregate_seed_rows(summarize_feedback_metrics(rows))
     return save_table(table, feedback_table_path)
 
 
-def ensure_feedback_kernel_method(table):
+def ensure_feedback_kernel_method(table, ctx):
     """Backfill the kernel-method row into a cached feedback table that predates it."""
     if (
         isinstance(table.index, pd.MultiIndex)
@@ -1603,7 +1600,7 @@ def ensure_feedback_kernel_method(table):
     ):
         return table
     print("Feedback quantification test: recomputing for method-level mean/std rows")
-    return write_feedback_response_table()
+    return write_feedback_response_table(ctx)
 
 
 # --------------------------------------------------------------------------- #
@@ -1624,7 +1621,8 @@ def load_or_compute_table(path, description, compute_table, index_col=0):
     return compute_table()
 
 
-def write_neurips_summary_tables():
+def write_neurips_summary_tables(ctx=None):
+    ctx = ctx or make_neurips_feedback_context()
     tsr_table = load_or_compute_table(
         tsr_table_path,
         "TSR test: monthly 1990-2020 NN TSR predictions vs ERA5 TSR, all-sky and clear-sky",
@@ -1643,10 +1641,11 @@ def write_neurips_summary_tables():
     feedback_table = ensure_feedback_kernel_method(
         load_or_compute_table(
             feedback_table_path,
-            "Feedback quantification test: shakirova_base_date to shakirova_perturbed_date response residuals, global and Arctic",
-            write_feedback_response_table,
+            "Feedback quantification test: context base_date to perturbed_date response residuals, global and Arctic",
+            lambda: write_feedback_response_table(ctx),
             index_col=[0, 1],
-        )
+        ),
+        ctx,
     )
     return tsr_table, kernel_table, kernel_fd_table, feedback_table
 
@@ -1774,7 +1773,7 @@ def compute_sobolev_lambda_kernel_raw_table(specs):
     )
 
 
-def compute_sobolev_lambda_feedback_raw_table(specs):
+def compute_sobolev_lambda_feedback_raw_table(specs, ctx):
     rows = []
     for label, config_path, checkpoint_dir in specs:
         for seed_label, checkpoint_path in zip(
@@ -1783,13 +1782,14 @@ def compute_sobolev_lambda_feedback_raw_table(specs):
         ):
             rows.extend(
                 collect_feedback_response_metrics(
-                    seed_label, config_path, checkpoint_path
+                    ctx, seed_label, config_path, checkpoint_path
                 )
             )
     return summarize_feedback_metrics(rows)
 
 
-def write_sobolev_lambda_summary_tables():
+def write_sobolev_lambda_summary_tables(ctx=None):
+    ctx = ctx or make_neurips_feedback_context()
     sobolev_lambda_tsr_raw_table = load_or_update_raw_sobolev_table(
         sobolev_lambda_tsr_raw_path,
         "Sobolev lambda ablation TSR seed metrics",
@@ -1803,7 +1803,7 @@ def write_sobolev_lambda_summary_tables():
     sobolev_lambda_feedback_raw_table = load_or_update_raw_sobolev_table(
         sobolev_lambda_feedback_raw_path,
         "Sobolev lambda ablation two-year feedback seed metrics",
-        compute_sobolev_lambda_feedback_raw_table,
+        lambda specs: compute_sobolev_lambda_feedback_raw_table(specs, ctx),
         index_col=[0, 1],
     )
 

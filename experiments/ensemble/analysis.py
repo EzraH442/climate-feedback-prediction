@@ -745,11 +745,12 @@ def second_order_test(
     model: SimpleModel,
     config,
     true_kernel: xr.Dataset,
-    dates=["2013-09", "2012-09"],
+    dates: tuple[str, str] | None = None,
     figures_path: Path = Path("."),
     kernel_name=None,
 ):
     kernel_name = kernel_name or eval_kernel_vars(config)[0]
+    dates = dates or ("2013-09", "2012-09")
     output_dir = figure_dir(
         figures_path,
         "clr",

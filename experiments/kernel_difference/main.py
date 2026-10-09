@@ -9,7 +9,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from config_utils import load_config, variable_config_from_omegaconf
-from experiments.common import output_path
+from experiments.common import output_path, parse_args_and_confirm
 from experiments.kernel_difference.analysis import (
     plot_hybrid_kernel_difference,
     plot_kernel_difference,
@@ -204,7 +204,7 @@ def run_kernel_difference(args) -> None:
 
 
 def main():
-    run_kernel_difference(KernelDifferenceArgs().parse_args())
+    run_kernel_difference(parse_args_and_confirm(KernelDifferenceArgs()))
 
 
 if __name__ == "__main__":

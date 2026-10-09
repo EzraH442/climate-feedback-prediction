@@ -11,6 +11,7 @@ if str(ROOT) not in sys.path:
 from config_utils import load_config, variable_config_from_omegaconf
 from experiments.common import (
     output_path,
+    parse_args_and_confirm,
     write_netcdf,
 )
 from utils import SECONDS_PER_DAY, kernel_delta, load_model_and_preprocessor, nn_pred
@@ -28,7 +29,7 @@ class BivariatePerturbationArgs(Tap):
 
 
 def main():
-    args = BivariatePerturbationArgs().parse_args()
+    args = parse_args_and_confirm(BivariatePerturbationArgs())
     config = load_config(args.config_file)
     vc = variable_config_from_omegaconf(config)
     checkpoint_path = (

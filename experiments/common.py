@@ -1,10 +1,25 @@
 import json
+import shlex
+import sys
 from pathlib import Path
 
 import torch
 import xarray as xr
 
 from utils import SECONDS_PER_DAY
+
+
+def parse_args_and_confirm(parser):
+    args = parser.parse_args()
+    print("Command:", shlex.join(sys.argv))
+    print("Parsed args:")
+    for key, value in vars(args).items():
+        if key.startswith("_") or key in {"config", "vc"}:
+            continue
+        print(f"  {key}: {value!r}")
+    if input("Continue? [y/N] ").strip().lower() not in {"y", "yes"}:
+        raise SystemExit("Aborted.")
+    return args
 
 
 def output_path(args, default_name: str) -> Path:

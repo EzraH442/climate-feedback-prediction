@@ -8,6 +8,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from analysis import run_standard_eval
+from experiments.common import parse_args_and_confirm
 
 
 class StandardEvalArgs(Tap):
@@ -17,9 +18,9 @@ class StandardEvalArgs(Tap):
 
 
 def main():
-    args = StandardEvalArgs(
-        description="Test the trained model on validation data."
-    ).parse_args()
+    args = parse_args_and_confirm(
+        StandardEvalArgs(description="Test the trained model on validation data.")
+    )
     run_standard_eval(args)
 
 

@@ -8,6 +8,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from analysis import run_ensemble_eval
+from experiments.common import parse_args_and_confirm
 
 
 class EnsembleEvalArgs(Tap):
@@ -22,9 +23,9 @@ class EnsembleEvalArgs(Tap):
 
 
 def main():
-    args = EnsembleEvalArgs(
-        description="Test the trained model on validation data."
-    ).parse_args()
+    args = parse_args_and_confirm(
+        EnsembleEvalArgs(description="Test the trained model on validation data.")
+    )
     run_ensemble_eval(args)
 
 

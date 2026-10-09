@@ -21,6 +21,7 @@ from constants import (
 from experiments.common import (
     EnsembleModel,
     albedo_kernel_components,
+    parse_args_and_confirm,
     parse_seed_ranges,
     with_flux_targets,
 )
@@ -296,9 +297,9 @@ def compute_closure_ensemble_eval(args):
 
 
 def main():
-    args = ClosureEnsembleEvalArgs(
-        description="Run closure-test analysis."
-    ).parse_args()
+    args = parse_args_and_confirm(
+        ClosureEnsembleEvalArgs(description="Run closure-test analysis.")
+    )
     ds_monthly, responses, output_root, north_mask, north_boundary = (
         compute_closure_ensemble_eval(args)
     )

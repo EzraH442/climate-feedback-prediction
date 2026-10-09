@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 from pathlib import Path
 
 import cartopy.crs as ccrs
@@ -50,6 +51,24 @@ ABLATION_SPECS = [
         Path("configs/model/fal/2011-2014_3,6,9,12_sob_fal_clearsky.yaml"),
     ),
 ]
+
+
+@dataclass
+class NeuripsFeedbackContext:
+    config: object
+    variable_config: object
+    model: object
+    preprocessor: object
+    output_dir: Path
+    base_date: str
+    perturbed_date: str
+    grid: dict
+    ds: xr.Dataset
+    base: xr.Dataset
+    perturbed: xr.Dataset
+    anomaly: xr.Dataset
+    anomaly_ecod: xr.DataArray
+    responses: xr.Dataset
 
 def select_date_state(ds: xr.Dataset, date: str) -> xr.Dataset:
     selected = ds.sel(date=date)
@@ -649,8 +668,8 @@ def sum_response_title(source, sky):
     return "$" + sum_response_expr(source, sky) + "$"
 
 
-def plot_feedback_total_response(sky, arctic=False):
-    terms = shakirova_terms(shakirova_responses, sky)
+def plot_feedback_total_response(ctx, sky, arctic=False):
+    terms = shakirova_terms(ctx.responses, sky)
     rows = [
         (terms["target"], None),
         (terms["kernel"][-2], terms["kernel"][-1]),
@@ -736,24 +755,24 @@ def plot_feedback_total_response(sky, arctic=False):
     fig.set_layout_engine("none")
     region = "_arctic" if arctic else ""
     fig.savefig(
-        shakirova_output_dir / f"shakirova_{sky}_total{region}.png", bbox_inches="tight"
+        ctx.output_dir / f"shakirova_{sky}_total{region}.png", bbox_inches="tight"
     )
     return fig
 
 
-def plot_feedback_component_responses(sky, arctic=False):
-    terms = shakirova_terms(shakirova_responses, sky)
+def plot_feedback_component_responses(ctx, sky, arctic=False):
+    terms = shakirova_terms(ctx.responses, sky)
     if sky == "all":
         inputs = [
-            (shakirova_anomaly.fal, r"$\Delta a$", "a", -0.5, 0.5, 0.05, ""),
-            (shakirova_anomaly.tcwv, r"$\Delta q$", "q", -20, 20, 2, "kg m$^{-2}$"),
-            (shakirova_anomaly_ecod, r"$\Delta c$", "c", -1, 1, 0.1, ""),
+            (ctx.anomaly.fal, r"$\Delta a$", "a", -0.5, 0.5, 0.05, ""),
+            (ctx.anomaly.tcwv, r"$\Delta q$", "q", -20, 20, 2, "kg m$^{-2}$"),
+            (ctx.anomaly_ecod, r"$\Delta c$", "c", -1, 1, 0.1, ""),
             (terms["target"], r"$\Delta R$", "sum", -60, 60, 5, "W m$^{-2}$"),
         ]
     else:
         inputs = [
-            (shakirova_anomaly.fal, r"$\Delta a$", "a", -0.5, 0.5, 0.05, ""),
-            (shakirova_anomaly.tcwv, r"$\Delta q$", "q", -20, 20, 2, "kg m$^{-2}$"),
+            (ctx.anomaly.fal, r"$\Delta a$", "a", -0.5, 0.5, 0.05, ""),
+            (ctx.anomaly.tcwv, r"$\Delta q$", "q", -20, 20, 2, "kg m$^{-2}$"),
             (terms["target"], r"$\Delta R$", "sum", -60, 60, 5, "W m$^{-2}$"),
         ]
 
@@ -841,13 +860,13 @@ def plot_feedback_component_responses(sky, arctic=False):
     fig.set_layout_engine("none")
     region = "_arctic" if arctic else ""
     fig.savefig(
-        shakirova_output_dir / f"shakirova_{sky}_components{region}.png",
+        ctx.output_dir / f"shakirova_{sky}_components{region}.png",
         bbox_inches="tight",
     )
     return fig
 
 
-def setup_neurips_feedback_context(
+def make_neurips_feedback_context(
     config_path: Path = Path(
         "configs/model/fal/2011-2014_3,6,9,12_sob_fal_clearsky.yaml"
     ),
@@ -859,11 +878,6 @@ def setup_neurips_feedback_context(
     perturbed_date: str = "2020-09",
     response_cache_name: str = "saved_responses_no_downscale.nc",
 ):
-    global config, vc, model, preprocessor
-    global shakirova_output_dir, shakirova_base_date, shakirova_perturbed_date
-    global shakirova_grid, shakirova_ds, shakirova_base, shakirova_perturbed
-    global shakirova_anomaly, shakirova_anomaly_ecod, shakirova_responses
-
     config = load_config(config_path)
     vc = variable_config_from_omegaconf(config)
     model, preprocessor, _ = load_model_and_preprocessor(
@@ -876,54 +890,65 @@ def setup_neurips_feedback_context(
     )
     raw = xr.open_mfdataset(raw_paths, combine="nested", concat_dim="date")
 
-    shakirova_output_dir = output_dir
-    shakirova_output_dir.mkdir(exist_ok=True, parents=True)
-    shakirova_base_date = base_date
-    shakirova_perturbed_date = perturbed_date
-    response_save_path = shakirova_output_dir / response_cache_name
+    output_dir.mkdir(exist_ok=True, parents=True)
+    response_save_path = output_dir / response_cache_name
 
     K_a = xr.open_dataset(ALBEDO_KERNEL_PATH).isel(
         month=pd.Timestamp(base_date).month - 1
     )
-    shakirova_grid = {"latitude": K_a.latitude, "longitude": K_a.longitude}
-    shakirova_ds = raw.interp(**shakirova_grid)
-    shakirova_base = select_date_state(shakirova_ds, shakirova_base_date)
-    shakirova_perturbed = select_date_state(shakirova_ds, shakirova_perturbed_date)
-    shakirova_anomaly = shakirova_perturbed - shakirova_base
-    shakirova_anomaly_ecod = (
-        preprocessor.transform(shakirova_perturbed)
-        - preprocessor.transform(shakirova_base)
+    grid = {"latitude": K_a.latitude, "longitude": K_a.longitude}
+    ds = raw.interp(**grid)
+    base = select_date_state(ds, base_date)
+    perturbed = select_date_state(ds, perturbed_date)
+    anomaly = perturbed - base
+    anomaly_ecod = (
+        preprocessor.transform(perturbed) - preprocessor.transform(base)
     ).ecod.compute()
 
     if response_save_path.exists():
-        shakirova_responses = xr.load_dataset(response_save_path)
+        responses = xr.load_dataset(response_save_path)
     else:
-        shakirova_responses = compute_responses(
-            shakirova_perturbed,
-            shakirova_base,
+        responses = compute_responses(
+            perturbed,
+            base,
             model,
             preprocessor,
             vc,
-            shakirova_base_date,
-            shakirova_perturbed_date,
+            base_date,
+            perturbed_date,
             Path(config.dataset.era5.raw_path),
         )
-        shakirova_responses.to_netcdf(response_save_path)
-    return shakirova_responses
+        responses.to_netcdf(response_save_path)
+    return NeuripsFeedbackContext(
+        config=config,
+        variable_config=vc,
+        model=model,
+        preprocessor=preprocessor,
+        output_dir=output_dir,
+        base_date=base_date,
+        perturbed_date=perturbed_date,
+        grid=grid,
+        ds=ds,
+        base=base,
+        perturbed=perturbed,
+        anomaly=anomaly,
+        anomaly_ecod=anomaly_ecod,
+        responses=responses,
+    )
 
 
-def load_feedback_ablation_responses(label, config_path, source, checkpoint_path=None):
+def load_feedback_ablation_responses(
+    ctx, label, config_path, source, checkpoint_path=None
+):
     if source == "kernel":
-        return shakirova_responses
+        return ctx.responses
 
     ablation_config = load_config(config_path)
     ablation_vc = variable_config_from_omegaconf(ablation_config)
     checkpoint_path = (
         checkpoint_path or Path(ablation_config.train.checkpoint_dir) / "best_model.pt"
     )
-    cache_path = (
-        shakirova_output_dir / f"ablation_responses_{checkpoint_path.parent.name}.nc"
-    )
+    cache_path = ctx.output_dir / f"ablation_responses_{checkpoint_path.parent.name}.nc"
     if cache_path.exists():
         return xr.load_dataset(cache_path)
 
@@ -931,13 +956,13 @@ def load_feedback_ablation_responses(label, config_path, source, checkpoint_path
         ablation_config, checkpoint_path, downscaling=False
     )
     responses = compute_responses(
-        shakirova_perturbed,
-        shakirova_base,
+        ctx.perturbed,
+        ctx.base,
         ablation_model,
         ablation_preprocessor,
         ablation_vc,
-        shakirova_base_date,
-        shakirova_perturbed_date,
+        ctx.base_date,
+        ctx.perturbed_date,
         Path(ablation_config.dataset.era5.raw_path),
     )
     responses.to_netcdf(cache_path)
@@ -957,7 +982,7 @@ def feedback_ablation_residual_fields(responses, source):
     ]
 
 
-def plot_feedback_ablation_residuals(arctic=True):
+def plot_feedback_ablation_residuals(ctx, arctic=True):
     fig, ax = plt.subplots(
         len(ABLATION_SPECS),
         4,
@@ -984,7 +1009,7 @@ def plot_feedback_ablation_residuals(arctic=True):
     residual_im = None
     for row, (label, config_path) in enumerate(ABLATION_SPECS):
         source = "kernel" if config_path is None else "nn"
-        responses = load_feedback_ablation_responses(label, config_path, source)
+        responses = load_feedback_ablation_responses(ctx, label, config_path, source)
         for col, field in enumerate(
             feedback_ablation_residual_fields(responses, source)
         ):
@@ -1032,8 +1057,7 @@ def plot_feedback_ablation_residuals(arctic=True):
     fig.set_layout_engine("none")
     region = "_arctic" if arctic else ""
     fig.savefig(
-        shakirova_output_dir
-        / f"shakirova_feedback_ablation_residual_fields{region}.png",
+        ctx.output_dir / f"shakirova_feedback_ablation_residual_fields{region}.png",
         bbox_inches="tight",
     )
     return fig
@@ -1074,10 +1098,9 @@ def load_sensitivity_model(config_path, checkpoint_path=None):
     )
 
 
-def compute_albedo_cloud_coupling(label, config_path, checkpoint_path=None):
+def compute_albedo_cloud_coupling(ctx, label, config_path, checkpoint_path=None):
     cache_path = (
-        shakirova_output_dir
-        / f"{coupling_slug(label)}_compute_albedo_cloud_coupling.nc"
+        ctx.output_dir / f"{coupling_slug(label)}_compute_albedo_cloud_coupling.nc"
     )
     if cache_path.exists():
         return xr.load_dataarray(cache_path)
@@ -1086,19 +1109,17 @@ def compute_albedo_cloud_coupling(label, config_path, checkpoint_path=None):
         config_path, checkpoint_path
     )
     cloud_vars = [
-        var for var in coupling_vc.clear_sky_zero_vars if var in shakirova_base
+        var for var in coupling_vc.clear_sky_zero_vars if var in ctx.base
     ]
     states = xr.concat(
         [
-            shakirova_base,
-            shakirova_base.assign(fal=shakirova_perturbed.fal),
-            shakirova_base.assign(
-                {var: shakirova_perturbed[var] for var in cloud_vars}
-            ),
-            shakirova_base.assign(
+            ctx.base,
+            ctx.base.assign(fal=ctx.perturbed.fal),
+            ctx.base.assign({var: ctx.perturbed[var] for var in cloud_vars}),
+            ctx.base.assign(
                 {
-                    "fal": shakirova_perturbed.fal,
-                    **{var: shakirova_perturbed[var] for var in cloud_vars},
+                    "fal": ctx.perturbed.fal,
+                    **{var: ctx.perturbed[var] for var in cloud_vars},
                 }
             ),
         ],
@@ -1133,15 +1154,15 @@ def predict_flux_for_states(
     )
 
 
-def albedo_cloud_diagnostic_fields(label, config_path, checkpoint_path=None):
+def albedo_cloud_diagnostic_fields(ctx, label, config_path, checkpoint_path=None):
     responses = load_feedback_ablation_responses(
-        label, config_path, "nn", checkpoint_path
+        ctx, label, config_path, "nn", checkpoint_path
     )
     terms = shakirova_terms(responses, "all")
     allcross_residual = terms["allcross"][-1]
     sum_residual = terms["nn"][-1]
     residual_diff = sum_residual - allcross_residual
-    coupling = compute_albedo_cloud_coupling(label, config_path, checkpoint_path)
+    coupling = compute_albedo_cloud_coupling(ctx, label, config_path, checkpoint_path)
     return [sum_residual, allcross_residual, residual_diff, coupling]
 
 
@@ -1155,7 +1176,7 @@ def spatial_field_correlation(a, b, arctic=True):
     return float(np.corrcoef(a_values[valid], b_values[valid])[0, 1])
 
 
-def plot_albedo_cloud_coupling_residuals(arctic=True):
+def plot_albedo_cloud_coupling_residuals(ctx, arctic=True):
     nn_specs = [
         (label, config_path)
         for label, config_path in ABLATION_SPECS
@@ -1186,7 +1207,7 @@ def plot_albedo_cloud_coupling_residuals(arctic=True):
     letters = iter("abcdefghijkl")
     im = None
     for row, (label, config_path) in enumerate(nn_specs):
-        fields = albedo_cloud_diagnostic_fields(label, config_path)
+        fields = albedo_cloud_diagnostic_fields(ctx, label, config_path)
         print(
             f"{label}: corr((a)-(b), Delta R_ac) = {spatial_field_correlation(fields[2], fields[3], arctic=arctic):.3f}"
         )
@@ -1217,22 +1238,22 @@ def plot_albedo_cloud_coupling_residuals(arctic=True):
     fig.set_layout_engine("none")
     region = "_arctic" if arctic else ""
     fig.savefig(
-        shakirova_output_dir / f"shakirova_ablation_albedo_cloud_residuals{region}.png",
+        ctx.output_dir / f"shakirova_ablation_albedo_cloud_residuals{region}.png",
         bbox_inches="tight",
     )
     return fig
 
 
-def plot_albedo_cloud_coupling_diagnostics(arctic=True):
+def plot_albedo_cloud_coupling_diagnostics(ctx, arctic=True):
     label, config_path = ABLATION_SPECS[-1]
-    responses = load_feedback_ablation_responses(label, config_path, "nn")
+    responses = load_feedback_ablation_responses(ctx, label, config_path, "nn")
     terms = shakirova_terms(responses, "all")
     target = terms["target"]
     a_field = target - terms["allcross"][0]
     b_field = target - terms["nn"][-2]
     c_field = terms["kernel"][-1]
     d_field = b_field - a_field
-    e_field = compute_albedo_cloud_coupling(label, config_path)
+    e_field = compute_albedo_cloud_coupling(ctx, label, config_path)
     f_field = e_field - d_field
 
     panels = [
@@ -1275,12 +1296,12 @@ def plot_albedo_cloud_coupling_diagnostics(arctic=True):
         (0, 1, d_field, r"(b) - (a)", "d", -8, 8, 1, None, None),
         (1, 1, e_field, r"$\Delta R_{ac}^{NN}$", "e", -8, 8, 1, None, None),
         (2, 1, f_field, r"(e) - (d)", "f", -8, 8, 1, None, None),
-        (0, 2, shakirova_anomaly.fal, r"$\Delta a$", "g", -0.5, 0.5, 0.05, "", ""),
-        (1, 2, shakirova_anomaly_ecod, r"$\Delta c$", "h", -1, 1, 0.1, "", ""),
+        (0, 2, ctx.anomaly.fal, r"$\Delta a$", "g", -0.5, 0.5, 0.05, "", ""),
+        (1, 2, ctx.anomaly_ecod, r"$\Delta c$", "h", -1, 1, 0.1, "", ""),
         (
             2,
             2,
-            shakirova_anomaly.tcwv,
+            ctx.anomaly.tcwv,
             r"$\Delta q$",
             "i",
             -20,
@@ -1333,7 +1354,7 @@ def plot_albedo_cloud_coupling_diagnostics(arctic=True):
     fig.set_layout_engine("none")
     region = "_arctic" if arctic else ""
     fig.savefig(
-        shakirova_output_dir
+        ctx.output_dir
         / f"shakirova_ablation_albedo_cloud_residuals_bottom_row{region}.png",
         bbox_inches="tight",
     )
@@ -1351,9 +1372,9 @@ def plot_albedo_cloud_coupling_diagnostics(arctic=True):
 
 
 # %%
-def plot_albedo_response_stack(arctic=True):
+def plot_albedo_response_stack(ctx, arctic=True):
     label, config_path = ABLATION_SPECS[-1]
-    responses = load_feedback_ablation_responses(label, config_path, "nn")
+    responses = load_feedback_ablation_responses(ctx, label, config_path, "nn")
     terms = shakirova_terms(responses, "all")
     fields = [
         (terms["target"], r"$\Delta R$"),
@@ -1394,7 +1415,7 @@ def plot_albedo_response_stack(arctic=True):
     fig.set_layout_engine("none")
     region = "_arctic" if arctic else ""
     fig.savefig(
-        shakirova_output_dir / f"shakirova_ablation_albedo_stack{region}.png",
+        ctx.output_dir / f"shakirova_ablation_albedo_stack{region}.png",
         bbox_inches="tight",
     )
     return fig
@@ -1405,12 +1426,14 @@ def plot_albedo_response_stack(arctic=True):
 
 
 # %%
-def plot_albedo_sensitivity_change(base_date=None, perturbed_date=None, arctic=True):
-    base_date = base_date or shakirova_base_date
-    perturbed_date = perturbed_date or shakirova_perturbed_date
+def plot_albedo_sensitivity_change(
+    ctx, base_date=None, perturbed_date=None, arctic=True
+):
+    base_date = base_date or ctx.base_date
+    perturbed_date = perturbed_date or ctx.perturbed_date
     label, config_path = ABLATION_SPECS[1]
     cache_path = (
-        shakirova_output_dir
+        ctx.output_dir
         / f"{coupling_slug(label)}_albedo_sensitivity_differences_{perturbed_date}_minus_{base_date}.nc"
     )
 
@@ -1424,7 +1447,7 @@ def plot_albedo_sensitivity_change(base_date=None, perturbed_date=None, arctic=T
     ) as raw_for_dates:
         ds_for_dates = (
             raw_for_dates.sel(date=[base_date, perturbed_date])
-            .interp(**shakirova_grid)
+            .interp(**ctx.grid)
             .load()
         )
     base = select_date_state(ds_for_dates, base_date)
@@ -1560,19 +1583,21 @@ def plot_albedo_sensitivity_change(base_date=None, perturbed_date=None, arctic=T
     fig.set_layout_engine("none")
     region = "_arctic" if arctic else ""
     fig.savefig(
-        shakirova_output_dir
+        ctx.output_dir
         / f"shakirova_albedo_sensitivity_differences_{perturbed_date}_minus_{base_date}{region}.png",
         bbox_inches="tight",
     )
     return fig
 
 
-def plot_albedo_kernel_comparison(base_date=None, perturbed_date=None, arctic=True):
-    base_date = base_date or shakirova_base_date
-    perturbed_date = perturbed_date or shakirova_perturbed_date
+def plot_albedo_kernel_comparison(
+    ctx, base_date=None, perturbed_date=None, arctic=True
+):
+    base_date = base_date or ctx.base_date
+    perturbed_date = perturbed_date or ctx.perturbed_date
     label, config_path = ABLATION_SPECS[1]
     cache_path = (
-        shakirova_output_dir
+        ctx.output_dir
         / f"{coupling_slug(label)}_albedo_kernels_{base_date}_{perturbed_date}.nc"
     )
 
@@ -1604,7 +1629,7 @@ def plot_albedo_kernel_comparison(base_date=None, perturbed_date=None, arctic=Tr
         ) as raw_for_dates:
             ds_for_dates = (
                 raw_for_dates.sel(date=[base_date, perturbed_date])
-                .interp(**shakirova_grid)
+                .interp(**ctx.grid)
                 .load()
             )
         coupling_model, coupling_preprocessor, coupling_vc = load_albedo_cloud_model(
@@ -1724,17 +1749,15 @@ def plot_albedo_kernel_comparison(base_date=None, perturbed_date=None, arctic=Tr
     fig.set_layout_engine("none")
     region = "_arctic" if arctic else ""
     fig.savefig(
-        shakirova_output_dir
+        ctx.output_dir
         / f"shakirova_albedo_kernels_{perturbed_date}_and_{base_date}{region}.png",
         bbox_inches="tight",
     )
     return fig
 
 
-def plot_neurips_albedo_sensitivity(date="2015-07", arctic=False):
-    output_path = (
-        shakirova_output_dir / f"neurips_albedo_radiative_sensitivity_{date}.png"
-    )
+def plot_neurips_albedo_sensitivity(ctx, date="2015-07", arctic=False):
+    output_path = ctx.output_dir / f"neurips_albedo_radiative_sensitivity_{date}.png"
     raw_ds = xr.open_dataset(
         Path("data/era5") / make_era5_filename(pd.Timestamp(date).year)
     )
@@ -1971,14 +1994,14 @@ def plot_tsi_albedo_sensitivity(date="2015-07", arctic=False):
 
 
 def run_neurips_feedback_figures():
-    setup_neurips_feedback_context()
-    plot_feedback_ablation_residuals(arctic=True)
-    plot_albedo_cloud_coupling_diagnostics(arctic=True)
-    plot_albedo_cloud_coupling_residuals(arctic=True)
-    plot_albedo_response_stack(arctic=True)
+    ctx = make_neurips_feedback_context()
+    plot_feedback_ablation_residuals(ctx, arctic=True)
+    plot_albedo_cloud_coupling_diagnostics(ctx, arctic=True)
+    plot_albedo_cloud_coupling_residuals(ctx, arctic=True)
+    plot_albedo_response_stack(ctx, arctic=True)
     plot_albedo_kernel_comparison(
-        base_date="2012-08", perturbed_date="2015-08", arctic=True
+        ctx, base_date="2012-08", perturbed_date="2015-08", arctic=True
     )
     plot_albedo_sensitivity_change(
-        base_date="2012-08", perturbed_date="2015-08", arctic=True
+        ctx, base_date="2012-08", perturbed_date="2015-08", arctic=True
     )

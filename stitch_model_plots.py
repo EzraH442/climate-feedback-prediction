@@ -5,64 +5,122 @@ from pathlib import Path
 import matplotlib.image as mpimg
 import matplotlib.pyplot as plt
 
-
 MODELS = [
     ("baseline", Path("checkpoints/fal/2011-2014_3,6,9,12_baseline")),
     ("previous", Path("checkpoints/fal/2011-2014_3,6,9,12_sob_fal_fast_ecod_noozone")),
     ("sob_fal", Path("checkpoints/fal/2011-2014_3,6,9,12_sob_fal")),
     ("sob_fal_fast-ecod", Path("checkpoints/fal/2011-2014_3,6,9,12_sob_fal_fast_ecod")),
     ("sob_fal_clear", Path("checkpoints/fal/2011-2014_3,6,9,12_sob_fal_clearsky")),
-    ("sob_fal_clear_fast-ecod", Path("checkpoints/fal/2011-2014_3,6,9,12_sob_fal_clearsky_fast_ecod")),
+    (
+        "sob_fal_clear_fast-ecod",
+        Path("checkpoints/fal/2011-2014_3,6,9,12_sob_fal_clearsky_fast_ecod"),
+    ),
     ("sob_fal_tcwv", Path("checkpoints/fal/2011-2014_3,6,9,12_sob_fal_tcwv")),
     ("sob_fal_noozone", Path("checkpoints/fal/2011-2014_3,6,9,12_sob_fal_noozone")),
-    ("sob_fal_clear_noozone", Path("checkpoints/fal/2011-2014_3,6,9,12_sob_fal_clearsky_noozone")),
-    ("sob_fal_tcwv_noozone", Path("checkpoints/fal/2011-2014_3,6,9,12_sob_fal_tcwv_noozone")),
-    ("sob_fal_tcwv_clear_noozone", Path("checkpoints/fal/2011-2014_3,6,9,12_sob_fal_tcwv_clearsky_noozone")),
+    (
+        "sob_fal_clear_noozone",
+        Path("checkpoints/fal/2011-2014_3,6,9,12_sob_fal_clearsky_noozone"),
+    ),
+    (
+        "sob_fal_tcwv_noozone",
+        Path("checkpoints/fal/2011-2014_3,6,9,12_sob_fal_tcwv_noozone"),
+    ),
+    (
+        "sob_fal_tcwv_clear_noozone",
+        Path("checkpoints/fal/2011-2014_3,6,9,12_sob_fal_tcwv_clearsky_noozone"),
+    ),
 ]
 
 ECOD_VALIDATION_MODELS = [
     ("baseline", Path("checkpoints/fal/2011-2014_3,6,9,12_baseline")),
-    ("baseline_true-tcc", Path("checkpoints/fal/2011-2014_3,6,9,12_baseline_true_tcc_ecod")),
+    (
+        "baseline_true-tcc",
+        Path("checkpoints/fal/2011-2014_3,6,9,12_baseline_true_tcc_ecod"),
+    ),
     ("sob_fal", Path("checkpoints/fal/2011-2014_3,6,9,12_sob_fal")),
     ("sob_fal_fast", Path("checkpoints/fal/2011-2014_3,6,9,12_sob_fal_fast_ecod")),
-    ("sob_fal_true-tcc", Path("checkpoints/fal/2011-2014_3,6,9,12_sob_fal_true_tcc_ecod")),
+    (
+        "sob_fal_true-tcc",
+        Path("checkpoints/fal/2011-2014_3,6,9,12_sob_fal_true_tcc_ecod"),
+    ),
     ("sob_fal_clear", Path("checkpoints/fal/2011-2014_3,6,9,12_sob_fal_clearsky")),
-    ("sob_fal_clear_fast", Path("checkpoints/fal/2011-2014_3,6,9,12_sob_fal_clearsky_fast_ecod")),
-    ("sob_fal_clear_true-tcc", Path("checkpoints/fal/2011-2014_3,6,9,12_sob_fal_clearsky_true_tcc_ecod")),
+    (
+        "sob_fal_clear_fast",
+        Path("checkpoints/fal/2011-2014_3,6,9,12_sob_fal_clearsky_fast_ecod"),
+    ),
+    (
+        "sob_fal_clear_true-tcc",
+        Path("checkpoints/fal/2011-2014_3,6,9,12_sob_fal_clearsky_true_tcc_ecod"),
+    ),
     ("sob_fal_tcwv", Path("checkpoints/fal/2011-2014_3,6,9,12_sob_fal_tcwv")),
-    ("sob_fal_tcwv_true-tcc", Path("checkpoints/fal/2011-2014_3,6,9,12_sob_fal_tcwv_true_tcc_ecod")),
+    (
+        "sob_fal_tcwv_true-tcc",
+        Path("checkpoints/fal/2011-2014_3,6,9,12_sob_fal_tcwv_true_tcc_ecod"),
+    ),
     ("sob_fal_noozone", Path("checkpoints/fal/2011-2014_3,6,9,12_sob_fal_noozone")),
-    ("sob_fal_noozone_fast", Path("checkpoints/fal/2011-2014_3,6,9,12_sob_fal_fast_ecod_noozone")),
-    ("sob_fal_noozone_true-tcc", Path("checkpoints/fal/2011-2014_3,6,9,12_sob_fal_noozone_true_tcc_ecod")),
+    (
+        "sob_fal_noozone_fast",
+        Path("checkpoints/fal/2011-2014_3,6,9,12_sob_fal_fast_ecod_noozone"),
+    ),
+    (
+        "sob_fal_noozone_true-tcc",
+        Path("checkpoints/fal/2011-2014_3,6,9,12_sob_fal_noozone_true_tcc_ecod"),
+    ),
 ]
 
 OZONE_VALIDATION_MODELS = [
     ("sob_fal", Path("checkpoints/fal/2011-2014_3,6,9,12_sob_fal")),
     ("sob_fal_noozone", Path("checkpoints/fal/2011-2014_3,6,9,12_sob_fal_noozone")),
     ("sob_fal_clear", Path("checkpoints/fal/2011-2014_3,6,9,12_sob_fal_clearsky")),
-    ("sob_fal_clear_noozone", Path("checkpoints/fal/2011-2014_3,6,9,12_sob_fal_clearsky_noozone")),
+    (
+        "sob_fal_clear_noozone",
+        Path("checkpoints/fal/2011-2014_3,6,9,12_sob_fal_clearsky_noozone"),
+    ),
     ("sob_fal_tcwv", Path("checkpoints/fal/2011-2014_3,6,9,12_sob_fal_tcwv")),
-    ("sob_fal_tcwv_noozone", Path("checkpoints/fal/2011-2014_3,6,9,12_sob_fal_tcwv_noozone")),
-    ("sob_fal_tcwv_clear_noozone", Path("checkpoints/fal/2011-2014_3,6,9,12_sob_fal_tcwv_clearsky_noozone")),
-    ("sob_fal_true-tcc", Path("checkpoints/fal/2011-2014_3,6,9,12_sob_fal_true_tcc_ecod")),
-    ("sob_fal_noozone_true-tcc", Path("checkpoints/fal/2011-2014_3,6,9,12_sob_fal_noozone_true_tcc_ecod")),
-    ("sob_fal_clear_true-tcc", Path("checkpoints/fal/2011-2014_3,6,9,12_sob_fal_clearsky_true_tcc_ecod")),
-    ("sob_fal_clear_noozone_true-tcc", Path("checkpoints/fal/2011-2014_3,6,9,12_sob_fal_clearsky_noozone_true_tcc_ecod")),
+    (
+        "sob_fal_tcwv_noozone",
+        Path("checkpoints/fal/2011-2014_3,6,9,12_sob_fal_tcwv_noozone"),
+    ),
+    (
+        "sob_fal_tcwv_clear_noozone",
+        Path("checkpoints/fal/2011-2014_3,6,9,12_sob_fal_tcwv_clearsky_noozone"),
+    ),
+    (
+        "sob_fal_true-tcc",
+        Path("checkpoints/fal/2011-2014_3,6,9,12_sob_fal_true_tcc_ecod"),
+    ),
+    (
+        "sob_fal_noozone_true-tcc",
+        Path("checkpoints/fal/2011-2014_3,6,9,12_sob_fal_noozone_true_tcc_ecod"),
+    ),
+    (
+        "sob_fal_clear_true-tcc",
+        Path("checkpoints/fal/2011-2014_3,6,9,12_sob_fal_clearsky_true_tcc_ecod"),
+    ),
+    (
+        "sob_fal_clear_noozone_true-tcc",
+        Path(
+            "checkpoints/fal/2011-2014_3,6,9,12_sob_fal_clearsky_noozone_true_tcc_ecod"
+        ),
+    ),
 ]
 
 ALL_VS_CLEAR_MODELS = [
-    ('baseline clr', Path("checkpoints/fal/2011-2014_3,6,9,12_baseline_clearonly")),
-    ('baseline all', Path("checkpoints/fal/2011-2014_3,6,9,12_baseline_clearsky")),
-    ('sob_fal clr', Path("checkpoints/fal/2011-2014_3,6,9,12_sob_fal_clearonly")),
-    ('sob_fal all', Path("checkpoints/fal/2011-2014_3,6,9,12_sob_fal_clearsky")),
+    ("baseline clr", Path("checkpoints/fal/2011-2014_3,6,9,12_baseline_clearonly")),
+    ("baseline all", Path("checkpoints/fal/2011-2014_3,6,9,12_baseline_clearsky")),
+    ("sob_fal clr", Path("checkpoints/fal/2011-2014_3,6,9,12_sob_fal_clearonly")),
+    ("sob_fal all", Path("checkpoints/fal/2011-2014_3,6,9,12_sob_fal_clearsky")),
 ]
 
 TCWV_EFFECT_MODELS = [
-    ('baseline all', Path("checkpoints/fal/2011-2014_3,6,9,12_baseline_clearsky")),
-    #("sob_fal_cloudysky", Path("checkpoints/fal/2011-2014_3,6,9,12_sob_fal")),
+    ("baseline all", Path("checkpoints/fal/2011-2014_3,6,9,12_baseline_clearsky")),
+    # ("sob_fal_cloudysky", Path("checkpoints/fal/2011-2014_3,6,9,12_sob_fal")),
     ("sob_fal_allsky", Path("checkpoints/fal/2011-2014_3,6,9,12_sob_fal_clearsky")),
-    #("sob_fal_tcwv_cloudysky", Path("checkpoints/fal/2011-2014_3,6,9,12_sob_fal_tcwv")),
-    ("sob_fal_tcwv_allsky", Path("checkpoints/fal/2011-2014_3,6,9,12_sob_fal_tcwv_clearsky")),
+    # ("sob_fal_tcwv_cloudysky", Path("checkpoints/fal/2011-2014_3,6,9,12_sob_fal_tcwv")),
+    (
+        "sob_fal_tcwv_allsky",
+        Path("checkpoints/fal/2011-2014_3,6,9,12_sob_fal_tcwv_clearsky"),
+    ),
 ]
 
 SETUPS = {
@@ -74,16 +132,16 @@ SETUPS = {
 }
 
 KERNEL_PLOTS = [
-    #"nn", 
-    #"nn_np", 
-    "nn_grad", 
-    "nn_grad_np", 
-    #"rrtm", 
-    #"rrtm_np", 
-    #"nn-rrtm", 
-    #"nn-rrtm_np", 
-    "nn_grad-rrtm", 
-    "nn_grad-rrtm_np"
+    # "nn",
+    # "nn_np",
+    "nn_grad",
+    "nn_grad_np",
+    # "rrtm",
+    # "rrtm_np",
+    # "nn-rrtm",
+    # "nn-rrtm_np",
+    "nn_grad-rrtm",
+    "nn_grad-rrtm_np",
 ]
 
 PLOTS = [
@@ -95,12 +153,12 @@ PLOTS = [
     "clr/tsrc_test/nn.png",
     "clr/tsrc_test/mbe.png",
     "clr/tsrc_test/rmse.png",
-    #"all/tsr_contour_test/fal/2015-09/fal_ecod.png",
-    #"all/kernel_contour_test/fal/2015-09/fal_ecod.png",
+    # "all/tsr_contour_test/fal/2015-09/fal_ecod.png",
+    # "all/kernel_contour_test/fal/2015-09/fal_ecod.png",
     *[
         f"{sky}/kernel_date_test/{kernel}/{date}/{plot}.png"
         for kernel in ("fal", "tcwv")
-        for date in ("2015-09",)#("2013-09", "2015-09", "2015-12")
+        for date in ("2015-09",)  # ("2013-09", "2015-09", "2015-12")
         for sky, plots in (
             ("all", KERNEL_PLOTS),
             ("clr", KERNEL_PLOTS),
@@ -112,32 +170,40 @@ PLOTS = [
     #     for kernel in ("fal", "tcwv")
     #     for plot in ("nn_grad_np", "rrtm_np", "nn_grad-rrtm_np")
     # ],
-    #*[
+    # *[
     #    f"closure_test/2012_09/delta_{var}{suffix}.png"
     #    for var in ("fal", "hcc", "mcc", "lcc", "tcwv", "tco3", "tsr", "ecod", "tsrc")
     #    for suffix in ("", "_np")
-    #],
+    # ],
     *[
         f"closure_test/2012_09/all/{prefix}{name}.png"
         for prefix in ("", "np/")
         for name in (
-            "dR_a", "dR_c", "dR_q",
-            #"k_dR_a", "k_dR_c", "k_dR_q",
-            "dR_sum", "dR_sum_allcross", "dR_res", "dR_res_allcross",
-            #"k_dR_sum", "k_dR_res",
-            #"cross_dR_a,q", "cross_dR_a,c", "cross_dR_q,c",
-            #"cross_dR_sum", "cross_dR_res",
+            "dR_a",
+            "dR_c",
+            "dR_q",
+            # "k_dR_a", "k_dR_c", "k_dR_q",
+            "dR_sum",
+            "dR_sum_allcross",
+            "dR_res",
+            "dR_res_allcross",
+            # "k_dR_sum", "k_dR_res",
+            # "cross_dR_a,q", "cross_dR_a,c", "cross_dR_q,c",
+            # "cross_dR_sum", "cross_dR_res",
         )
     ],
     *[
         f"closure_test/2012_09/clr/{prefix}{name}.png"
         for prefix in ("", "np/")
         for name in (
-            "dR_a,clr", "dR_q,clr",
-            #"k_dR_a,clr", "k_dR_q,clr",
-            "dR_sum,clr", "dR_sum_allcross,clr",
-            "dR_res,clr", "dR_res_allcross,clr",
-            #"k_dR_sum,clr", "k_dR_res,clr",
+            "dR_a,clr",
+            "dR_q,clr",
+            # "k_dR_a,clr", "k_dR_q,clr",
+            "dR_sum,clr",
+            "dR_sum_allcross,clr",
+            "dR_res,clr",
+            "dR_res_allcross,clr",
+            # "k_dR_sum,clr", "k_dR_res,clr",
         )
     ],
     "closure_test/all/timeseries_net.png",
@@ -159,7 +225,6 @@ PLOTS = [
     "closure_test/clr/boxplot_residuals_by_year_month_global.png",
     "closure_test/clr/np/boxplot_residuals_by_year_month_np.png",
     "closure_test/clr/boxplot_residuals_by_month_np.png",
-
     "closure_test/all/timeseries_q.png",
     "closure_test/clr/timeseries_q.png",
 ]
@@ -205,12 +270,14 @@ def stitch(
     for ax, (label, img_path) in zip(axes, images):
         if img_path is not None:
             ax.imshow(mpimg.imread(img_path))
-        ax.set_title(label if img_path is not None else f"{label}\nmissing", fontsize=10, pad=0)
+        ax.set_title(
+            label if img_path is not None else f"{label}\nmissing", fontsize=10, pad=0
+        )
         ax.axis("off")
 
-    for ax in axes[len(images):]:
+    for ax in axes[len(images) :]:
         ax.axis("off")
-    
+
     plt.tight_layout()
     fig.savefig(output, dpi=200)
     plt.close(fig)
@@ -218,7 +285,9 @@ def stitch(
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("plot_path", nargs="?", help="Path relative to each model's latest figures dir.")
+    parser.add_argument(
+        "plot_path", nargs="?", help="Path relative to each model's latest figures dir."
+    )
     parser.add_argument("-o", "--output")
     parser.add_argument("--setup", choices=SETUPS, default="default")
     parser.add_argument("--cols", type=int, default=4)
@@ -229,7 +298,14 @@ def main():
     models, default_output = SETUPS[args.setup]
     output = Path(args.output) if args.output else default_output
     if args.plot_path:
-        stitch(args.plot_path, output, args.cols, args.skip_missing, args.skip_existing, models)
+        stitch(
+            args.plot_path,
+            output,
+            args.cols,
+            args.skip_missing,
+            args.skip_existing,
+            models,
+        )
         return
 
     output.mkdir(parents=True, exist_ok=True)

@@ -10,6 +10,7 @@ if str(ROOT) not in sys.path:
 from analysis import run_shakirova_eval
 
 from constants import SHAKIROVA_NORTH_BOUNDARY
+from experiments.common import parse_args_and_confirm
 
 
 class ShakirovaEvalArgs(Tap):
@@ -25,9 +26,9 @@ class ShakirovaEvalArgs(Tap):
 
 
 def main():
-    args = ShakirovaEvalArgs(
-        description="Run one two-date radiative closure experiment."
-    ).parse_args()
+    args = parse_args_and_confirm(
+        ShakirovaEvalArgs(description="Run one two-date radiative closure experiment.")
+    )
     run_shakirova_eval(args)
 
 
