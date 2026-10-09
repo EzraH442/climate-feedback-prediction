@@ -10,13 +10,13 @@
 #SBATCH --error=%x-%A_%a.err
 #SBATCH --mail-type=ALL
 #SBATCH --mail-user=ezra.huang@mail.mcgill.ca
-#SBATCH --array=0-9
+#SBATCH --array=0-19
 
 set -euo pipefail
 
 CONFIG="configs/experiments/fal/baseline_optimization.yaml"
 CHECKPOINT_ROOT="./baseline-optimization/checkpoints"
-HIDDEN_SIZES=(11 15 20 30 50)
+HIDDEN_SIZES=(30 50)
 MONTH_KEYS=("3,6,9,12" "1-12")
 
 ARGS=()
@@ -38,9 +38,14 @@ done
 
 train_one() {
     local overrides="$1"
+    local seed="$2"
     local override_args=()
     read -r -a override_args <<< "${overrides}"
-    python train.py --config_file "${CONFIG}" --no-resume "${override_args[@]}"
+    python train.py \
+        --config_file "${CONFIG}" \
+        --no-resume \
+        --seed "${seed}" \
+        "${override_args[@]}"
 }
 
 export OMP_NUM_THREADS="${SLURM_CPUS_PER_TASK:-1}"
@@ -55,14 +60,16 @@ if [[ -n "${SLURM_JOB_ID:-}" ]]; then
     module load scipy-stack
     module load httpproxy
 
-    virtualenv --no-download "${SLURM_TMPDIR}/env"
-    source "${SLURM_TMPDIR}/env/bin/activate"
-    pip install --no-index --upgrade pip
-    pip install --no-index -r requirements.txt
+    source ~/.venv/bin/activate
 
-    train_one "${ARGS[$SLURM_ARRAY_TASK_ID]}"
+    task_id="${SLURM_ARRAY_TASK_ID}"
+    config_index=$((task_id / 5))
+    seed=$((task_id % 5 + 1))
+    train_one "${ARGS[$config_index]}" "${seed}"
 else
     for overrides in "${ARGS[@]}"; do
-        train_one "${overrides}"
+        for seed in 1 2 3 4 5; do
+            train_one "${overrides}" "${seed}"
+        done
     done
 fi

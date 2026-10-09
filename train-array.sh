@@ -32,10 +32,7 @@ module load mpi4py/4.1.0
 module load scipy-stack
 module load httpproxy
 
-virtualenv --no-download $SLURM_TMPDIR/env
-source $SLURM_TMPDIR/env/bin/activate
-pip install --no-index --upgrade pip
-pip install --no-index -r requirements.txt
+source ~/.venv/bin/activate
 
 config_file=${ARGS[$SLURM_ARRAY_TASK_ID]}
 python train.py --config_file "${config_file}" --no-resume

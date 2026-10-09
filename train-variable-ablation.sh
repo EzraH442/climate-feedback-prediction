@@ -43,10 +43,7 @@ if [[ -n "${SLURM_JOB_ID:-}" ]]; then
     module load scipy-stack
     module load httpproxy
 
-    virtualenv --no-download "${SLURM_TMPDIR}/env"
-    source "${SLURM_TMPDIR}/env/bin/activate"
-    pip install --no-index --upgrade pip
-    pip install --no-index -r requirements.txt
+    source ~/.venv/bin/activate
 
     train_one "${ARGS[$SLURM_ARRAY_TASK_ID]}"
 else
