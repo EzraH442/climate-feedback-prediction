@@ -15,6 +15,7 @@ from utils import (
     weighted_residuals_by_year_month,
 )
 
+
 def plot_component_timeseries(series, output_dir: Path, clear_sky: bool) -> None:
     variables = ["a", "q"] if clear_sky else ["a", "q", "c"]
     suffix = "_clr" if clear_sky else ""
@@ -71,9 +72,9 @@ def build_rmse_residual_series(
 def plot_residual_rmse_timeseries(series, output_dir: Path, clear_sky: bool) -> None:
     fig, ax = setup_timeseries_plot()
     ylabel = (
-        rf"RMSE $\Delta R_{{net,clr}}$ ($W m^{{-2}}$)"
+        r"RMSE $\Delta R_{{net,clr}}$ ($W m^{{-2}}$)"
         if clear_sky
-        else rf"RMSE $\Delta R_{{net}}$ ($W m^{{-2}}$)"
+        else r"RMSE $\Delta R_{{net}}$ ($W m^{{-2}}$)"
     )
     for source in ["nn", "k", "nn_allcross"]:
         name = f"dR_res_{source}" + ("_clr" if clear_sky else "")
@@ -90,9 +91,9 @@ def plot_residual_rmse_timeseries(series, output_dir: Path, clear_sky: bool) -> 
 def plot_residual_mbe_timeseries(series, output_dir: Path, clear_sky: bool) -> None:
     fig, ax = setup_timeseries_plot()
     ylabel = (
-        rf"MBE $\Delta R_{{net,clr}}$ ($W m^{{-2}}$)"
+        r"MBE $\Delta R_{{net,clr}}$ ($W m^{{-2}}$)"
         if clear_sky
-        else rf"MBE $\Delta R_{{net}}$ ($W m^{{-2}}$)"
+        else r"MBE $\Delta R_{{net}}$ ($W m^{{-2}}$)"
     )
     for source in ["nn", "k", "nn_allcross"]:
         name = f"dR_res_{source}" + ("_clr" if clear_sky else "")
