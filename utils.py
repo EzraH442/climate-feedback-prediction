@@ -778,11 +778,10 @@ def compute_nn_kernel_autograd(
     input_range = float(vmax[input_var] - vmin[input_var])
     # print(f"{target.upper()} range", target_range)
     # print(f"{input_var} range", input_range)
-    grad_physical_per_unit = (
-        grads.detach().cpu().numpy().squeeze(axis=0)
-        * (target_range / input_range)
-        / SECONDS_PER_DAY
-    )
+    grad_values = grads.detach().cpu().numpy()
+    if grad_values.shape[0] == 1:
+        grad_values = grad_values.squeeze(axis=0)
+    grad_physical_per_unit = grad_values * (target_range / input_range) / SECONDS_PER_DAY
     return grad_physical_per_unit * kernel_delta(input_var), lon, lat
 
 
