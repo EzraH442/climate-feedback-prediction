@@ -17,6 +17,7 @@ from experiments.common import (
     checkpoint_paths_for_args,
     model_label,
     parse_args_and_confirm,
+    write_json,
 )
 from utils import (
     SECONDS_PER_DAY,
@@ -165,6 +166,19 @@ def print_tsr_metrics(mbe: xr.DataArray, rmse: xr.DataArray) -> None:
     )
 
 
+def save_tsr_metrics(path: Path, mbe: xr.DataArray, rmse: xr.DataArray) -> None:
+    write_json(
+        path,
+        {
+            "mbe_mean": float(mbe.mean("model")),
+            "mbe_std": float(mbe.std("model")),
+            "rmse_mean": float(rmse.mean("model")),
+            "rmse_std": float(rmse.std("model")),
+            "n_models": mbe.sizes["model"],
+        },
+    )
+
+
 def main():
     args: TSRTestArgs = parse_args_and_confirm(TSRTestArgs())
 
@@ -173,6 +187,7 @@ def main():
         args, data, checkpoint_paths_for_args(args, args.config)
     )
     print_tsr_metrics(mbe, rmse)
+    save_tsr_metrics(args.output_dir / "metrics.json", mbe, rmse)
 
 
 if __name__ == "__main__":

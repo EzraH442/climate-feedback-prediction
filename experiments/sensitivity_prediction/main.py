@@ -15,8 +15,8 @@ from experiments.common import (
     checkpoint_paths_for_args,
     model_label,
     parse_args_and_confirm,
-    write_netcdf,
     write_json,
+    write_netcdf,
 )
 from utils import (
     compute_nn_kernel,

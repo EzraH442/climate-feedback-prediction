@@ -1,6 +1,7 @@
 import matplotlib.pyplot as plt
 
 from experiments.radiative_closure_single_date.analysis import (
+    make_neurips_feedback_context,
     plot_albedo_cloud_coupling_diagnostics,
     plot_albedo_cloud_coupling_residuals,
     plot_albedo_kernel_comparison,
@@ -10,7 +11,6 @@ from experiments.radiative_closure_single_date.analysis import (
     plot_feedback_component_responses,
     plot_feedback_total_response,
     plot_neurips_albedo_sensitivity,
-    make_neurips_feedback_context,
 )
 from experiments.standard_eval.analysis import (
     write_neurips_summary_tables,
