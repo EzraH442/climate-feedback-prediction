@@ -12,9 +12,6 @@ from experiments.radiative_closure_single_date.analysis import (
     plot_feedback_total_response,
     plot_neurips_albedo_sensitivity,
 )
-from experiments.standard_eval.analysis import (
-    write_neurips_summary_tables,
-)
 
 
 def save(fig):
@@ -46,7 +43,6 @@ def make_feedback_figures(ctx) -> None:
 
 def main() -> None:
     ctx = make_neurips_feedback_context()
-    write_neurips_summary_tables()
     make_feedback_figures(ctx)
 
 
