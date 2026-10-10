@@ -75,13 +75,19 @@ def predict_tsr(
 ) -> xr.DataArray:
     model_input = vc.clear_sky_input(data) if clear_sky else data
     dim_names = [dim for dim in ["date", "latitude", "longitude"] if dim in data.dims]
-    return nn_pred(
+    prediction = nn_pred(
         processed_data if processed_data is not None else preprocessor.transform(model_input),
         model,
         preprocessor,
         vc,
         dim_names,
         clear=clear_sky,
+    )
+    return prediction.interp(
+        latitude=data.latitude,
+        longitude=data.longitude,
+        method="nearest",
+        kwargs={"fill_value": "extrapolate"},
     )
 
 
