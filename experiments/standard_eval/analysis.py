@@ -20,9 +20,6 @@ from experiments.kernel_difference.analysis import (
 )
 from experiments.radiative_closure_single_date.analysis import (
     arctic_field,
-    load_feedback_ablation_responses,
-    make_neurips_feedback_context,
-    shakirova_terms,
 )
 from experiments.sensitivity_prediction.main import predict_sensitivity
 from experiments.tsr_prediction.main import predict_tsr
@@ -347,8 +344,6 @@ kernel_table_path = table_output_dir / "kernel_date_test_2015_heldout_months.csv
 kernel_fd_table_path = (
     table_output_dir / "kernel_finite_difference_date_test_2015_heldout_months.csv"
 )
-closure_table_path = table_output_dir / "closure_1990_2020.csv"
-feedback_table_path = table_output_dir / "feedback_quantification_two_year.csv"
 
 
 def seed_checkpoint_paths(config_path, checkpoint_dir=None):
@@ -555,36 +550,6 @@ def summarize_prediction_metrics(rows, include_std=True):
     return pd.DataFrame(table_rows).set_index("Model")
 
 
-def append_feedback_metric(rows, model, residual, sky, region, diff):
-    mean, mean_sq = global_bias_and_mean_square(diff, arctic=(region == "arctic"))
-    rows.append(
-        {
-            "Model": model,
-            "Residual": residual,
-            "sky": sky,
-            "region": region,
-            "mean": mean,
-            "mean_sq": mean_sq,
-        }
-    )
-
-
-def summarize_feedback_metrics(rows):
-    rows_df = pd.DataFrame(rows)
-    table_rows = []
-    for (model, residual), group_df in rows_df.groupby(
-        ["Model", "Residual"], sort=False
-    ):
-        row = {"Model": model, "Residual": residual}
-        for region in ["global", "arctic"]:
-            for sky in ["all", "clear"]:
-                subset = group_df[(group_df.region == region) & (group_df.sky == sky)]
-                row[f"{region} {sky} MBE"] = float(subset["mean"].mean())
-                row[f"{region} {sky} RMSE"] = float(np.sqrt(subset["mean_sq"].mean()))
-        table_rows.append(row)
-    return pd.DataFrame(table_rows).set_index(["Model", "Residual"])
-
-
 # --------------------------------------------------------------------------- #
 # TSR test: NN TSR predictions vs ERA5 TSR, 1990-2020, all-sky & clear-sky
 # --------------------------------------------------------------------------- #
@@ -755,61 +720,6 @@ def write_albedo_kernel_finite_difference_table():
 
 
 # --------------------------------------------------------------------------- #
-# Feedback quantification test: context base_date -> perturbed_date response residuals
-# --------------------------------------------------------------------------- #
-
-
-def collect_feedback_response_metrics(ctx, label, config_path, checkpoint_path):
-    rows = []
-    responses = load_feedback_ablation_responses(
-        ctx, label, config_path, "nn", checkpoint_path
-    )
-    for sky, response_sky in [("all", "all"), ("clear", "clr")]:
-        terms = shakirova_terms(responses, response_sky)
-        for residual, diff in [
-            ("allcross", terms["allcross"][-1]),
-            ("nn sum", terms["nn"][-1]),
-        ]:
-            for region in ["global", "arctic"]:
-                append_feedback_metric(rows, label, residual, sky, region, diff)
-    return rows
-
-
-def collect_feedback_kernel_metrics(ctx):
-    rows = []
-    responses = load_feedback_ablation_responses(ctx, None, None, "kernel")
-    for sky, response_sky in [("all", "all"), ("clear", "clr")]:
-        terms = shakirova_terms(responses, response_sky)
-        diff = terms["kernel"][-1]
-        for region in ["global", "arctic"]:
-            append_feedback_metric(rows, "Kernel", "kernel sum", sky, region, diff)
-    return rows
-
-
-def write_feedback_response_table(ctx):
-    rows = []
-    for label, config_path, checkpoint_path in expanded_table_model_specs():
-        rows.extend(
-            collect_feedback_response_metrics(ctx, label, config_path, checkpoint_path)
-        )
-    rows.extend(collect_feedback_kernel_metrics(ctx))
-
-    table = aggregate_seed_rows(summarize_feedback_metrics(rows))
-    return save_table(table, feedback_table_path)
-
-
-def ensure_feedback_kernel_method(table, ctx):
-    """Backfill the kernel-method row into a cached feedback table that predates it."""
-    if (
-        isinstance(table.index, pd.MultiIndex)
-        and ("Kernel", "kernel sum") in table.index
-    ):
-        return table
-    print("Feedback quantification test: recomputing for method-level mean/std rows")
-    return write_feedback_response_table(ctx)
-
-
-# --------------------------------------------------------------------------- #
 # Cache loading and top-level table computation
 # --------------------------------------------------------------------------- #
 
@@ -827,8 +737,7 @@ def load_or_compute_table(path, description, compute_table, index_col=0):
     return compute_table()
 
 
-def write_neurips_summary_tables(ctx=None):
-    ctx = ctx or make_neurips_feedback_context()
+def write_neurips_summary_tables():
     tsr_table = load_or_compute_table(
         tsr_table_path,
         "TSR test: monthly 1990-2020 NN TSR predictions vs ERA5 TSR, all-sky and clear-sky",
@@ -844,16 +753,7 @@ def write_neurips_summary_tables(ctx=None):
         "Kernel finite-difference date test: same 2015 held-out months; NN finite-difference albedo kernel vs FAL kernel",
         write_albedo_kernel_finite_difference_table,
     )
-    feedback_table = ensure_feedback_kernel_method(
-        load_or_compute_table(
-            feedback_table_path,
-            "Feedback quantification test: context base_date to perturbed_date response residuals, global and Arctic",
-            lambda: write_feedback_response_table(ctx),
-            index_col=[0, 1],
-        ),
-        ctx,
-    )
-    return tsr_table, kernel_table, kernel_fd_table, feedback_table
+    return tsr_table, kernel_table, kernel_fd_table
 
 
 # %%
@@ -866,12 +766,6 @@ sobolev_lambda_kernel_raw_path = (
     table_output_dir
     / "sobolev_lambda_seed_metrics_kernel_date_test_2015_heldout_months.csv"
 )
-sobolev_lambda_feedback_raw_path = (
-    table_output_dir
-    / "sobolev_lambda_seed_metrics_feedback_quantification_two_year.csv"
-)
-
-
 def sobolev_lambda_seed_paths(label, config_path, checkpoint_dir):
     seeds = seed_checkpoint_paths(config_path, checkpoint_dir)
     if len(seeds) != 5:
@@ -979,23 +873,7 @@ def compute_sobolev_lambda_kernel_raw_table(specs):
     )
 
 
-def compute_sobolev_lambda_feedback_raw_table(specs, ctx):
-    rows = []
-    for label, config_path, checkpoint_dir in specs:
-        for seed_label, checkpoint_path in zip(
-            sobolev_seed_labels(label),
-            sobolev_lambda_seed_paths(label, config_path, checkpoint_dir),
-        ):
-            rows.extend(
-                collect_feedback_response_metrics(
-                    ctx, seed_label, config_path, checkpoint_path
-                )
-            )
-    return summarize_feedback_metrics(rows)
-
-
-def write_sobolev_lambda_summary_tables(ctx=None):
-    ctx = ctx or make_neurips_feedback_context()
+def write_sobolev_lambda_summary_tables():
     sobolev_lambda_tsr_raw_table = load_or_update_raw_sobolev_table(
         sobolev_lambda_tsr_raw_path,
         "Sobolev lambda ablation TSR seed metrics",
@@ -1006,18 +884,9 @@ def write_sobolev_lambda_summary_tables(ctx=None):
         "Sobolev lambda ablation kernel sensitivity seed metrics",
         compute_sobolev_lambda_kernel_raw_table,
     )
-    sobolev_lambda_feedback_raw_table = load_or_update_raw_sobolev_table(
-        sobolev_lambda_feedback_raw_path,
-        "Sobolev lambda ablation two-year feedback seed metrics",
-        lambda specs: compute_sobolev_lambda_feedback_raw_table(specs, ctx),
-        index_col=[0, 1],
-    )
-
     return (
         sobolev_lambda_tsr_raw_table,
         sobolev_lambda_kernel_raw_table,
-        sobolev_lambda_feedback_raw_table,
         sobolev_seed_mean_std_table(sobolev_lambda_tsr_raw_table),
         sobolev_seed_mean_std_table(sobolev_lambda_kernel_raw_table),
-        sobolev_seed_mean_std_table(sobolev_lambda_feedback_raw_table),
     )
