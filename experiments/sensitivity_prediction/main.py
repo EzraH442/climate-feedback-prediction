@@ -2,6 +2,7 @@
 import sys
 from pathlib import Path
 
+import numpy as np
 import xarray as xr
 from tap import Tap
 
@@ -15,11 +16,13 @@ from experiments.common import (
     model_label,
     parse_args_and_confirm,
     write_netcdf,
+    write_json,
 )
 from utils import (
     compute_nn_kernel,
     compute_nn_kernel_autograd,
     generate_paths_yearly,
+    global_mean,
     kernel_delta,
     load_model_and_preprocessor,
     make_era5_filename,
@@ -165,6 +168,19 @@ def main():
     write_netcdf(
         output_dir / f"{args.variable}.nc",
         xr.Dataset({"prediction": prediction, "truth": truth}),
+    )
+    residual = prediction - truth
+    mbe = global_mean(residual).mean("date")
+    rmse = np.sqrt(global_mean(residual**2).mean("date"))
+    write_json(
+        output_dir / "metrics.json",
+        {
+            "mbe_mean": float(mbe.mean("model")) if "model" in mbe.dims else float(mbe),
+            "mbe_std": float(mbe.std("model")) if "model" in mbe.dims else 0.0,
+            "rmse_mean": float(rmse.mean("model")) if "model" in rmse.dims else float(rmse),
+            "rmse_std": float(rmse.std("model")) if "model" in rmse.dims else 0.0,
+            "n_models": prediction.sizes.get("model", 1),
+        },
     )
 
 

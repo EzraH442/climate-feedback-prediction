@@ -14,7 +14,6 @@ from experiments.radiative_closure_single_date.analysis import (
 )
 from experiments.standard_eval.analysis import (
     write_neurips_summary_tables,
-    write_sobolev_lambda_summary_tables,
 )
 
 
@@ -47,8 +46,7 @@ def make_feedback_figures(ctx) -> None:
 
 def main() -> None:
     ctx = make_neurips_feedback_context()
-    write_neurips_summary_tables(ctx)
-    write_sobolev_lambda_summary_tables(ctx)
+    write_neurips_summary_tables()
     make_feedback_figures(ctx)
 
 
