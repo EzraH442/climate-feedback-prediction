@@ -79,65 +79,60 @@ def plot(args: SobolevLineArgs) -> None:
         else None
     )
     fig, axes = plt.subplots(2, 2, figsize=(10, 7), constrained_layout=True)
-    for ax, panel_label, sky_metrics, sky_baselines, metric, label, title in [
+    for ax, panel_label, sky_metrics, sky_baselines, metric, label, title, show_xlabel in [
         (
             axes[0, 0],
             r"$\bf{(a)}$",
             clear_sky,
             [
-                (baseline_clear, "Baseline", ":"),
-                (baseline_clearsky, "Baseline clear-sky", "-."),
+                (baseline_clear, "NN", ":"),
+                (baseline_clearsky, "NN+clearsky", "-."),
             ],
             "mbe",
             "MBE (W/m$^2$)",
             "Clear-sky MBE",
+            False,
         ),
         (
             axes[0, 1],
             r"$\bf{(b)}$",
             clear_sky,
             [
-                (baseline_clear, "Baseline", ":"),
-                (baseline_clearsky, "Baseline clear-sky", "-."),
+                (baseline_clear, "NN", ":"),
+                (baseline_clearsky, "NN+clearsky", "-."),
             ],
             "rmse",
             "RMSE (W/m$^2$)",
             "Clear-sky RMSE",
+            False,
         ),
         (
             axes[1, 0],
             r"$\bf{(c)}$",
             all_sky,
             [
-                (baseline, "Baseline", ":"),
-                (baseline_clearsky_all, "Baseline clear-sky", "-."),
+                (baseline, "NN", ":"),
+                (baseline_clearsky_all, "NN+clearsky", "-."),
             ],
             "mbe",
             "MBE (W/m$^2$)",
             "All-sky MBE",
+            True,
         ),
         (
             axes[1, 1],
             r"$\bf{(d)}$",
             all_sky,
             [
-                (baseline, "Baseline", ":"),
-                (baseline_clearsky_all, "Baseline clear-sky", "-."),
+                (baseline, "NN", ":"),
+                (baseline_clearsky_all, "NN+clearsky", "-."),
             ],
             "rmse",
             "RMSE (W/m$^2$)",
             "All-sky RMSE",
+            True,
         ),
     ]:
-        plot_with_std(
-            ax,
-            lambda_values,
-            sky_metrics[f"{metric}_mean"],
-            sky_metrics[f"{metric}_std"],
-            linestyle="-",
-            marker="o",
-            label="Sobolev",
-        )
         for sky_baseline, baseline_label, baseline_linestyle in sky_baselines:
             if not sky_baseline:
                 continue
@@ -149,14 +144,22 @@ def plot(args: SobolevLineArgs) -> None:
                 linestyle=baseline_linestyle,
                 label=baseline_label,
             )
+        plot_with_std(
+            ax,
+            lambda_values,
+            sky_metrics[f"{metric}_mean"],
+            sky_metrics[f"{metric}_std"],
+            linestyle="-",
+            marker="o",
+            label="NN+clearsky+Sob",
+        )
         ax.set_xscale("log")
         ax.set_xticks(lambda_values)
         ax.set_xticklabels([f"{value:g}" for value in lambda_values])
         ax.xaxis.set_minor_locator(NullLocator())
-        ax.set_xlabel(r"$\lambda$")
+        ax.set_xlabel(r"$\lambda$" if show_xlabel else "")
         ax.set_ylabel(label)
-        ax.set_title(title)
-        ax.text(0.02, 0.95, panel_label, transform=ax.transAxes, va="top")
+        ax.set_title(f"{panel_label} {title}", loc="left")
         if metric == "mbe":
             ymin, ymax = ax.get_ylim()
             bound = max(abs(ymin), abs(ymax))
