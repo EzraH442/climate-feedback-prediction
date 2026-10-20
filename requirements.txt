@@ -16,7 +16,7 @@ dulwich==1.0.0+computecanada
 everett==3.1.0+computecanada
 filelock==3.29.0+computecanada
 findlibs==0.0.2+computecanada
-fsspec==2026.3.0+computecanada
+fsspec==2026.6.0
 gitdb==4.0.12+computecanada
 gitpython==3.1.49+computecanada
 idna==3.12+computecanada
