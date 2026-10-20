@@ -5,11 +5,11 @@ import numpy as np
 import torch
 
 from config_utils import load_config, variable_config_from_omegaconf
-from preprocessing import DianaPreprocessor
+from preprocessing import Preprocessor
 from utils import (
+    load_yearly_and_filter_by_months,
     make_combined_kernel_filename,
     make_era5_filename,
-    load_yearly_and_filter_by_months,
 )
 
 
@@ -34,25 +34,13 @@ def load_or_create_mmap(path: Path, shape: tuple[int, ...], build_array):
     return np.load(path, mmap_mode="r")
 
 
-def area_weights_from_latitudes(
-    latitudes_deg: np.ndarray,
-    n_dates: int,
-    n_lon: int,
-) -> torch.Tensor:
-    lat_weights = np.cos(np.deg2rad(latitudes_deg)).astype(np.float32)
-    lat_weights = np.clip(lat_weights, 1e-6, None)
-    sample_weights = np.broadcast_to(
-        lat_weights[None, :, None],
-        (n_dates, len(latitudes_deg), n_lon),
-    ).reshape(-1)
-    return torch.as_tensor(sample_weights, dtype=torch.double)
-
-
-class ClimateTorchDataset(torch.utils.data.Dataset):
+class ClimateTorchDataset(
+    torch.utils.data.Dataset[tuple[torch.Tensor, torch.Tensor, torch.Tensor]]
+):
     def __init__(
         self,
-        config_path="configs/model/fal/1990-2020_1-12_baseline.yaml",
-        data_type="train",
+        config_path: str | Path = "configs/model/fal/1990-2020_1-12_baseline.yaml",
+        data_type: str = "train",
     ):
         """
         Args:
@@ -98,16 +86,10 @@ class ClimateTorchDataset(torch.utils.data.Dataset):
         self.n_lat = len(self.dataset_era5.latitude)
         self.n_lon = len(self.dataset_era5.longitude)
         self.base_len = self.n_dates * self.n_lat * self.n_lon
-        self.sample_weights = area_weights_from_latitudes(
-            self.dataset_era5.latitude.to_numpy(),
-            n_dates=self.n_dates,
-            n_lon=self.n_lon,
-        )
-        self.sample_weights = torch.cat([self.sample_weights] * len(self.sky))
 
         slurm_tmpdir = os.getenv("SLURM_TMPDIR")
         if not slurm_tmpdir:
-            raise EnvironmentError("SLURM_TMPDIR environment variable is not set.")
+            raise OSError("SLURM_TMPDIR environment variable is not set.")
         mmap_dir = Path(slurm_tmpdir)
         mmap_dir.mkdir(parents=True, exist_ok=True)
 
@@ -128,7 +110,7 @@ class ClimateTorchDataset(torch.utils.data.Dataset):
         if "clear" in self.sky:
 
             def build_x_clear():
-                preprocessor = DianaPreprocessor(conf)
+                preprocessor = Preprocessor(conf)
                 preprocessor.load(conf.preprocess.params_dir)
                 raw = load_yearly_and_filter_by_months(
                     path=conf.dataset.era5.raw_path,
@@ -205,21 +187,20 @@ class ClimateTorchDataset(torch.utils.data.Dataset):
 
         return x, y, k
 
-    def __getitem__(self, idx):
+    def __getitem__(self, index):
         if len(self.sky) == 2:
-            clear_sky_sample = idx >= self.base_len
+            clear_sky_sample = index >= self.base_len
             if clear_sky_sample:
-                idx -= self.base_len
-                x, y, k = self._get_clear(idx)
+                index -= self.base_len
+                x, y, k = self._get_clear(index)
             else:
-                x, y, k = self._get_all(idx)
-            pass
+                x, y, k = self._get_all(index)
         elif self.sky[0] == "all":
-            x, y, k = self._get_all(idx)
+            x, y, k = self._get_all(index)
         elif self.sky[0] == "clear":
-            x, y, k = self._get_clear(idx)
+            x, y, k = self._get_clear(index)
         else:
-            raise NotImplementedError('path not implemented')
+            raise NotImplementedError("path not implemented")
 
         return (
             torch.from_numpy(x.copy()).float(),

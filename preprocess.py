@@ -1,17 +1,20 @@
+import argparse
 from pathlib import Path
 
-from preprocessing import DianaPreprocessor
 import xarray as xr
-import argparse
 
 from config_utils import load_config
+from preprocessing import Preprocessor
 from utils import (
     load_yearly_and_filter_by_months,
-    make_era5_filename,
-    make_combined_kernel_filename,
     make_cloud_profile_filename,
+    make_combined_kernel_filename,
+    make_era5_filename,
     make_kernel_filename,
 )
+
+KERNEL_YEARS = {2011, 2012, 2013, 2014, 2015}
+
 
 def load_cloud_profiles(
     path: str, years, months, target_grid: xr.Dataset
@@ -62,12 +65,8 @@ def convert_kernels_for_target(processed_kernel, target_var, train_data, val_dat
     return processed_kernel / raw_tisr
 
 
-KERNEL_YEARS = set(range(2011, 2016))
-
-
 def preprocess(config_path):
     config = load_config(config_path)
-    input_vars = config.dataset.input_vars
     target_var = config.dataset.target_var
 
     train_val_years = [config.dataset.train_years, config.dataset.val_years]
@@ -95,7 +94,7 @@ def preprocess(config_path):
             raw_kern_path,
             all_kern_years,
             config.dataset.months,
-            lambda year: make_kernel_filename(year, var),
+            lambda year, var=var: make_kernel_filename(year, var),
         )
         for var in kernel_vars
     ]  # list of datasets (date, lat, lon, all_clr), with field .<var> for each kernel variable
@@ -104,7 +103,7 @@ def preprocess(config_path):
     kern_ds_combined = xr.merge(kern_datasets)
 
     # --- preprocess era5 data ---
-    preprocessor = DianaPreprocessor(config)
+    preprocessor = Preprocessor(config)
     print("Fitting preprocessor on training data...")
     preprocessor.fit(train_data)
 
@@ -140,7 +139,7 @@ def preprocess(config_path):
     ranges = scalar.get_data_max() - scalar.get_data_min()
 
     target_range = ranges[target_var]
-    if len(config.dataset.sky) == 1 and config.dataset.sky[0] == 'clear':
+    if len(config.dataset.sky) == 1 and config.dataset.sky[0] == "clear":
         target_range = ranges[config.dataset.clear_sky_var]
 
     processed_kernel = interpolate_kernel_dataset(

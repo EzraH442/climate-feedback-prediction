@@ -1,19 +1,28 @@
+import glob
 from pathlib import Path
-from config_utils import variable_config_from_omegaconf, VariableConfig
 
+import cartopy.crs as ccrs
+import matplotlib.pyplot as plt
+import matplotlib.ticker as mticker
 import numpy as np
 import pandas as pd
-import xarray as xr
-from mpl_toolkits.basemap import Basemap
-import matplotlib.pyplot as plt
-
-from preprocessing import XarrayMinMaxScaler, DianaPreprocessor
-from model import SimpleModel
-import glob
-
 import torch
+import xarray as xr
+from cartopy.mpl.gridliner import LATITUDE_FORMATTER, LONGITUDE_FORMATTER
+from cartopy.util import add_cyclic_point
+from matplotlib.path import Path as MplPath
+
+from config_utils import VariableConfig
+from model import SimpleModel
+from preprocessing import Preprocessor, XarrayMinMaxScaler
 
 SECONDS_PER_DAY = 3600 * 24
+
+
+def figure_dir(figures_path: Path, *parts: str) -> Path:
+    path = figures_path.joinpath(*parts)
+    path.mkdir(parents=True, exist_ok=True)
+    return path
 
 
 def make_era5_filename(year):
@@ -49,114 +58,139 @@ def load_yearly_and_filter_by_months(path: str, years, months, filename_fn):
 
 
 # --- map setup functions ---
-def setup_global_map() -> Basemap:
-    m = Basemap(
-        projection="cyl",
-        resolution="l",
-        llcrnrlat=-90,
-        urcrnrlat=90,
-        llcrnrlon=0,
-        urcrnrlon=360,
+def setup_global_map():
+    ax = plt.axes(projection=ccrs.PlateCarree())
+    ax.set_global()
+    ax.coastlines()
+    ax.gridlines(
+        draw_labels=True, xlocs=np.arange(-180, 181, 60), ylocs=np.arange(-90, 91, 30)
     )
-    m.drawcoastlines()
-    m.drawcountries()
-    m.drawmapboundary()
-    m.drawparallels(np.arange(-90.0, 91.0, 30.0), labels=[True, False, False, True])
-    m.drawmeridians(np.arange(-180.0, 181.0, 60.0), labels=[True, False, False, True])
-    return m
+    ax._plot_lat_bounds = (-90.0, 90.0)
+    return ax
 
 
-def setup_north_pole_map(boundary: float = 60) -> Basemap:
-    m = Basemap(
-        projection="npstere",
-        boundinglat=boundary,
-        lon_0=0,
-        resolution="l",
+def _set_round_boundary(ax):
+    theta = np.linspace(0, 2 * np.pi, 100)
+    circle = MplPath(np.column_stack([np.sin(theta), np.cos(theta)]) * 0.5 + 0.5)
+    ax.set_boundary(circle, transform=ax.transAxes)
+
+
+def setup_north_pole_map(boundary: float = 60):
+    ax = plt.axes(projection=ccrs.NorthPolarStereo(central_longitude=0))
+    ax.set_extent([-180, 180, boundary, 90], ccrs.PlateCarree())
+    ax.coastlines()
+    gl = ax.gridlines(
+        draw_labels=True,
+        xlocs=np.arange(-180, 181, 60),
+        ylocs=np.arange(boundary, 91, 10),
     )
-    m.drawcoastlines()
-    m.drawcountries()
-    m.drawmapboundary(fill_color="white")
-    m.drawparallels(np.arange(boundary, 91.0, 30.0))
-    m.drawmeridians(np.arange(0.0, 360.0, 60.0))
-    return m
+    gl.xformatter = LONGITUDE_FORMATTER
+    gl.yformatter = LATITUDE_FORMATTER
+    gl.top_labels = False
+    gl.right_labels = False
+    ax.set_xlabel("Longitude")
+    ax.set_ylabel("Latitude")
+    _set_round_boundary(ax)
+    ax._plot_lat_bounds = (boundary, 90.0)
+    return ax
 
 
-def setup_south_pole_map(boundary: float = -60) -> Basemap:
-    m = Basemap(
-        projection="spstere",
-        boundinglat=boundary,
-        lon_0=0,
-        resolution="l",
-    )
-    m.drawcoastlines()
-    m.drawcountries()
-    m.drawmapboundary(fill_color="white")
-    m.drawparallels(np.arange(-90.0, boundary + 1, 30.0))
-    m.drawmeridians(np.arange(0.0, 360.0, 60.0))
-    return m
+def setup_south_pole_map(boundary: float = -60):
+    ax = plt.axes(projection=ccrs.SouthPolarStereo(central_longitude=0))
+    ax.set_extent([-180, 180, -90, boundary], ccrs.PlateCarree())
+    ax.coastlines()
+    ax.gridlines(xlocs=np.arange(-180, 181, 60), ylocs=np.arange(-90, boundary + 1, 10))
+    _set_round_boundary(ax)
+    ax._plot_lat_bounds = (-90.0, boundary)
+    return ax
 
 
-def plot_colormesh_on_map(m, lon, lat, data, cmap, vmin, vmax) -> None:
+def _sliced_lon_lat_data(ax, lon, lat, data):
     lon_arr = np.asarray(lon)
     lat_arr = np.asarray(lat)
     data_arr = np.asarray(data)
 
-    lat_mask = (lat_arr >= m.latmin) & (lat_arr <= m.latmax)
+    lat_min, lat_max = getattr(ax, "_plot_lat_bounds", (-90.0, 90.0))
+    lat_mask = (lat_arr >= lat_min) & (lat_arr <= lat_max)
     lat_idx = np.where(lat_mask)[0]
-    # Add one row of padding on each side so boundary cell quads are complete
     i_min = max(lat_idx.min() - 1, 0)
     i_max = min(lat_idx.max() + 1, len(lat_arr) - 1)
 
     lat_sub = lat_arr[i_min : i_max + 1]
     data_sub = data_arr[i_min : i_max + 1, :]
+    lon_sub = lon_arr
 
-    lon_grid, lat_grid = np.meshgrid(lon_arr, lat_sub)
-    x, y = m(lon_grid, lat_grid)
+    if len(lon_sub) > 1 and lon_sub[-1] - lon_sub[0] < 360:
+        step = lon_sub[1] - lon_sub[0]
+        lon_sub = np.append(lon_sub, lon_sub[-1] + step)
+        data_sub = np.concatenate([data_sub, data_sub[:, :1]], axis=1)
+
+    lon_grid, lat_grid = np.meshgrid(lon_sub, lat_sub)
+    return lon_grid, lat_grid, data_sub
+
+
+def plot_colormesh_on_map(m, lon, lat, data, cmap, vmin, vmax) -> None:
+    lon_grid, lat_grid, data_sub = _sliced_lon_lat_data(m, lon, lat, data)
     return m.pcolormesh(
-        x, y, data_sub, shading="nearest", cmap=cmap, vmin=vmin, vmax=vmax
+        lon_grid,
+        lat_grid,
+        data_sub,
+        transform=ccrs.PlateCarree(),
+        shading="nearest",
+        cmap=cmap,
+        vmin=vmin,
+        vmax=vmax,
     )
 
 
 def plot_contours_on_map(m, lon, lat, data, cmap, vmin, vmax) -> None:
-    # lon_grid, lat_grid = np.meshgrid(np.asarray(lon), np.asarray(lat))
-    # m.pcolormesh(lon_grid, lat_grid, np.asarray(data), latlon=True, shading="nearest", cmap=cmap, vmin=vmin, vmax=vmax)
-
-    lon_arr = np.asarray(lon)
-    lat_arr = np.asarray(lat)
-    data_arr = np.asarray(data)
-
-    # Pre-slice to map bounds — avoids Basemap producing masked/overflow
-    # coordinates for out-of-bounds points, which pcolormesh rejects
-    lat_mask = (lat_arr >= m.latmin) & (lat_arr <= m.latmax)
-    lat_idx = np.where(lat_mask)[0]
-    # Add one row of padding on each side so boundary cell quads are complete
-    i_min = max(lat_idx.min() - 1, 0)
-    i_max = min(lat_idx.max() + 1, len(lat_arr) - 1)
-
-    lat_sub = lat_arr[i_min : i_max + 1]
-    data_sub = data_arr[i_min : i_max + 1, :]
-
-    lon_grid, lat_grid = np.meshgrid(lon_arr, lat_sub)
-    x, y = m(lon_grid, lat_grid)
-
+    lon_grid, lat_grid, data_sub = _sliced_lon_lat_data(m, lon, lat, data)
     data_range = vmax - vmin
     step = data_range // 12
     if step == 0:
         step = data_range / 12
-    true_min = np.min(data).values
-    true_max = np.max(data).values
-    # print(true_min, true_max)
+    true_min = np.nanmin(np.asarray(data))
+    true_max = np.nanmax(np.asarray(data))
     levels_up = np.arange(0, true_max - 1 + step, step)
     levels_down = -np.arange(step, -true_min - 1 + step, step)
     levels = list(reversed(list(levels_down))) + list(levels_up)
-    # print(levels)
 
-    cs_halo = m.contour(x, y, data_sub, colors="white", linewidths=3.0, levels=levels)
+    m.contour(
+        lon_grid,
+        lat_grid,
+        data_sub,
+        colors="white",
+        linewidths=3.0,
+        levels=levels,
+        transform=ccrs.PlateCarree(),
+    )
     contours = m.contour(
-        x, y, data_sub, colors="#333333", linewidths=1.2, levels=levels
+        lon_grid,
+        lat_grid,
+        data_sub,
+        colors="#333333",
+        linewidths=1.2,
+        levels=levels,
+        transform=ccrs.PlateCarree(),
     )
     plt.clabel(contours, inline=True, fmt="%.1f", fontsize=10)
     return contours
+
+
+def plot_contourf_on_map(m, lon, lat, data, cmap, vmin, vmax):
+    lon_grid, lat_grid, data_sub = _sliced_lon_lat_data(m, lon, lat, data)
+    levels = np.linspace(vmin, vmax, 25)
+    return m.contourf(
+        lon_grid,
+        lat_grid,
+        data_sub,
+        levels=levels,
+        cmap=cmap,
+        vmin=vmin,
+        vmax=vmax,
+        extend="both",
+        transform=ccrs.PlateCarree(),
+    )
 
 
 def plot_global_field(
@@ -178,9 +212,10 @@ def plot_global_field(
     if contours:
         plot_contours_on_map(m, lon, lat, field, cmap=cmap, vmin=vmin, vmax=vmax)
     if annotation is not None:
-        plt.text(x=300, y=np.max(lat) + 5, s=annotation, fontsize=20)
-    # fig.colorbar(artist, m, orientation="horizontal", fraction=0.075, label=label)
-    plt.colorbar(artist, orientation="horizontal", fraction=0.075, label=label)
+        m.text(
+            300, np.max(lat) + 5, annotation, fontsize=20, transform=ccrs.PlateCarree()
+        )
+    fig.colorbar(artist, ax=m, orientation="horizontal", fraction=0.075, label=label)
     plt.title(title)
     plt.savefig(save_path)
     plt.close(fig)
@@ -202,13 +237,13 @@ def plot_north_pole_field(
 ) -> None:
     fig = plt.figure(figsize=(8, 8), dpi=300)
     m = setup_north_pole_map(boundary=boundary)
-    artist = plot_colormesh_on_map(m, lon, lat, field, cmap=cmap, vmin=vmin, vmax=vmax)
-    if contours:
-        plot_contours_on_map(m, lon, lat, field, cmap=cmap, vmin=vmin, vmax=vmax)
+    artist = plot_contourf_on_map(m, lon, lat, field, cmap=cmap, vmin=vmin, vmax=vmax)
     if annotation is not None:
-        plt.text(x=300, y=np.max(lat) + 5, s=annotation, fontsize=20)
+        m.text(0.02, 0.98, annotation, fontsize=20, transform=m.transAxes, va="top")
     plt.title(title)
-    plt.colorbar(artist, orientation="horizontal", fraction=0.05, pad=0.07, label=label)
+    fig.colorbar(
+        artist, ax=m, orientation="horizontal", fraction=0.05, pad=0.07, label=label
+    )
     plt.savefig(save_path)
     plt.close(fig)
 
@@ -233,11 +268,276 @@ def plot_south_pole_field(
     if contours:
         plot_contours_on_map(m, lon, lat, field, cmap=cmap, vmin=vmin, vmax=vmax)
     if annotation is not None:
-        plt.text(x=300, y=np.max(lat) + 5, s=annotation, fontsize=20)
+        m.text(0.02, 0.98, annotation, fontsize=20, transform=m.transAxes, va="top")
     plt.title(title)
-    plt.colorbar(artist, orientation="horizontal", fraction=0.05, pad=0.07, label=label)
+    fig.colorbar(
+        artist, ax=m, orientation="horizontal", fraction=0.05, pad=0.07, label=label
+    )
     plt.savefig(save_path)
     plt.close(fig)
+
+
+def plot_field_pair(
+    field,
+    title: str,
+    save_path: Path,
+    np_save_path: Path,
+    vmax: float,
+    label: str,
+    north_mask,
+    north_boundary: float,
+    np_vmax: float | None = None,
+    ann_rmse=False,
+) -> None:
+    if north_mask is None:
+        raise RuntimeError("north_mask must be initialized before plotting.")
+    lon, lat = field.longitude, field.latitude
+    field_masked = field.isel(latitude=north_mask)
+
+    mean = float(global_mean(field).values)
+    mean_np = float(global_mean(field_masked).values)
+    ann = f"{mean:.2f}"
+    ann_np = f"{mean_np:.2f}"
+
+    if ann_rmse:
+        rmse_val = np.sqrt(float(global_mean(field * field).values))
+        rmse_val_np = np.sqrt(float(global_mean(field_masked * field_masked).values))
+        ann += f"; {rmse_val:.2f}"
+        ann_np += f"; {rmse_val_np:.2f}"
+
+    plot_global_field(
+        field,
+        lon,
+        lat,
+        title=title,
+        save_path=save_path,
+        vmin=-vmax,
+        vmax=vmax,
+        annotation=ann,
+        label=label,
+    )
+    plot_north_pole_field(
+        field,
+        lon,
+        lat,
+        title=title,
+        save_path=np_save_path,
+        vmin=-(np_vmax if np_vmax is not None else vmax),
+        vmax=np_vmax if np_vmax is not None else vmax,
+        annotation=ann_np,
+        label=label,
+        boundary=north_boundary,
+        contours=True,
+    )
+
+
+def plot_input_anomalies(
+    anomaly,
+    anomaly_ecod,
+    dR_clr,
+    output_dir: Path,
+    north_mask,
+    north_boundary: float,
+    year: int | None = None,
+    month: int | None = None,
+) -> None:
+    specs = [
+        ("fal", "", 0.5),
+        ("hcc", "", None),
+        ("mcc", "", None),
+        ("lcc", "", None),
+        ("tcwv", "kg/m^2", None),
+        ("tco3", "kg/m^2", None),
+        ("tsr", "W/m^2", 24),
+        ("tciw", "W/m^2", None),
+        ("tclw", "W/m^2", None),
+    ]
+    anomaly_slice = anomaly
+    if year is not None:
+        anomaly_slice = anomaly_slice.sel(year=year)
+    if month is not None:
+        anomaly_slice = anomaly_slice.sel(month=month)
+    anomaly_slice = anomaly_slice.compute()
+
+    for var, label, fixed_vmax in specs:
+        field = anomaly_slice[var]
+        vmax = float(fixed_vmax if fixed_vmax is not None else np.max(np.abs(field)))
+        print(var, np.max(np.abs(field)).values)
+        plot_field_pair(
+            field,
+            title=rf"$\Delta${var}",
+            save_path=output_dir / f"delta_{var}.png",
+            np_save_path=output_dir / f"delta_{var}_np.png",
+            vmax=vmax,
+            label=label,
+            north_mask=north_mask,
+            north_boundary=north_boundary,
+        )
+
+    extra_fields = [("ecod", anomaly_ecod, "ecod"), ("tsrc", dR_clr, "tsrc")]
+    for var, field, label in extra_fields:
+        if year is not None and "year" in field.dims:
+            field = field.sel(year=year)
+        if month is not None and "month" in field.dims:
+            field = field.sel(month=month)
+        vmax = float(np.max(np.abs(field)))
+        plot_field_pair(
+            field,
+            title=rf"$\Delta${var}",
+            save_path=output_dir / f"delta_{var}.png",
+            np_save_path=output_dir / f"delta_{var}_np.png",
+            vmax=vmax,
+            label=label,
+            north_mask=north_mask,
+            north_boundary=north_boundary,
+        )
+
+
+def plot_response_dataset(
+    dataset: xr.Dataset,
+    output_dir: Path,
+    source: str,
+    north_mask,
+    north_boundary: float,
+    year: int | None = None,
+    month: int | None = None,
+    np_vmax: float = 8,
+    ann_rmse=False,
+) -> None:
+    for name, response in dataset.data_vars.items():
+        label = response.attrs.get("plot_label", name)
+        filename = response.attrs["filename"]
+        vmax = response.attrs.get("vmax")
+        field = response
+        if year is not None:
+            field = field.sel(year=year)
+        if month is not None:
+            field = field.sel(month=month)
+        if vmax is None:
+            vmax = float(np.max(np.abs(field)))
+        plot_field_pair(
+            field,
+            title=rf"$\Delta R_{{{label}}}^{{{source}}}$",
+            save_path=output_dir / filename,
+            np_save_path=output_dir / "np" / filename,
+            vmax=vmax,
+            label="W/m^2",
+            north_mask=north_mask,
+            north_boundary=north_boundary,
+            np_vmax=np_vmax,
+            ann_rmse=ann_rmse,
+        )
+
+
+def cyclic_data(data, lon):
+    values = data.to_numpy() if hasattr(data, "to_numpy") else np.asarray(data)
+    return add_cyclic_point(values, coord=np.asarray(lon), axis=-1)
+
+
+def plot_text_on_ax(ax, text):
+    ax.text(
+        1.02,
+        1,
+        text,
+        transform=ax.transAxes,
+        horizontalalignment="right",
+        verticalalignment="bottom",
+    )
+
+
+def plot_shakirova_field(
+    ax,
+    field,
+    title="",
+    vmin=-60,
+    vmax=60,
+    step=5,
+    cmap="RdBu_r",
+    left_labels=False,
+    bottom_labels=False,
+    arctic=False,
+    titlepad=None,
+    extend="both",
+):
+    plot_data, plot_lon = cyclic_data(field, field.longitude)
+    im = ax.contourf(
+        plot_lon,
+        field.latitude,
+        plot_data,
+        levels=np.arange(vmin, vmax + step, step),
+        transform=ccrs.PlateCarree(),
+        cmap=cmap,
+        vmin=vmin,
+        vmax=vmax,
+        extend=extend,
+    )
+    ax.coastlines()
+    if arctic:
+        ax.set_extent([-180, 180, 65, 90], ccrs.PlateCarree())
+    gl = ax.gridlines(draw_labels=True)
+    gl.top_labels = False
+    gl.right_labels = False
+    gl.left_labels = left_labels
+    gl.bottom_labels = bottom_labels
+    gl.xlocator = mticker.FixedLocator([-180, -90, 0, 90, 180])
+
+    if title:
+        ax.set_title(title, loc="left", pad=titlepad)
+    return im
+
+
+def arctic_field(field):
+    return field.where(field.latitude >= 65, drop=True)
+
+
+def response_mean(field, arctic=False):
+    return float(global_mean(arctic_field(field) if arctic else field))
+
+
+def annotate_response(ax, field, residual=False, arctic=False, units="W m$^{-2}$"):
+    field = arctic_field(field) if arctic else field
+    if residual:
+        mbe = float(global_mean(field))
+        rmse = float(np.sqrt(global_mean(field**2)))
+        plot_text_on_ax(
+            ax, f"MBE: {mbe:.2f} " + units + f" , RMSE: {rmse:.2f} " + units
+        )
+    else:
+        plot_text_on_ax(ax, f"{response_mean(field):.2f} " + units)
+
+
+def panel_title(label, title):
+    return rf"$\bf{{({label})}}$ {title}"
+
+
+def add_bottom_colorbar(fig, im, axes_list, label, gap=0.01, height=0.035):
+    fig.canvas.draw()
+    renderer = fig.canvas.get_renderer()
+    bboxes = [
+        axis.get_tightbbox(renderer).transformed(fig.transFigure.inverted())
+        for axis in axes_list
+    ]
+    x0 = min(axis.get_position().x0 for axis in axes_list)
+    x1 = max(axis.get_position().x1 for axis in axes_list)
+    y0 = min(bbox.y0 for bbox in bboxes) - gap - height
+    cax = fig.add_axes([x0, y0, x1 - x0, height])
+    cax.set_in_layout(False)
+    return fig.colorbar(im, cax=cax, orientation="horizontal", label=label)
+
+
+def add_right_colorbar(fig, im, axes_list, label, gap=0.01, width=0.01):
+    fig.canvas.draw()
+    renderer = fig.canvas.get_renderer()
+    bboxes = [
+        axis.get_tightbbox(renderer).transformed(fig.transFigure.inverted())
+        for axis in axes_list
+    ]
+    y0 = min(axis.get_position().y0 for axis in axes_list)
+    y1 = max(axis.get_position().y1 for axis in axes_list)
+    x1 = max(bbox.x1 for bbox in bboxes) + gap
+    cax = fig.add_axes([x1, y0, width, y1 - y0])
+    cax.set_in_layout(False)
+    return fig.colorbar(im, cax=cax, orientation="vertical", label=label)
 
 
 def setup_timeseries_plot():
@@ -354,18 +654,18 @@ def scale_minmax_value(scaler: XarrayMinMaxScaler, name: str, values):
 
 
 def load_model_and_preprocessor(
-    config, checkpoint_path: Path, downscaling=True, override=None
-):
+    config, checkpoint_path: Path, downscaling=True
+) -> tuple[SimpleModel, Preprocessor, int]:
     checkpoint_data = torch.load(
         checkpoint_path, map_location="cpu", weights_only=False
     )
-    epoch = checkpoint_data["epoch"]
+    epoch: int = checkpoint_data["epoch"]
     model_config = checkpoint_data.get("config", config)
     model = SimpleModel(model_config)
     model.load_state_dict(checkpoint_data["model_state_dict"])
     model.eval()
 
-    preprocessor = DianaPreprocessor(config, downscaling=downscaling)
+    preprocessor = Preprocessor(config, downscaling=downscaling)
     preprocessor.load(model.config.preprocess.params_dir)
 
     return model, preprocessor, epoch
@@ -374,7 +674,7 @@ def load_model_and_preprocessor(
 def nn_pred(
     ds: xr.Dataset,
     model: SimpleModel,
-    preprocessor: DianaPreprocessor,
+    preprocessor: Preprocessor,
     variable_config: VariableConfig,
     dim_names=["month", "latitude", "longitude"],
     clear=False,
@@ -401,7 +701,7 @@ def nn_pred(
     return pred
 
 
-def target_flux(ds: xr.Dataset, preprocessor: DianaPreprocessor, var: str) -> xr.DataArray:
+def target_flux(ds: xr.Dataset, preprocessor: Preprocessor, var: str) -> xr.DataArray:
     raw = preprocessor.scalar.inverse_transform(ds)
     if var == "pal":
         return (raw["pal"] * raw["tisr"]).rename("tsr")
@@ -412,7 +712,7 @@ def target_flux(ds: xr.Dataset, preprocessor: DianaPreprocessor, var: str) -> xr
 
 def compute_nn_kernel(
     ds: xr.Dataset,
-    preprocessor: DianaPreprocessor,
+    preprocessor: Preprocessor,
     model: SimpleModel,
     variable_config: VariableConfig,
     clear=False,
@@ -425,19 +725,29 @@ def compute_nn_kernel(
     )
 
     pred = nn_pred(
-        preprocessor.transform(ds_base), model, preprocessor, variable_config, dim_order, clear=clear
+        preprocessor.transform(ds_base),
+        model,
+        preprocessor,
+        variable_config,
+        dim_order,
+        clear=clear,
     )
     pred_perturbed = nn_pred(
-        preprocessor.transform(ds_p), model, preprocessor, variable_config, dim_order, clear=clear
+        preprocessor.transform(ds_p),
+        model,
+        preprocessor,
+        variable_config,
+        dim_order,
+        clear=clear,
     )
 
     kernel = (pred_perturbed - pred) / SECONDS_PER_DAY
-    return kernel.to_numpy().squeeze(axis=0), kernel.longitude, kernel.latitude
+    return kernel.to_numpy(), kernel.longitude, kernel.latitude
 
 
 def compute_nn_kernel_autograd(
     ds: xr.Dataset,
-    preprocessor: DianaPreprocessor,
+    preprocessor: Preprocessor,
     model: SimpleModel,
     variable_config: VariableConfig,
     var="fal",
@@ -468,11 +778,8 @@ def compute_nn_kernel_autograd(
     input_range = float(vmax[input_var] - vmin[input_var])
     # print(f"{target.upper()} range", target_range)
     # print(f"{input_var} range", input_range)
-    grad_physical_per_unit = (
-        grads.detach().cpu().numpy().squeeze(axis=0)
-        * (target_range / input_range)
-        / SECONDS_PER_DAY
-    )
+    grad_values = grads.detach().cpu().numpy()
+    grad_physical_per_unit = grad_values * (target_range / input_range) / SECONDS_PER_DAY
     return grad_physical_per_unit * kernel_delta(input_var), lon, lat
 
 

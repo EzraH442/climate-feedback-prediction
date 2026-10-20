@@ -1,19 +1,19 @@
-from comet_ml import ExistingExperiment, Experiment
 import argparse
 import os
 import shutil
 from pathlib import Path
 
-import torch
-from torch.utils.data import DataLoader, WeightedRandomSampler
 import omegaconf
+import torch
+from comet_ml import ExistingExperiment, Experiment
 from omegaconf import OmegaConf
+from torch.utils.data import DataLoader
 
 from config_utils import load_config
 from dataloader import ClimateTorchDataset, make_era5_filename
 from model import (
-    SimpleModelTrainer,
     SimpleModelSobolevTrainer,
+    SimpleModelTrainer,
 )
 
 
@@ -21,8 +21,8 @@ def comet_experiment_key_path(checkpoint_dir: str) -> Path:
     return Path(checkpoint_dir) / "comet_experiment_key.txt"
 
 
-def stage_training_data(config_path: str, seed=None) -> str:
-    config = load_config(config_path)
+def stage_training_data(config_path: str, seed=None, overrides=None) -> str:
+    config = load_config(config_path, overrides=overrides)
     slurm_tmpdir = Path(
         os.environ.get("SLURM_TMPDIR", Path(config.dataset.era5.path).resolve())
     )
@@ -31,9 +31,7 @@ def stage_training_data(config_path: str, seed=None) -> str:
     staged_data_dir = slurm_tmpdir / "era5_processed"
     staged_data_dir.mkdir(parents=True, exist_ok=True)
 
-    years_to_stage = sorted(
-        set([*config.dataset.train_years, *config.dataset.val_years])
-    )
+    years_to_stage = sorted({*config.dataset.train_years, *config.dataset.val_years})
 
     for year in years_to_stage:
         filename = make_era5_filename(year)
@@ -50,6 +48,11 @@ def stage_training_data(config_path: str, seed=None) -> str:
         config.seed = seed
         config.train.name = config.train.name + f"_seed_{seed}"
         config.train.checkpoint_dir = config.train.checkpoint_dir + f"_seed_{seed}"
+
+    checkpoint_dir = Path(config.train.checkpoint_dir)
+    checkpoint_dir.mkdir(parents=True, exist_ok=True)
+    OmegaConf.save(config, checkpoint_dir / "config.yaml")
+
     runtime_config_path = slurm_tmpdir / "train_runtime_config.yaml"
     OmegaConf.save(config, runtime_config_path)
     return str(runtime_config_path)
@@ -60,9 +63,7 @@ def create_comet_experiment(
 ):
     api_key = os.environ.get("COMET_API_KEY")
     if not api_key:
-        raise EnvironmentError(
-            "COMET_API_KEY is not set. Export it before running train.py."
-        )
+        raise OSError("COMET_API_KEY is not set. Export it before running train.py.")
 
     key_path = comet_experiment_key_path(config.train.checkpoint_dir)
     experiment_key = None
@@ -93,8 +94,8 @@ def create_comet_experiment(
     return experiment
 
 
-def train(config_path: str, resume: bool = True, seed=None):
-    staged_config_path = stage_training_data(config_path, seed)
+def train(config_path: str, resume: bool = True, seed=None, overrides=None):
+    staged_config_path = stage_training_data(config_path, seed, overrides=overrides)
     config = load_config(staged_config_path)
     assert isinstance(config, omegaconf.DictConfig), ""
 
@@ -121,14 +122,6 @@ def train(config_path: str, resume: bool = True, seed=None):
 
     train_sampler = None
     train_shuffle = True
-    if config.train.area_weighted_sampling:
-        train_sampler = WeightedRandomSampler(
-            weights=train_dataset.sample_weights,
-            num_samples=len(train_dataset),
-            replacement=True,
-            generator=torch.Generator().manual_seed(config.seed),
-        )
-        train_shuffle = False
 
     train_dataloader = DataLoader(
         train_dataset,
@@ -196,13 +189,11 @@ def main():
         "--config_file",
         type=str,
         required=False,
-        help="Path to config file",
         default="configs/model/fal/1990-2020_1-12_baseline.yaml",
     )
     parser.add_argument(
         "--seed",
         type=int,
-        help="Manual seed for training ensembles",
         default=None,
     )
     parser.add_argument(
@@ -216,10 +207,15 @@ def main():
         dest="resume",
         help="Whether to start training from scratch",
     )
+    parser.add_argument(
+        "overrides",
+        nargs="*",
+        help="OmegaConf dotlist overrides, e.g. train.sobolev_alpha=0.25",
+    )
     parser.set_defaults(resume=True)
     args = parser.parse_args()
 
-    train(args.config_file, args.resume, seed=args.seed)
+    train(args.config_file, args.resume, seed=args.seed, overrides=args.overrides)
 
 
 if __name__ == "__main__":

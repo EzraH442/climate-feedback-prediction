@@ -12,7 +12,7 @@ FU_A1 = 0.250875e1  # um m^2 g^-1
 ICE_RE = 30.0  # assumed ice effective radius (um), per Zelinka et al. (2012)
 
 
-def Dge_from_ice_re(r_e_um=ICE_RE):
+def Dge_from_ice_re(r_e_um: float=ICE_RE):
     """
     Fu (1996) Eq. 3.12:
 
@@ -25,15 +25,11 @@ def Dge_from_ice_re(r_e_um=ICE_RE):
 #print("c2:", (FU_A0 + FU_A1 / Dge_from_ice_re(ICE_RE)))
 
 def cod_from_water_path(
-    liquid_water_path, ice_water_path, liquid_re=LIQUID_RE, ice_re=ICE_RE
+    liquid_water_path, ice_water_path, liquid_re: float=LIQUID_RE, ice_re: float=ICE_RE
 ):
     """
-    Convert liquid/ice water path (g/m^2) to cloud optical depth (unitless)
-
-    Parameters
-    ----------
     liquid_water_path, ice_water_path : array-like
-        Liquid / ice water path in g m^-2.
+        Liquid/ice water path (g m^-2).
     liquid_re, ice_re : float
         Liquid / ice water effective radius (um).
 

@@ -57,7 +57,6 @@ dataset:
 
 optimizer:
   learning_rate: 0.001
-  scheduler: null
 
 model:
   activation: "tanh"

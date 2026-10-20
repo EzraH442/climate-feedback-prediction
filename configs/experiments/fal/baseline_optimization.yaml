@@ -1,0 +1,41 @@
+base: ../../base/model/common.yaml
+
+dataset:
+  input_vars:
+    - fal
+    - hcc
+    - mcc
+    - lcc
+    - sp
+    - tciw
+    - tclw
+    - tcwv
+    - tco3
+    - tisr
+    - ecod
+    - ecod_fal
+  months: [3, 6, 9, 12] # overridden for 3,6,9,12 vs 1-12
+  era5:
+    path: ./data/fal/era5_processed_mar_june_sep_dec_2011_2014 # overridden with dataset.months
+  kernels:
+    raw_path: ./data/fal/kernels
+    path: ./data/fal/kernels_processed
+  train_years: [2011, 2012, 2013, 2014]
+  val_years: [2015]
+  test_years: [2015]
+
+preprocess:
+  params_dir: preprocess_states/fal/2011-2014_3,6,9,12 # overridden with dataset.months
+  ecod:
+    enabled: true
+    method: "true"
+
+model:
+  input_dim: 12
+  hidden_dim_sizes: [11] # overridden by train-baseline-optimization.sh
+
+train:
+  name: baseline_opt_2011-2014_3,6,9,12_hidden-11 # overridden per hidden-size/month combination
+  checkpoint_dir: ./baseline-optimization/checkpoints/baseline_opt_2011-2014_3,6,9,12_hidden-11 # overridden per hidden-size/month combination
+  sobolev: false
+  sobolev_vars: []

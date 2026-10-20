@@ -1,0 +1,188 @@
+# Example: python experiments/sensitivity_prediction/main.py --config_file configs/model/fal/2011-2014_3,6,9,12_baseline.yaml --dates 2015-09
+import sys
+from pathlib import Path
+
+import numpy as np
+import xarray as xr
+from tap import Tap
+
+ROOT = Path(__file__).resolve().parents[2]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from config_utils import load_config, variable_config_from_omegaconf
+from experiments.common import (
+    checkpoint_paths_for_args,
+    model_label,
+    parse_args_and_confirm,
+    write_json,
+    write_netcdf,
+)
+from utils import (
+    compute_nn_kernel,
+    compute_nn_kernel_autograd,
+    generate_paths_yearly,
+    global_mean,
+    kernel_delta,
+    load_model_and_preprocessor,
+    make_era5_filename,
+    make_kernel_filename,
+)
+
+
+class SensitivityPredictionArgs(Tap):
+    config_file: Path
+    checkpoint_path: list[Path] | None = None
+    seeds: list[str] | None = None
+    output_dir: Path | None = None
+    era5_data_path: Path = Path("data/era5")
+    kernel_data_path: Path | None = None
+    dates: list[str]
+    variable: str = "fal"
+    clear_sky: bool = False
+    autograd: bool = False
+
+    def process_args(self):
+        if self.seeds and self.checkpoint_path:
+            self.error("--seeds and --checkpoint_path are mutually exclusive")
+        self.output_dir = Path(self.output_dir or "sensitivity_prediction")
+        self.output_dir.mkdir(parents=True, exist_ok=True)
+
+
+def collect_sensitivity_input_data(data_path: Path, dates: list[str]) -> xr.Dataset:
+    years = sorted({int(date[:4]) for date in dates})
+    return xr.open_mfdataset(
+        generate_paths_yearly(data_path, years, make_era5_filename),
+        combine="nested",
+        concat_dim="date",
+    ).sel(date=dates)
+
+
+def collect_sensitivity_truth_data(
+    kernel_path: Path, dates: list[str], variable: str, clear_sky: bool
+) -> xr.DataArray:
+    years = sorted({int(date[:4]) for date in dates})
+    kernels = xr.open_mfdataset(
+        generate_paths_yearly(
+            kernel_path, years, lambda year: make_kernel_filename(year, variable)
+        ),
+        combine="nested",
+        concat_dim="date",
+    )
+    sky = "clr" if clear_sky else "all"
+    return (
+        kernels[variable]
+        .sel(date=dates, all_clr=sky)
+        * kernel_delta(variable)
+    )
+
+
+def predict_sensitivity(
+    ds,
+    preprocessor,
+    model,
+    vc,
+    truth,
+    variable: str = "fal",
+    clear_sky: bool = False,
+    autograd: bool = False,
+):
+    raw = ds.interp(latitude=truth.latitude, longitude=truth.longitude)
+    if autograd:
+        field, lon, lat = compute_nn_kernel_autograd(
+            raw,
+            preprocessor,
+            model,
+            vc,
+            var=variable,
+            clear=clear_sky,
+        )
+        return sensitivity_field(field, raw.date, lon, lat)
+    field, lon, lat = compute_nn_kernel(
+        raw,
+        preprocessor,
+        model,
+        vc,
+        clear=clear_sky,
+        perturbation_var=variable,
+    )
+    return sensitivity_field(field, raw.date, lon, lat)
+
+
+def sensitivity_field(field, dates, lon, lat):
+    if field.ndim == 2:
+        return xr.DataArray(
+            field,
+            coords={"latitude": lat, "longitude": lon},
+            dims=("latitude", "longitude"),
+        ).expand_dims(date=dates)
+    return xr.DataArray(
+        field,
+        coords={"date": dates, "latitude": lat, "longitude": lon},
+        dims=("date", "latitude", "longitude"),
+    )
+
+
+def predict_sensitivity_for_models(ds, config, vc, args, truth, checkpoint_paths):
+    predictions = []
+    labels = []
+    for checkpoint_path in checkpoint_paths:
+        model, preprocessor, _ = load_model_and_preprocessor(
+            config, checkpoint_path, downscaling=False
+        )
+        predictions.append(
+            predict_sensitivity(
+                ds,
+                preprocessor,
+                model,
+                vc,
+                truth,
+                variable=args.variable,
+                clear_sky=args.clear_sky,
+                autograd=args.autograd,
+            )
+        )
+        labels.append(model_label(checkpoint_path))
+    if len(predictions) == 1:
+        return predictions[0]
+    return xr.concat(predictions, dim=xr.IndexVariable("model", labels))
+
+
+def main():
+    args = parse_args_and_confirm(SensitivityPredictionArgs())
+    config = load_config(args.config_file)
+    vc = variable_config_from_omegaconf(config)
+    output_dir = args.output_dir
+
+    ds = collect_sensitivity_input_data(args.era5_data_path, args.dates)
+    truth = collect_sensitivity_truth_data(
+        Path(args.kernel_data_path or config.dataset.kernels.raw_path),
+        args.dates,
+        args.variable,
+        args.clear_sky,
+    )
+    prediction = predict_sensitivity_for_models(
+        ds, config, vc, args, truth, checkpoint_paths_for_args(args, config)
+    )
+
+    write_netcdf(
+        output_dir / f"{args.variable}.nc",
+        xr.Dataset({"prediction": prediction, "truth": truth}),
+    )
+    residual = prediction - truth
+    mbe = global_mean(residual).mean("date")
+    rmse = np.sqrt(global_mean(residual**2).mean("date"))
+    write_json(
+        output_dir / "metrics.json",
+        {
+            "mbe_mean": float(mbe.mean("model")) if "model" in mbe.dims else float(mbe),
+            "mbe_std": float(mbe.std("model")) if "model" in mbe.dims else 0.0,
+            "rmse_mean": float(rmse.mean("model")) if "model" in rmse.dims else float(rmse),
+            "rmse_std": float(rmse.std("model")) if "model" in rmse.dims else 0.0,
+            "n_models": prediction.sizes.get("model", 1),
+        },
+    )
+
+
+if __name__ == "__main__":
+    main()

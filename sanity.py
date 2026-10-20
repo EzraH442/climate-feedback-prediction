@@ -4,12 +4,11 @@ import xarray as xr
 
 from dataloader import make_era5_filename
 
-
 raw_root = Path("data/era5")
 odd_years = list(range(1991, 2021, 2))
 raw_paths = [raw_root / make_era5_filename(year) for year in odd_years]
 dataset = xr.open_mfdataset(raw_paths, combine="nested", concat_dim="date")
-dataset = dataset.sel(date=dataset.date.dt.month.isin([3,9]))
+dataset = dataset.sel(date=dataset.date.dt.month.isin([3, 9]))
 
 n_dates = int(dataset.sizes.get("date", 0))
 if n_dates == 0:
@@ -21,4 +20,6 @@ valid_count = int(tsr.count().to_numpy().item())
 
 print(f"Selected {n_dates} monthly slices")
 print(f"Valid tsr values: {valid_count}")
-print(f"Mean tsr over March and September of odd years 1991-2019: {tsr_mean / (3600 * 24)}")
+print(
+    f"Mean tsr over March and September of odd years 1991-2019: {tsr_mean / (3600 * 24)}"
+)

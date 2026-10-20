@@ -1,12 +1,12 @@
 #!/bin/bash
-#SBATCH --array=1-10
+#SBATCH --array=1-5
 #SBATCH --job-name=baseline
 #SBATCH --account=rrg-yihuang-ad
-#SBATCH --time=6:00:0
+#SBATCH --time=3:00:0
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=1
-#SBATCH --mem=6G
+#SBATCH --mem=3G
 #SBATCH --output=%x-%j.out
 #SBATCH --error=%x-%j.err
 #SBATCH --mail-type=ALL
@@ -28,6 +28,7 @@ fi
 
 export OMP_NUM_THREADS=$SLURM_CPUS_PER_TASK
 export COMET_API_KEY=MoBGkV7uhoNarGzMpipBaZYsJ
+export PROJ_DATA="/cvmfs/soft.computecanada.ca/easybuild/software/2023/x86-64-v4/Compiler/gcccore/proj/9.2.0/share/proj"
 
 module purge
 module load StdEnv/2023
@@ -37,9 +38,6 @@ module load mpi4py/4.1.0
 module load scipy-stack
 module load httpproxy
 
-virtualenv --no-download $SLURM_TMPDIR/env
-source $SLURM_TMPDIR/env/bin/activate
-pip install --no-index --upgrade pip
-pip install --no-index -r requirements.txt
+source ~/venv/bin/activate
 
 python train.py --config_file "${CONFIG_FILE}" --no-resume --seed "${SEED}"
